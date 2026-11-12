@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check my data</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;font-family:Arial,sans-serif;color:#222;background:#fafafa}
+header{background:#333;color:#fff;padding:8px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+header h1{font-size:17px;margin:0 8px 0 0}
+header select,header button{font:inherit;font-size:13px;padding:6px 10px;border:0;border-radius:4px}
+header button.go{background:#28a745;color:#fff;font-weight:bold;cursor:pointer}
+header button{cursor:pointer}
+main{max-width:900px;margin:0 auto;padding:14px}
+.intro{font-size:14px;line-height:1.5;color:#444;margin:4px 0 12px}
+.sum{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.pill{padding:8px 14px;border-radius:8px;font-size:14px;background:#fff;border:1px solid #ddd}
+.pill b{font-size:20px;display:block}
+.pill.p{border-color:#e3a3a3;background:#fdf1f1}.pill.w{border-color:#e8d49a;background:#fff9e8}.pill.n{background:#f3f4f6}.pill.ok{border-color:#a8d5b8;background:#effaf3}
+.opts{font-size:13px;margin:8px 0}
+#prog{font-size:13px;color:#666;margin:6px 0;min-height:18px}
+h2{font-size:15px;margin:22px 0 6px;padding-bottom:4px;border-bottom:1px solid #ddd}
+h2 small{color:#777;font-weight:normal}
+.issue{display:grid;grid-template-columns:78px 1fr;gap:8px;background:#fff;border:1px solid #e2e2e2;border-radius:6px;padding:7px 9px;margin:5px 0;font-size:13px;line-height:1.45}
+.badge{font-size:11px;font-weight:bold;text-align:center;border-radius:4px;padding:3px 0;align-self:start}
+.badge.problem{background:#f8d7da;color:#842029}.badge.warn{background:#fff3cd;color:#664d03}.badge.note{background:#e9ecef;color:#495057}
+.ref{font-weight:bold}
+.fix{color:#666;font-size:12px;margin-top:2px}
+.msg{margin:10px 0;padding:8px 10px;border-radius:4px;font-size:13px;background:#fff3cd;color:#664d03}
+.msg.ok{background:#d1e7dd;color:#0f5132}.msg.err{background:#f8d7da;color:#842029}
+.msg:empty{display:none}
+code{background:#eee;padding:1px 4px;border-radius:3px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Check my data</h1>
+  <select id="src" title="What to check"><option value="">Live site</option></select>
+  <button id="run" class="go" type="button">Check now</button>
+  <button id="copy" type="button" disabled>Copy report</button>
+</header>
+<main>
+  <p class="intro">This reads your site's files and looks for things that would quietly break the map: a photo that isn't where the file says, a child with no parent, a stop on a tour that no longer exists, a typo in an ID. It only reads. Nothing is changed or uploaded.</p>
+  <div id="note" class="msg"></div>
+  <div class="sum" id="sum"></div>
+  <div class="opts"><label><input type="checkbox" id="showNotes"> Also show notes (things that are fine, but worth knowing, like places with no photo)</label></div>
+  <div id="prog"></div>
+  <div id="out"></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="marker-shapes.js"></script>
+<script src="welcome-themes.js"></script>
+<script src="schedule.js"></script>
+<script src="marker-fill.js"></script>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const ORDER = ["Setup","Settings","Places","Children","Stories and spots","Categories","Marker shapes","Photos","Passport","Tours","Old maps","Events"];
+const BIG_PHOTO = 1.5 * 1024 * 1024;
+const PHOTO_EXT = ["jpg","jpeg","png","webp","JPG","PNG"];
+let issues = [], counts = { files: 0, photos: 0 }, evSlug = "", evInfo = null, headCache = new Map();
+
+function add(sev, section, ref, msg, fix){ issues.push({ sev, section, ref: ref || "", msg, fix: fix || "" }); }
+const v = (r, k) => String(r && r[k] != null ? r[k] : "").trim();
+const lc = s => String(s || "").trim().toLowerCase();
+const num = s => { const n = parseFloat(s); return isFinite(n) ? n : null; };
+
+/* ---------- reading files (same rules as the map: an event only reads its own copy) ---------- */
+async function tryFetch(u, opts){ try { return await fetch(u, Object.assign({ cache: "no-store" }, opts || {})); } catch (e) { return null; } }
+const EVENT_FOLDERS = () => (evInfo && Array.isArray(evInfo.folders)) ? evInfo.folders : ["photos","spots","stories","anims"];
+function assetUrl(p){
+  p = String(p || "");
+  if (!evSlug || /^([a-z]+:)?\/\//i.test(p)) return p;
+  const m = /^(photos|spots|stories|anims)\//.exec(p);
+  return m && EVENT_FOLDERS().includes(m[1]) ? "events/" + evSlug + "/" + p : p;
+}
+async function getText(file){
+  if (evSlug) {
+    const listed = !!(evInfo && Array.isArray(evInfo.data));
+    if (!listed || evInfo.data.includes(file)) { const r = await tryFetch("events/" + evSlug + "/" + file); if (r && r.ok) return { text: await r.text() }; }
+    if (listed) return { text: null };
+  }
+  const r = await tryFetch(file);
+  if (!r) return { text: null, failed: true };
+  return r.ok ? { text: await r.text() } : { text: null };
+}
+function head(url){
+  if (headCache.has(url)) return headCache.get(url);
+  const p = (async () => {
+    let r = await tryFetch(url, { method: "HEAD" });
+    if (r && (r.status === 405 || r.status === 501)) r = await tryFetch(url);
+    return r ? { ok: r.ok, size: +(r.headers.get("content-length") || 0) } : { ok: false, size: 0, failed: true };
+  })();
+  headCache.set(url, p);
+  return p;
+}
+async function pool(list, n, fn){
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, list.length) }, async () => { while (i < list.length) { const k = i++; await fn(list[k], k); } }));
+}
+function parseCsv(section, file, text, required, where){
+  const res = Papa.parse(text, { header: true, skipEmptyLines: "greedy" });
+  const fields = (res.meta.fields || []).map(f => f.trim());
+  required.forEach(c => { if (!fields.includes(c)) add("problem", section, file, 'Missing the column "' + c + '".', "Add a column named " + c + ". " + where + " adds it when you save."); });
+  (res.errors || []).filter(e => e.type === "FieldMismatch").forEach(e => add("warn", section, file + " row " + (e.row + 2), (e.code === "TooManyFields" ? "Has more" : "Has fewer") + " columns than the header. Text with a comma in it needs quotes around it.", "Open it in " + where + " and save it again."));
+  counts.files++;
+  return { rows: res.data, fields };
+}
+
+/* ---------- small helpers ---------- */
+function coords(section, file, ref, r, where){
+  const lat = num(v(r, "LAT")), lng = num(v(r, "LONG"));
+  if (lat == null || lng == null) { add("problem", section, ref, "Has no usable LAT/LONG, so it will not appear on the map.", "Drag it onto the map in " + where + "."); return null; }
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) { add("problem", section, ref, "Its LAT/LONG (" + lat + ", " + lng + ") is not a real place. LAT and LONG may be swapped.", "Fix it in " + where + "."); return null; }
+  return { lat, lng };
+}
+function km(a, b){
+  const R = 6371, rad = d => d * Math.PI / 180, dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const median = a => { const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+function dupes(section, ref, list, idOf, where){
+  const seen = new Map();
+  list.forEach((r, i) => { const id = lc(idOf(r)); if (!id) return; (seen.get(id) || seen.set(id, []).get(id)).push(i + 2); });
+  seen.forEach((rows, id) => { if (rows.length > 1) add("problem", section, ref + ' "' + id + '"', "Appears " + rows.length + " times (rows " + rows.join(", ") + "). Each ID must be unique.", "Rename the extras in " + where + "."); });
+}
+
+/* ---------- the checks ---------- */
+let running = false, again = false;
+async function run(){
+  if (running) { again = true; return; }
+  running = true;
+  try { await runOnce(); } finally { running = false; if (again) { again = false; run(); } }
+}
+async function runOnce(){
+  issues = []; counts = { files: 0, photos: 0 }; headCache = new Map();
+  $("run").disabled = true; $("copy").disabled = true; $("note").textContent = ""; $("out").innerHTML = ""; $("sum").innerHTML = "";
+  evSlug = $("src").value; evInfo = null;
+  $("prog").textContent = "Reading files…";
+
+  if (evSlug) {
+    const r = await tryFetch("events/" + evSlug + "/event.json");
+    if (r && r.ok) { try { evInfo = await r.json(); } catch (e) {} }
+    if (!evInfo) add("warn", "Events", "events/" + evSlug + "/event.json", "This event has no readable event.json, so the map assumes it holds every file and folder.", "Re-save the event from the Events tab.");
+  }
+
+  const names = ((window.ETS_CONFIG && window.ETS_CONFIG.DATA) || []).filter(n => n !== "border.geojson");   // the list lives in ets-config.js
+  ["site.csv","locations.csv"].forEach(n => { if (!names.includes(n)) names.push(n); });
+  const got = {};
+  await Promise.all(names.map(async n => { got[n] = await getText(n); }));
+  if (got["site.csv"].failed || got["locations.csv"].failed) {
+    $("note").className = "msg err";
+    $("note").textContent = "I could not read your files. Open this page from your website (or its tab in the editor hub), not from a file on your computer.";
+    $("prog").textContent = ""; $("run").disabled = false; return;
+  }
+
+  /* settings */
+  const S = {};
+  let site = null;
+  if (got["site.csv"].text != null) {
+    site = parseCsv("Settings", "site.csv", got["site.csv"].text, ["KEY","VALUE"], "the Settings editor");
+    site.rows.forEach(r => { S[v(r, "KEY")] = v(r, "VALUE"); });
+  } else add("note", "Settings", "site.csv", "No site.csv, so the page uses its built-in defaults.", "");
+  const KNOWN = ["PLACE","HEADER","TAB_TITLE","BAR_COLOR","CENTER_LAT","CENTER_LNG","ZOOM","BOUNDS_WEST","BOUNDS_SOUTH","BOUNDS_EAST","BOUNDS_NORTH","MIN_ZOOM","MAX_ZOOM","FIT_TO_MARKERS","PASSPORT","PASSPORT_RANKS","YEAR_SLIDER","OVERLAY_SLIDER","AERIAL_BUTTON","EVENT_BUTTON","EVENT_TITLE","EVENT_TEXT","WELCOME_THEME","WELCOME_TEXT"];
+  Object.keys(S).forEach(k => { if (k && !KNOWN.includes(k)) add("note", "Settings", k, "Is not a setting the page knows about, so it is ignored.", "Check the spelling, or remove the row."); });
+  if (site && !S.PLACE) add("warn", "Settings", "PLACE", "Is empty. {PLACE} will be blank in the header and welcome screen.", "Fill it in on the Settings editor.");
+  if (S.BAR_COLOR && !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(S.BAR_COLOR)) add("warn", "Settings", "BAR_COLOR", '"' + S.BAR_COLOR + '" is not a color like #E47303.', "Pick the color again in the Settings editor.");
+  ["CENTER_LAT","CENTER_LNG","ZOOM","BOUNDS_WEST","BOUNDS_SOUTH","BOUNDS_EAST","BOUNDS_NORTH","MIN_ZOOM","MAX_ZOOM"].forEach(k => { if (S[k] && num(S[k]) == null) add("problem", "Settings", k, '"' + S[k] + '" is not a number.', "Fix it in the Settings editor."); });
+  ["PASSPORT","PASSPORT_RANKS","YEAR_SLIDER","OVERLAY_SLIDER","AERIAL_BUTTON","FIT_TO_MARKERS"].forEach(k => { if (S[k] && !/^(yes|no)$/i.test(S[k])) add("warn", "Settings", k, '"' + S[k] + '" should be yes or no.', "Use the checkbox in the Settings editor."); });
+  const bounds = ["BOUNDS_WEST","BOUNDS_SOUTH","BOUNDS_EAST","BOUNDS_NORTH"].map(k => num(S[k]));
+  const hasBounds = bounds.every(b => b != null);
+  if (hasBounds && (bounds[0] >= bounds[2] || bounds[1] >= bounds[3])) add("problem", "Settings", "BOUNDS", "West must be less than east, and south less than north.", "Redraw the allowed area in the Settings editor.");
+  const minZ = num(S.MIN_ZOOM), maxZ = num(S.MAX_ZOOM), z = num(S.ZOOM);
+  if (minZ != null && maxZ != null && minZ > maxZ) add("problem", "Settings", "MIN_ZOOM / MAX_ZOOM", "The smallest zoom is larger than the biggest.", "Swap them in the Settings editor.");
+  if (z != null && ((minZ != null && z < minZ) || (maxZ != null && z > maxZ))) add("warn", "Settings", "ZOOM", "The starting zoom is outside the allowed zoom range.", "");
+  if (S.WELCOME_THEME && window.WelcomeThemes && !WelcomeThemes.list[lc(S.WELCOME_THEME)]) add("warn", "Settings", "WELCOME_THEME", '"' + S.WELCOME_THEME + '" is not a theme (' + Object.keys(WelcomeThemes.list).join(", ") + ").", "Pick one in the Settings editor.");
+  if (/^yes$/i.test(S.PASSPORT || "yes") === false) add("note", "Passport", "", "The passport is turned off, so its files are not checked.", "");
+
+  /* places */
+  const cats = new Set(), catList = [];
+  let customShapes = {};
+  if (got["shapes.csv"].text != null) {
+    const sh = parseCsv("Marker shapes", "shapes.csv", got["shapes.csv"].text, ["CODE","POINTS"], "the Places editor");
+    dupes("Marker shapes", "Shape", sh.rows, r => v(r, "CODE"), "the Places editor");
+    sh.rows.forEach((r, i) => {
+      const ref = "shapes.csv row " + (i + 2) + " (" + v(r, "CODE") + ")";
+      if (window.MarkerShapes && MarkerShapes.BUILTIN[MarkerShapes.slug(v(r, "CODE"))]) add("warn", "Marker shapes", ref, "Has the same name as a built-in shape, so the built-in one is used.", "Rename it.");
+      else if (window.MarkerShapes && !MarkerShapes.parsePoints(v(r, "POINTS"))) add("warn", "Marker shapes", ref, "Needs at least 3 corners like 50 0;100 50;0 50.", "Redraw it in the Marker shapes list.");
+    });
+    if (window.MarkerShapes) customShapes = MarkerShapes.parseRows(sh.rows);
+  }
+  if (got["categories.csv"].text != null) {
+    const c = parseCsv("Categories", "categories.csv", got["categories.csv"].text, ["CODE"], "the Places editor");
+    dupes("Categories", "Category", c.rows, r => v(r, "CODE"), "the Places editor");
+    const icons = new Set(); const ic = await getText("icons.js");
+    if (ic.text) for (const m of ic.text.matchAll(/^\s{2}([A-Za-z0-9_]+):\s*\{\s*label:/gm)) icons.add(m[1]);
+    c.rows.forEach((r, i) => {
+      const code = v(r, "CODE").toUpperCase(); if (!code) return;
+      cats.add(code); catList.push(code);
+      const ref = code;
+      if (v(r, "COLOR") && !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v(r, "COLOR"))) add("warn", "Categories", ref, 'Its color "' + v(r, "COLOR") + '" is not like #E47303.', "Pick the color again in the Places editor.");
+      if (icons.size && v(r, "ICON") && !icons.has(v(r, "ICON"))) add("warn", "Categories", ref, 'Its icon "' + v(r, "ICON") + '" is not in icons.js, so a plain building shows.', "Choose an icon in the Places editor.");
+      const fl = lc(v(r, "FILL"));
+      if (fl && window.MarkerFill && !MarkerFill.cleanPattern(fl)) add("warn", "Categories", ref, 'Its fill "' + fl + '" is not a known pattern (' + MarkerFill.PATTERNS.map(p => p.code).join(", ") + "), so the icon shows instead.", "Pick a color or pattern in the Places editor.");
+      ["FILL_COLOR","FILL_COLOR2"].forEach(k => { if (v(r, k) && !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v(r, k))) add("warn", "Categories", ref, k + ' "' + v(r, k) + '" is not a color like #E47303.', "Pick the color again in the Places editor."); });
+      const sh = lc(v(r, "SHAPE"));
+      if (sh && window.MarkerShapes && !MarkerShapes.BUILTIN[sh] && !customShapes[sh]) add("warn", "Categories", ref, 'Its shape "' + sh + '" does not exist, so the marker stays round.', "Choose a shape in the Places editor.");
+    });
+  } else add("note", "Categories", "categories.csv", "No categories.csv, so default colors and icons are used.", "");
+
+  const idKinds = new Map();
+  const claim = (id, kind, ref, where) => { const k = lc(id); if (!k) return; if (idKinds.has(k) && idKinds.get(k) !== kind) add("problem", "Setup", ref, 'Uses the ID "' + id + '", which is already used by a ' + idKinds.get(k) + ". IDs must be unique across places, children and spots.", "Rename one in " + where + "."); else idKinds.set(k, kind); };
+  const located = [], photoJobs = [];
+  const WP = "the Places editor", WS = "the Stories & Spots editor";
+  let places = [], kids = [], spots = [];
+
+  if (got["locations.csv"].text == null) add("problem", "Places", "locations.csv", "Cannot be found. The map has no places without it.", "Upload locations.csv to the site.");
+  else {
+    const L = parseCsv("Places", "locations.csv", got["locations.csv"].text, ["ID","NAME","LAT","LONG"], WP);
+    places = L.rows;
+    dupes("Places", "ID", places, r => v(r, "ID"), WP);
+    places.forEach((r, i) => {
+      const id = v(r, "ID"), ref = (id || "row " + (i + 2)) + (v(r, "NAME") ? " (" + v(r, "NAME") + ")" : "");
+      if (!id) { add("problem", "Places", "row " + (i + 2), "Has no ID.", "Give it one in " + WP + "."); return; }
+      claim(id, "place", id, WP);
+      if (!v(r, "NAME")) add("warn", "Places", id, "Has no NAME.", "");
+      const ll = coords("Places", "locations.csv", ref, r, WP); if (ll) located.push({ ref, id, ll, kind: "place" });
+      const cat = v(r, "CATEGORY").toUpperCase();
+      if (cat && cats.size && !cats.has(cat)) add("warn", "Places", ref, 'Category "' + cat + '" is not in categories.csv, so it gets the default color.', "Pick a category in " + WP + ".");
+      const est = r["EST."] != null ? v(r, "EST.") : v(r, "EST");
+      if (est && !/\d{4}/.test(est)) add("warn", "Places", ref, 'EST. "' + est + '" has no 4-digit year, so the year slider cannot use it.', "");
+      if (v(r, "RADIUS") && num(v(r, "RADIUS")) == null) add("warn", "Places", ref, 'RADIUS "' + v(r, "RADIUS") + '" is not a number.', "");
+      photoJobs.push({ section: "Places", ref, id, path: v(r, "PHOTO") });
+    });
+  }
+  if (got["childmarkers.csv"].text != null) {
+    const C = parseCsv("Children", "childmarkers.csv", got["childmarkers.csv"].text, ["CHILD_ID","PARENT_ID","NAME","LAT","LONG"], WP);
+    kids = C.rows;
+    dupes("Children", "CHILD_ID", kids, r => v(r, "CHILD_ID"), WP);
+    const parents = new Map(places.map(r => [lc(v(r, "ID")), r]));
+    kids.forEach((r, i) => {
+      const id = v(r, "CHILD_ID"), ref = (id || "row " + (i + 2)) + (v(r, "NAME") ? " (" + v(r, "NAME") + ")" : "");
+      if (!id) { add("problem", "Children", "row " + (i + 2), "Has no CHILD_ID.", ""); return; }
+      claim(id, "child", id, WP);
+      const p = parents.get(lc(v(r, "PARENT_ID")));
+      if (!v(r, "PARENT_ID")) add("problem", "Children", ref, "Has no PARENT_ID, so it belongs to nothing.", "Choose its parent in " + WP + ".");
+      else if (!p) add("problem", "Children", ref, 'Its parent "' + v(r, "PARENT_ID") + '" does not exist in locations.csv.', "Choose an existing parent in " + WP + ".");
+      const ll = coords("Children", "childmarkers.csv", ref, r, WP);
+      if (ll) {
+        located.push({ ref, id, ll, kind: "child" });
+        const pl = p && { lat: num(v(p, "LAT")), lng: num(v(p, "LONG")) };
+        if (pl && pl.lat != null && pl.lng != null && km(ll, pl) > 1) add("warn", "Children", ref, "Is " + km(ll, pl).toFixed(1) + " km from its parent. Is one of them in the wrong place?", "Check both on the map in " + WP + ".");
+      }
+      const cat = v(r, "CATEGORY").toUpperCase();
+      if (cat && cats.size && !cats.has(cat)) add("warn", "Children", ref, 'Category "' + cat + '" is not in categories.csv.', "");
+      photoJobs.push({ section: "Children", ref, id, path: v(r, "PHOTO") });
+    });
+  }
+  if (got["spots.csv"].text != null) {
+    const P = parseCsv("Stories and spots", "spots.csv", got["spots.csv"].text, ["SPOT_ID","TITLE","LAT","LONG"], WS);
+    spots = P.rows;
+    dupes("Stories and spots", "SPOT_ID", spots, r => v(r, "SPOT_ID"), WS);
+    spots.forEach((r, i) => {
+      const id = v(r, "SPOT_ID"), ref = (id || "row " + (i + 2)) + (v(r, "TITLE") ? " (" + v(r, "TITLE") + ")" : "");
+      if (!id) { add("problem", "Stories and spots", "row " + (i + 2), "Has no SPOT_ID.", ""); return; }
+      claim(id, "spot", id, WS);
+      const kind = lc(v(r, "KIND"));
+      if (kind && kind !== "spot" && kind !== "story") add("warn", "Stories and spots", ref, 'KIND "' + v(r, "KIND") + '" should be spot or story.', "");
+      const ll = coords("Stories and spots", "spots.csv", ref, r, WS); if (ll) located.push({ ref, id, ll, kind: "spot" });
+      const cat = v(r, "CATEGORY").toUpperCase();
+      if (cat && cats.size && !cats.has(cat)) add("warn", "Stories and spots", ref, 'Category "' + cat + '" is not in categories.csv.', "");
+      const ph = v(r, "PHOTO");
+      if (ph && kind === "story" && /^spots\//i.test(ph)) add("note", "Stories and spots", ref, "Is a story but its photo is in the spots folder.", "");
+      if (ph && kind === "spot" && /^stories\//i.test(ph)) add("note", "Stories and spots", ref, "Is a spot but its photo is in the stories folder.", "");
+      photoJobs.push({ section: "Stories and spots", ref, id, path: ph, noProbe: true });
+    });
+  }
+
+  /* where everything sits */
+  if (located.length > 3) {
+    const mLat = median(located.map(o => o.ll.lat)), mLng = median(located.map(o => o.ll.lng));
+    located.forEach(o => {
+      const d = km(o.ll, { lat: mLat, lng: mLng });
+      if (d <= 50) return;
+      const swapped = Math.abs(o.ll.lng) <= 90 && km({ lat: o.ll.lng, lng: o.ll.lat }, { lat: mLat, lng: mLng }) < 50;
+      add("warn", o.kind === "place" ? "Places" : o.kind === "child" ? "Children" : "Stories and spots", o.ref,
+        swapped ? "LAT and LONG look swapped. Swapped, it would sit right among your other markers." : "Is " + Math.round(d) + " km from the middle of your other markers. Check its coordinates.", "Fix its coordinates in the editor.");
+    });
+  }
+  if (hasBounds) located.forEach(o => { if (o.ll.lng < bounds[0] || o.ll.lng > bounds[2] || o.ll.lat < bounds[1] || o.ll.lat > bounds[3]) add("warn", o.kind === "place" ? "Places" : o.kind === "child" ? "Children" : "Stories and spots", o.ref, "Is outside the allowed map area in settings, so visitors cannot pan to it.", "Widen the area in the Settings editor, or move the marker."); });
+
+  const usedCats = new Set([...places, ...kids, ...spots].map(r => v(r, "CATEGORY").toUpperCase()).filter(Boolean));
+  catList.forEach(c => { if (!usedCats.has(c)) add("note", "Categories", c, "No place, child or spot uses it.", ""); });
+
+  /* photos.csv */
+  const idSet = new Set(idKinds.keys());
+  if (got["photos.csv"].text != null) {
+    const F = parseCsv("Photos", "photos.csv", got["photos.csv"].text, ["ITEM_ID","PATH"], "the Places or Stories & Spots editor");
+    const per = new Map();
+    F.rows.forEach((r, i) => {
+      const id = v(r, "ITEM_ID"); if (!id) return;
+      const ref = "photos.csv row " + (i + 2) + " (" + id + ")";
+      if (!idSet.has(lc(id))) add("warn", "Photos", ref, "Belongs to an item that does not exist, so it is never shown.", "Remove the row or fix the ID.");
+      (per.get(lc(id)) || per.set(lc(id), []).get(lc(id))).push(r);
+    });
+    per.forEach((rows, id) => {
+      const sorted = rows.slice().sort((a, b) => (num(v(a, "ORDER")) || 0) - (num(v(b, "ORDER")) || 0));
+      sorted.slice(1).forEach(r => { if (!v(r, "PATH")) add("problem", "Photos", id, "Has an extra photo row with no PATH, so nothing shows.", "Add the photo path or remove the row."); else photoJobs.push({ section: "Photos", ref: id + " (extra photo)", id: "", path: v(r, "PATH"), noProbe: true }); });
+      if (sorted[0] && v(sorted[0], "PATH")) photoJobs.push({ section: "Photos", ref: id + " (main photo)", id: "", path: v(sorted[0], "PATH"), noProbe: true });
+    });
+  }
+
+  /* passport */
+  const passportOn = /^yes$/i.test(S.PASSPORT || "yes");
+  if (passportOn && (got["stamps.csv"].text != null || got["tasks.csv"].text != null)) {
+    const WPASS = "the Passport editor";
+    const taskIds = new Set(); let T = [], St = [];
+    if (got["tasks.csv"].text != null) {
+      T = parseCsv("Passport", "tasks.csv", got["tasks.csv"].text, ["TASK_ID","SCOPE","TARGET"], WPASS).rows;
+      dupes("Passport", "Task", T, r => v(r, "TASK_ID"), WPASS);
+      T.forEach((r, i) => {
+        const id = v(r, "TASK_ID"); if (!id) return; taskIds.add(lc(id));
+        const scope = lc(v(r, "SCOPE")), target = v(r, "TARGET");
+        if (scope === "behavior") { if (!["story","spot","tour"].includes(lc(target))) add("warn", "Passport", "task " + id, 'Its target "' + target + '" should be story, spot or tour.', ""); }
+        else if (scope === "item") { if (!idSet.has(lc(target))) add("problem", "Passport", "task " + id, 'Points at "' + target + '", which is not a place, child or spot. It can never be completed.', "Pick an existing place in " + WPASS + "."); }
+        else if (scope === "category") { if (cats.size && !cats.has(target.toUpperCase())) add("problem", "Passport", "task " + id, 'Points at category "' + target + '", which is not in categories.csv.', "Pick an existing category in " + WPASS + "."); }
+        else add("problem", "Passport", "task " + id, 'Its scope "' + v(r, "SCOPE") + '" should be behavior, item or category.', "");
+        if (v(r, "COUNT") && num(v(r, "COUNT")) == null) add("warn", "Passport", "task " + id, 'COUNT "' + v(r, "COUNT") + '" is not a number.', "");
+      });
+    }
+    if (got["stamps.csv"].text != null) {
+      St = parseCsv("Passport", "stamps.csv", got["stamps.csv"].text, ["STAMP_ID"], WPASS).rows;
+      dupes("Passport", "Stamp", St, r => v(r, "STAMP_ID"), WPASS);
+      const icons = new Set(); const ic = await getText("icons.js");
+      if (ic.text) for (const m of ic.text.matchAll(/^\s{2}([A-Za-z0-9_]+):\s*\{\s*label:/gm)) icons.add(m[1]);
+      const used = new Set();
+      St.forEach(r => {
+        const id = v(r, "STAMP_ID"); if (!id) return;
+        const cat = v(r, "CATEGORY").toUpperCase();
+        if (cat && cats.size && !cats.has(cat)) add("warn", "Passport", "stamp " + id, 'Category "' + cat + '" is not in categories.csv.', "");
+        if (icons.size && v(r, "VEHICLE") && !icons.has(lc(v(r, "VEHICLE"))) && !icons.has(v(r, "VEHICLE"))) add("warn", "Passport", "stamp " + id, 'Vehicle "' + v(r, "VEHICLE") + '" is not an icon in icons.js.', "");
+        const tl = v(r, "TASKS").split("|").map(s => s.trim()).filter(Boolean);
+        if (!tl.length) add("warn", "Passport", "stamp " + id, "Has no tasks, so it can never be earned.", "");
+        tl.forEach(t => { used.add(lc(t)); if (!taskIds.has(lc(t))) add("problem", "Passport", "stamp " + id, 'Lists the task "' + t + '", which is not in tasks.csv.', "Fix the task list in " + WPASS + "."); });
+        const stars = [1,2,3].map(n => num(v(r, "STAR" + n)));
+        if (stars.some(s => s == null)) add("warn", "Passport", "stamp " + id, "A STAR value is missing or not a number.", "");
+        else {
+          if (!(stars[0] <= stars[1] && stars[1] <= stars[2])) add("warn", "Passport", "stamp " + id, "The star targets (" + stars.join(", ") + ") should go up.", "");
+          if (tl.length && stars[2] > tl.length) add("warn", "Passport", "stamp " + id, "Needs " + stars[2] + " tasks for the last star but only lists " + tl.length + ", so it can never be earned.", "");
+        }
+        [1,2,3].forEach(n => { if (!v(r, "RANK" + n)) add("note", "Passport", "stamp " + id, "RANK" + n + " is blank.", ""); });
+      });
+      T.forEach(r => { const id = lc(v(r, "TASK_ID")); if (id && St.length && !used.has(id)) add("note", "Passport", "task " + v(r, "TASK_ID"), "Is not part of any stamp, so it is a loose task that counts toward nothing.", ""); });
+    }
+  }
+
+  /* tours */
+  if (got["tours.csv"].text != null || got["tourstops.csv"].text != null) {
+    const WT = "the Tours editor";
+    const tourIds = new Set();
+    if (got["tours.csv"].text != null) {
+      const TT = parseCsv("Tours", "tours.csv", got["tours.csv"].text, ["TOUR_ID"], WT);
+      dupes("Tours", "Tour", TT.rows, r => v(r, "TOUR_ID"), WT);
+      TT.rows.forEach(r => { const id = v(r, "TOUR_ID"); if (!id) return; tourIds.add(lc(id)); const c = v(r, "CATEGORY").toUpperCase(); if (c && cats.size && !cats.has(c)) add("warn", "Tours", "tour " + id, 'Category "' + c + '" is not in categories.csv.', ""); });
+    }
+    const stopsBy = new Map();
+    if (got["tourstops.csv"].text != null) {
+      const TS = parseCsv("Tours", "tourstops.csv", got["tourstops.csv"].text, ["TOUR_ID","ITEM_ID"], WT);
+      TS.rows.forEach((r, i) => {
+        const t = lc(v(r, "TOUR_ID")); if (!t) return;
+        (stopsBy.get(t) || stopsBy.set(t, []).get(t)).push(r);
+        const ref = "tour " + v(r, "TOUR_ID") + ", row " + (i + 2);
+        if (tourIds.size && !tourIds.has(t)) add("warn", "Tours", ref, "Belongs to a tour that is not in tours.csv, so it is never shown.", "");
+        if (!idSet.has(lc(v(r, "ITEM_ID")))) add("problem", "Tours", ref, 'Stops at "' + v(r, "ITEM_ID") + '", which is not a place, child or spot.', "Pick an existing stop in " + WT + ".");
+        if (v(r, "STEP") && num(v(r, "STEP")) == null) add("warn", "Tours", ref, 'STEP "' + v(r, "STEP") + '" is not a number.', "");
+      });
+      stopsBy.forEach((rows, t) => {
+        const steps = rows.map(r => v(r, "STEP")).filter(Boolean);
+        if (new Set(steps).size !== steps.length) add("warn", "Tours", "tour " + t, "Has two stops with the same STEP number, so their order is a guess.", "");
+        if (rows.length === 1) add("note", "Tours", "tour " + t, "Has only one stop.", "");
+      });
+    }
+    tourIds.forEach(t => { if (!stopsBy.has(t)) add("warn", "Tours", "tour " + t, "Has no stops.", "Add stops in " + WT + " or remove the tour."); });
+  }
+
+  /* overlays, welcome picture, outline, code files, events */
+  const fileJobs = [];
+  if (got["overlays.json"].text != null && /^yes$/i.test(S.OVERLAY_SLIDER || "yes")) {
+    let ov = null;
+    try { ov = JSON.parse(got["overlays.json"].text); counts.files++; } catch (e) { add("problem", "Old maps", "overlays.json", "Is not valid JSON: " + e.message, "Rebuild it in the Overlays editor."); }
+    if (ov) (Array.isArray(ov) ? ov : []).forEach((o, i) => {
+      const ref = (o && o.name) || "overlay " + (i + 1);
+      if (!o || !o.url) add("problem", "Old maps", ref, "Has no image url.", "");
+      else fileJobs.push({ section: "Old maps", ref, path: o.url, what: "image" });
+      const c = o && o.coords;
+      if (!Array.isArray(c) || c.length !== 4 || c.some(p => !Array.isArray(p) || p.length !== 2 || p.some(n => !isFinite(n)))) add("problem", "Old maps", ref, "Needs four corners, each a [longitude, latitude] pair.", "Re-place the map in the Overlays editor.");
+    });
+  }
+  if (!S.WELCOME_THEME) fileJobs.push({ section: "Setup", ref: "welcome1.gif", path: "welcome1.gif", what: "welcome picture", sev: "warn", fix: "Upload welcome1.gif, or pick an animated theme in the Settings editor." });
+  fileJobs.push({ section: "Setup", ref: "border.geojson", path: "border.geojson", what: "boundary outline", sev: "warn", fix: "Upload it, or the outline is not drawn." });
+  [((window.ETS_CONFIG&&window.ETS_CONFIG.LIVE_PAGE)||"Demo2a.html"),"icons.js","marker-shapes.js","welcome-themes.js"].forEach(f => fileJobs.push({ section: "Setup", ref: f, path: f, what: "page file", sev: "problem", fix: "Upload " + f + " to the top folder of the site." }));
+  if (!evSlug) {
+    const ix = await tryFetch("events/index.json");
+    if (ix && ix.ok) { try {
+      (await ix.json()).forEach(e => {
+        fileJobs.push({ section: "Events", ref: "Event " + e.slug, path: "events/" + e.slug + "/event.json", what: "event", sev: "warn", fix: "The event is listed but its folder is gone. Remove it from events/index.json." });
+        if (e.auto && !e.schedule) add("warn", "Events", "Event " + e.slug, "Is set to open automatically but has no dates.", "Set dates on its card in the Events tab.");
+        if (e.schedule && window.EventSchedule) EventSchedule.validate(e.schedule).forEach(p => add("problem", "Events", "Event " + e.slug, "Dates: " + p, "Fix them on the event's card in the Events tab."));
+      });
+    } catch (e) { add("warn", "Events", "events/index.json", "Cannot be read.", "Save an event again from the Events tab to rebuild it."); } }
+  }
+
+  render();
+  /* the slow part: look for files */
+  const total = photoJobs.length + fileJobs.length;
+  let done = 0;
+  const progress = () => { $("prog").textContent = "Looking for photos and files… " + done + " of " + total; };
+  progress();
+  const big = new Map();
+  const checkPath = async (job, path) => {
+    const p = String(path || "").trim();
+    if (/^\//.test(p)) { add("warn", job.section, job.ref, 'Photo path "' + p + '" starts with a slash, which points at the wrong folder on a GitHub site.', "Remove the leading slash."); return false; }
+    if (p.includes("\\")) { add("warn", job.section, job.ref, 'Photo path "' + p + '" uses backslashes. Use forward slashes.', ""); return false; }
+    const r = await head(assetUrl(p));
+    if (r.failed) return false;
+    if (!r.ok) return false;
+    counts.photos++;
+    if (r.size > BIG_PHOTO && !big.has(p)) { big.set(p, r.size); add("warn", job.section, job.ref, "Photo " + p + " is " + (r.size / 1048576).toFixed(1) + " MB. That is slow on a phone.", "Resize it to about 1600 pixels wide before uploading."); }
+    return true;
+  };
+  await pool(photoJobs, 6, async job => {
+    if (job.path) {
+      const ok = await checkPath(job, job.path);
+      if (!ok && !/^\/|\\/.test(job.path)) add("warn", job.section, job.ref, 'Photo "' + job.path + '" was not found.', "Check the folder, spelling and extension. File names are case-sensitive (Photo.JPG is not photo.jpg).");
+    } else if (!job.noProbe && job.id) {
+      let found = false;
+      for (const ext of PHOTO_EXT) { if (await checkPath(job, "photos/" + job.id + "." + ext)) { found = true; break; } }
+      if (!found) add("note", job.section, job.ref, "Has no photo, so it shows its category icon.", "");
+    } else if (job.noProbe && job.section === "Stories and spots") add("note", job.section, job.ref, "Has no photo.", "");
+    done++; if (done % 5 === 0) progress();
+  });
+  await pool(fileJobs, 6, async job => {
+    const r = await head(job.section === "Old maps" ? assetUrl(job.path) : job.path);
+    if (!r.ok && !r.failed) add(job.sev || "warn", job.section, job.ref, "The " + job.what + ' file "' + job.path + '" was not found.', job.fix || "Upload it, or fix the name.");
+    done++; progress();
+  });
+  $("prog").textContent = "";
+  render(true);
+}
+
+/* ---------- showing the report ---------- */
+function render(final){
+  const by = { problem: 0, warn: 0, note: 0 };
+  issues.forEach(i => by[i.sev]++);
+  $("sum").innerHTML =
+    '<div class="pill p"><b>' + by.problem + "</b>Problems</div>" +
+    '<div class="pill w"><b>' + by.warn + "</b>Warnings</div>" +
+    '<div class="pill n"><b>' + by.note + "</b>Notes</div>" +
+    '<div class="pill ' + (final && !by.problem && !by.warn ? "ok" : "n") + '"><b>' + counts.files + "</b>Files read" + (counts.photos ? ", " + counts.photos + " photos found" : "") + "</div>";
+  const showNotes = $("showNotes").checked;
+  const shown = issues.filter(i => showNotes || i.sev !== "note");
+  const sev = { problem: 0, warn: 1, note: 2 };
+  const groups = ORDER.concat([...new Set(shown.map(i => i.section))].filter(s => !ORDER.includes(s)));
+  let html = "";
+  groups.forEach(g => {
+    const list = shown.filter(i => i.section === g).sort((a, b) => sev[a.sev] - sev[b.sev]);
+    if (!list.length) return;
+    html += "<h2>" + esc(g) + " <small>(" + list.length + ")</small></h2>" + list.map(i =>
+      '<div class="issue"><div class="badge ' + i.sev + '">' + (i.sev === "problem" ? "Problem" : i.sev === "warn" ? "Warning" : "Note") + "</div><div>" +
+      (i.ref ? '<span class="ref">' + esc(i.ref) + "</span>: " : "") + esc(i.msg) + (i.fix ? '<div class="fix">Fix: ' + esc(i.fix) + "</div>" : "") + "</div></div>").join("");
+  });
+  if (final && !by.problem && !by.warn) html = '<div class="msg ok">Everything checked looks good.' + (by.note ? " Turn on notes above to see " + by.note + " small things worth knowing." : "") + "</div>" + html;
+  $("out").innerHTML = html;
+  $("copy").disabled = !final;
+  $("run").disabled = !final;
+}
+$("showNotes").onchange = () => render($("run").disabled === false);
+$("run").onclick = run;
+$("copy").onclick = async () => {
+  const lines = issues.filter(i => i.sev !== "note").map(i => "[" + (i.sev === "problem" ? "Problem" : "Warning") + "] " + i.section + " · " + (i.ref ? i.ref + ": " : "") + i.msg);
+  const txt = "Data check (" + (evSlug ? "event " + evSlug : "live site") + "): " + lines.length + " items\n" + lines.join("\n");
+  try { await navigator.clipboard.writeText(txt); $("note").className = "msg ok"; $("note").textContent = "Report copied. Paste it wherever you need it."; }
+  catch (e) { $("note").className = "msg"; $("note").textContent = "Could not copy automatically. Select the text on this page instead."; }
+};
+/* events you can check */
+(async () => {
+  const r = await tryFetch("events/index.json");
+  if (!r || !r.ok) return;
+  try { (await r.json()).filter(e => e.public !== false).forEach(e => { const o = document.createElement("option"); o.value = e.slug; o.textContent = "Event: " + (e.name || e.slug); $("src").appendChild(o); }); } catch (e) {}
+})();
+(async () => {   // when designing an event, check that event
+  const w = window.Workspace && Workspace.current();
+  if (!w) return;
+  await new Promise(r => setTimeout(r, 400));
+  if (![...$("src").options].some(o => o.value === w)) { const o = document.createElement("option"); o.value = w; o.textContent = "Event being designed: " + w; $("src").appendChild(o); }
+  $("src").value = w;
+  run();
+})();
+run();
+</script>
+</body>
+</html>

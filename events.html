@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Events: Save and Switch</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;font-family:Arial,sans-serif;color:#222;background:#fafafa}
+header{background:#333;color:#fff;padding:8px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+header h1{font-size:17px;margin:0 8px 0 0}
+button{font:inherit;font-size:13px;padding:7px 11px;border:1px solid #bbb;border-radius:4px;background:#fff;color:#222;cursor:pointer}
+button:hover{background:#eee}
+button.go{background:#28a745;border-color:#28a745;color:#fff;font-weight:bold}
+button.go:hover{background:#218838}
+button:disabled{opacity:.4;cursor:not-allowed}
+header button{border:0}
+main{max-width:860px;margin:0 auto;padding:14px}
+h2{font-size:16px;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid #ddd}
+.intro{font-size:14px;line-height:1.5;color:#444}
+.msg{margin:10px 0;padding:8px 10px;border-radius:4px;font-size:13px;line-height:1.5;background:#fff3cd;color:#664d03}
+.msg.ok{background:#d1e7dd;color:#0f5132}
+.msg.err{background:#f8d7da;color:#842029}
+.msg:empty{display:none}
+label{display:block;font-size:12px;font-weight:bold;margin:10px 0 3px;color:#555}
+label.chk{font-weight:normal;font-size:13px;color:#222;margin:3px 0;display:flex;gap:6px;align-items:center}
+input[type=text]{width:100%;padding:7px;font:inherit;font-size:14px;border:1px solid #bbb;border-radius:4px}
+.sz{color:#777;font-size:12px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:640px){.cols{grid-template-columns:1fr}}
+.card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px 12px;margin:8px 0}
+.card h3{margin:0 0 2px;font-size:15px}
+.card .sub{font-size:12px;color:#666}
+.card .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.panel{margin-top:10px;padding:10px;background:#f4f6f8;border-radius:6px}
+.preview{font-size:13px;line-height:1.5;margin:8px 0}
+code{background:#eee;padding:1px 4px;border-radius:3px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Events</h1>
+  <button id="refresh" type="button">Refresh</button>
+  <button id="gear" type="button">&#9881; GitHub settings</button>
+</header>
+<main>
+  <p class="intro">An event is a saved copy of the site's data (and, if you want, its photos) kept in <code>events / event-name /</code> in your repository.
+  <b>Applying</b> an event copies it over the live site, so visitors see that event's markers, spots, passport, and settings.
+  Each event also gets its own link (<code>?event=name</code> added to the live page address), and events you mark for the switcher appear in the About panel on the map so guests can move between them.
+  GitHub copies files it already has, so nothing is uploaded and nothing is stored twice.</p>
+  <div id="status" class="msg">Reading the repository&hellip;</div>
+
+  <h2>Design an Event</h2>
+  <p class="intro">Build an event in the other tabs <b>without changing the live map</b>. The editors switch to the event's own folder, a red frame and a banner remind you where you are, and nothing is visible to visitors until you add the event to the switcher or give it dates.</p>
+  <div class="cols">
+    <div><label for="dnName">Event name</label><input type="text" id="dnName" placeholder="Fried Chicken Trail"><div class="sz" id="dnSlug"></div></div>
+    <div><label for="dnFrom">Start from</label><select id="dnFrom"></select><div class="sz" id="dnHint"></div></div>
+  </div>
+  <div style="margin-top:10px"><button class="go" id="dnBtn" type="button" disabled>Create the event and start designing</button></div>
+
+  <h2>Save the Live Site and an Event</h2>
+  <div class="cols">
+    <div>
+      <label for="evName">Event Name</label>
+      <input type="text" id="evName" placeholder="Fried Chicken Trail">
+      <div class="sz" id="slugNote"></div>
+      <label for="evNote">Note (Optional)</label>
+      <input type="text" id="evNote" placeholder="Oct 18 and 19, runs from the library to the depot">
+      <label class="chk" style="margin-top:12px"><input type="checkbox" id="evPublic" checked> Show in the event switcher on the map</label>
+    </div>
+    <div>
+      <label>Data Files</label><div id="dataBox"></div>
+      <label>Folders</label><div id="folderBox"></div>
+    </div>
+  </div>
+  <div class="preview" id="savePreview"></div>
+  <button class="go" id="saveBtn" type="button" disabled>Save as event</button>
+
+  <h2>Saved Events</h2>
+  <div id="list"><em>Loading&hellip;</em></div>
+</main>
+<script src="publish.js"></script>
+<script src="schedule.js"></script>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const DATA = (window.ETS_CONFIG && window.ETS_CONFIG.DATA) || ["site.csv","locations.csv","childmarkers.csv","categories.csv","spots.csv","tours.csv","tourstops.csv","lines.geojson","stamps.csv","tasks.csv","prizes.csv","photos.csv","shapes.csv","overlays.json","border.geojson"];   // the list lives in ets-config.js
+const FOLDERS = ["photos","spots","stories","anims"];
+const SKEY = "ghpublish.settings.v1", TKEY = "ghpublish.token.v1";   // same storage as the editors' Publish button
+
+let branch = "", head = "", baseTree = "", tree = new Map(), meta = {};
+
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const isReserved = s => s === "main" || s === "index";   // "main" means the usual map in links
+const slugify = s => String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+const say = (html, cls) => { $("status").className = "msg " + (cls || ""); $("status").innerHTML = html; };
+const settings = () => { const d = { owner: "Luri-den", repo: "ETS", branch: "" }; try { return Object.assign(d, JSON.parse(localStorage.getItem(SKEY) || "{}")); } catch (e) { return d; } };
+const token = () => { try { return sessionStorage.getItem(TKEY) || localStorage.getItem(TKEY) || ""; } catch (e) { return ""; } };
+
+async function api(path, method, body) {
+  const s = settings(), t = token();
+  const headers = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+  if (t) headers.Authorization = "Bearer " + t;
+  if (body) headers["Content-Type"] = "application/json";
+  const res = await fetch("https://api.github.com/repos/" + s.owner + "/" + s.repo + path, { method: method || "GET", headers, body: body ? JSON.stringify(body) : undefined });
+  if (!res.ok) {
+    let m = ""; try { m = (await res.json()).message || ""; } catch (e) {}
+    const err = new Error(res.status + (m ? " " + m : "")); err.status = res.status; throw err;
+  }
+  return res.json();
+}
+
+async function load() {
+  if (!token() || !settings().owner || !settings().repo) { say("GitHub is not set up yet. Click <b>&#9881; GitHub settings</b> and enter your GitHub username, the repository name, and a token (the same ones the editors' Publish button uses)."); return; }
+  say("Reading the repository&hellip;");
+  try {
+    const s = settings();
+    branch = s.branch || (await api("")).default_branch;
+    head = (await api("/git/ref/heads/" + branch)).object.sha;
+    baseTree = (await api("/git/commits/" + head)).tree.sha;
+    const t = await api("/git/trees/" + baseTree + "?recursive=1");
+    if (t.truncated) throw new Error("The repository is too large to list in one go.");
+    tree = new Map(t.tree.filter(x => x.type === "blob").map(x => [x.path, x]));
+    meta = {};
+    for (const slug of eventSlugs()) {
+      const e = tree.get("events/" + slug + "/event.json");
+      if (!e) continue;
+      try {
+        const b = await api("/git/blobs/" + e.sha);
+        const bytes = Uint8Array.from(atob(b.content.replace(/\s/g, "")), c => c.charCodeAt(0));
+        meta[slug] = JSON.parse(new TextDecoder().decode(bytes));
+      } catch (x) {}
+    }
+    say("");
+    renderSave(); renderList(); fillDesignFrom(); updateDesign();
+  } catch (e) {
+    say(/401|403/.test(e.message) ? "GitHub refused the token (" + esc(e.message) + "). Check &#9881; GitHub settings." : "Could not read the repository: " + esc(e.message), "err");
+  }
+}
+
+function eventSlugs() {
+  const set = new Set();
+  for (const p of tree.keys()) { const m = /^events\/([^/]+)\//.exec(p); if (m) set.add(m[1]); }
+  return [...set].sort();
+}
+const eventFiles = slug => [...tree].filter(([p]) => p.startsWith("events/" + slug + "/") && !p.endsWith("/event.json"));
+
+/* ---------- save ---------- */
+function selected() {
+  return {
+    data: [...document.querySelectorAll(".chkData:checked")].map(x => x.value),
+    folders: [...document.querySelectorAll(".chkFolder:checked")].map(x => x.value)
+  };
+}
+function livePaths(sel) {
+  const out = [];
+  for (const p of tree.keys()) {
+    if (p.startsWith("events/")) continue;
+    if (sel.data.includes(p) || sel.folders.some(f => p.startsWith(f + "/"))) out.push(p);
+  }
+  return out;
+}
+function allSel() { return { data: DATA.filter(f => tree.has(f)), folders: FOLDERS }; }
+
+function renderSave() {
+  const dataHave = DATA.filter(f => tree.has(f));
+  $("dataBox").innerHTML = dataHave.map(f => '<label class="chk"><input type="checkbox" class="chkData" value="' + f + '" checked> ' + f + "</label>").join("") || "<em>No data files found.</em>";
+  const info = FOLDERS.map(f => { let n = 0, b = 0; for (const [p, e] of tree) if (p.startsWith(f + "/")) { n++; b += e.size || 0; } return { f, n, b }; }).filter(x => x.n);
+  $("folderBox").innerHTML = info.map(x => '<label class="chk"><input type="checkbox" class="chkFolder" value="' + x.f + '" checked> ' + x.f + '/ <span class="sz">' + x.n + " files, " + fmtSize(x.b) + "</span></label>").join("") || "<em>No photos, spots, stories or anims folders found.</em>";
+  updateSavePreview();
+}
+function updateSavePreview() {
+  const name = $("evName").value.trim(), slug = slugify(name), sel = selected();
+  const paths = livePaths(sel);
+  let bytes = 0; paths.forEach(p => bytes += tree.get(p).size || 0);
+  $("slugNote").textContent = slug ? (isReserved(slug) ? "\"" + slug + "\" is reserved. Choose another name." : "Folder: events/" + slug + "/") : "";
+  const exists = slug && eventSlugs().includes(slug);
+  $("savePreview").innerHTML = paths.length
+    ? paths.length + " files (" + fmtSize(bytes) + ") will be saved into <code>events/" + esc(slug || "…") + "/</code>. Saved copies add about that much to the size of the published site." +
+      (exists ? '<br><b>An event with this name already exists. Saving will replace it.</b>' : "")
+    : "Tick at least one file or folder.";
+  $("saveBtn").disabled = !(slug && !isReserved(slug) && paths.length);
+}
+["evName", "evNote"].forEach(id => $(id).addEventListener("input", updateSavePreview));
+$("dataBox").addEventListener("change", updateSavePreview);
+$("folderBox").addEventListener("change", updateSavePreview);
+
+async function snapshotWrites(slug, name, note, sel, isPublic, extra) {
+  const prefix = "events/" + slug + "/", writes = [], want = new Set();
+  for (const p of livePaths(sel)) {
+    const e = tree.get(p);
+    writes.push({ path: prefix + p, mode: e.mode, type: "blob", sha: e.sha });
+    want.add(prefix + p);
+  }
+  const info = {
+    name, note, saved: new Date().toISOString(), files: writes.length, public: !!isPublic,
+    data: sel.data.filter(f => tree.has(f)),                                              // the map reads only these from the event
+    folders: sel.folders.filter(f => [...tree.keys()].some(p => p.startsWith(f + "/")))
+  };
+  if (extra && extra.schedule) { info.schedule = extra.schedule; info.auto = !!extra.auto; }   // re-saving keeps the event's dates
+  const m = await api("/git/blobs", "POST", { content: JSON.stringify(info, null, 2), encoding: "utf-8" });
+  writes.push({ path: prefix + "event.json", mode: "100644", type: "blob", sha: m.sha });
+  want.add(prefix + "event.json");
+  for (const p of tree.keys()) if (p.startsWith(prefix) && !want.has(p)) writes.push({ path: p, mode: "100644", type: "blob", sha: null });   // left over from an earlier save
+  return writes;
+}
+
+// events/index.json is the list the map's event switcher reads. changes = { slug: { name, note, public } } for events written in this commit.
+async function indexWrite(changes) {
+  const slugs = new Set(eventSlugs());
+  Object.keys(changes).forEach(s => slugs.add(s));
+  const list = [];
+  slugs.forEach(slug => {
+    const m = changes[slug] || meta[slug] || {};
+    if (m.public || m.auto) list.push({ slug, name: m.name || slug, note: m.note || "", public: !!m.public, auto: !!m.auto, schedule: m.schedule || null });
+  });
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  const b = await api("/git/blobs", "POST", { content: JSON.stringify(list, null, 2), encoding: "utf-8" });
+  return { path: "events/index.json", mode: "100644", type: "blob", sha: b.sha };
+}
+
+async function commit(writes, message) {
+  const cur = (await api("/git/ref/heads/" + branch)).object.sha;
+  if (cur !== head) throw new Error("The repository changed since this page loaded. Click Refresh and try again.");
+  const t = await api("/git/trees", "POST", { base_tree: baseTree, tree: writes });
+  const c = await api("/git/commits", "POST", { message, tree: t.sha, parents: [head] });
+  await api("/git/refs/heads/" + branch, "PATCH", { sha: c.sha });
+  return c;
+}
+const commitLink = c => ' <a href="https://github.com/' + esc(settings().owner) + "/" + esc(settings().repo) + "/commit/" + c.sha + '" target="_blank" rel="noopener">View commit</a>';
+
+$("saveBtn").onclick = async () => {
+  const name = $("evName").value.trim(), slug = slugify(name), note = $("evNote").value.trim();
+  if (eventSlugs().includes(slug) && !confirm('Replace the saved event "' + slug + '" with what is live now?')) return;
+  $("saveBtn").disabled = true;
+  try {
+    say("Saving&hellip;");
+    const pub = $("evPublic").checked;
+    const prev = meta[slug] || {};
+    const writes = await snapshotWrites(slug, name, note, selected(), pub, { schedule: prev.schedule, auto: prev.auto });
+    writes.push(await indexWrite({ [slug]: { name, note, public: pub, auto: prev.auto, schedule: prev.schedule } }));
+    const c = await commit(writes, "Save event: " + name);
+    await load();
+    say("&#10004; Saved <b>" + esc(name) + "</b> to <code>events/" + esc(slug) + "/</code>." + commitLink(c), "ok");
+  } catch (e) { say("Could not save: " + esc(e.message), "err"); }
+  updateSavePreview();
+};
+
+/* ---------- list + apply ---------- */
+function renderList() {
+  const slugs = eventSlugs();
+  if (!slugs.length) { $("list").innerHTML = "<em>No saved events yet.</em>"; return; }
+  $("list").innerHTML = slugs.map(slug => {
+    const m = meta[slug] || {}, files = eventFiles(slug);
+    let bytes = 0; files.forEach(([, e]) => bytes += e.size || 0);
+    const when = m.saved ? new Date(m.saved).toLocaleDateString() : "";
+    return '<div class="card" data-slug="' + esc(slug) + '"><h3>' + esc(m.name || slug) + '</h3>' +
+      '<div class="sub"><code>events/' + esc(slug) + '/</code> &middot; ' + files.length + " files, " + fmtSize(bytes) + (when ? " &middot; saved " + esc(when) : "") + (m.public ? " &middot; <b>in the switcher</b>" : "") + (Workspace.current() === slug ? ' &middot; <b style="color:#d4351c">designing now</b>' : "") + (!m.public && !m.auto ? " &middot; not published (no switcher entry, no dates)" : "") + "</div>" +
+      (m.note ? '<div class="sub">' + esc(m.note) + "</div>" : "") +
+      (m.schedule ? '<div class="sub">&#128197; ' + esc(EventSchedule.describe(m.schedule)) + " &middot; <b>" + esc(EventSchedule.statusText(EventSchedule.status(m.schedule)) || "") + "</b>" + (m.auto ? " &middot; opens automatically" : "") + "</div>" : "") +
+      '<div class="row">' + (Workspace.current() === slug ? '<button class="go dsg-off" type="button">Stop designing</button>' : '<button class="go dsg" type="button">Design this event</button>') + '<button class="pv" type="button">Preview</button><button class="ap" type="button">Apply to live site</button><button class="rs" type="button">Re-save from live site</button><button class="pub" type="button">' + (m.public ? "Remove from switcher" : "Add to switcher") + '</button><button class="cp" type="button">Copy link</button><button class="sch" type="button">' + (m.schedule ? "Edit dates" : "Set dates\u2026") + '</button></div>' +
+      '<div class="slot"></div><div class="slot2"></div></div>';
+  }).join("");
+  document.querySelectorAll("#list .card").forEach(card => {
+    const slug = card.dataset.slug;
+    card.querySelector(".ap").onclick = () => openApply(card, slug);
+    card.querySelector(".sch").onclick = () => openSchedule(card, slug);
+    card.querySelector(".pv").onclick = () => window.open(new URL(((window.ETS_CONFIG&&window.ETS_CONFIG.LIVE_PAGE)||"Demo2a.html") + "?event=" + encodeURIComponent(slug), location.href).href, "_blank");
+    const dsg = card.querySelector(".dsg"), dsgOff = card.querySelector(".dsg-off");
+    if (dsg) dsg.onclick = () => {
+      if (!confirm('Design "' + ((meta[slug] && meta[slug].name) || slug) + '"? The editor tabs will reload and switch to this event. Save or publish anything unsaved in them first.')) return;
+      Workspace.set(slug); renderList();
+      say("Now designing <b>" + esc((meta[slug] && meta[slug].name) || slug) + "</b>. Use the other tabs as usual. Publishing there saves into <code>events/" + esc(slug) + "/</code>, and the live map is not changed.", "ok");
+    };
+    if (dsgOff) dsgOff.onclick = () => { Workspace.set(""); renderList(); say("Back on the live site. The editor tabs now publish to the live map again.", "ok"); };
+    card.querySelector(".cp").onclick = async () => {
+      const url = new URL(((window.ETS_CONFIG&&window.ETS_CONFIG.LIVE_PAGE)||"Demo2a.html") + "?event=" + encodeURIComponent(slug), location.href).href;
+      try { await navigator.clipboard.writeText(url); say("Copied this link: <code>" + esc(url) + "</code> (good for a QR code)", "ok"); }
+      catch (e) { say("Link for this event: <code>" + esc(url) + "</code>", "ok"); }
+    };
+    card.querySelector(".pub").onclick = async () => {
+      const m = meta[slug] || { name: slug }, flag = !m.public;
+      try {
+        say("Updating&hellip;");
+        const info = Object.assign({}, m, { public: flag });
+        const b = await api("/git/blobs", "POST", { content: JSON.stringify(info, null, 2), encoding: "utf-8" });
+        const c = await commit([{ path: "events/" + slug + "/event.json", mode: "100644", type: "blob", sha: b.sha }, await indexWrite({ [slug]: info })], (flag ? "Add " : "Remove ") + slug + (flag ? " to" : " from") + " the event switcher");
+        await load();
+        say("&#10004; " + (flag ? "Added to" : "Removed from") + " the switcher." + commitLink(c), "ok");
+      } catch (e2) { say("Could not update: " + esc(e2.message), "err"); }
+    };
+    card.querySelector(".rs").onclick = () => {
+      $("evName").value = (meta[slug] && meta[slug].name) || slug;
+      $("evNote").value = (meta[slug] && meta[slug].note) || "";
+      updateSavePreview();
+      $("evName").scrollIntoView({ behavior: "smooth", block: "center" });
+      $("evName").focus();
+    };
+  });
+}
+
+function applyPlan(slug, o) {
+  const prefix = "events/" + slug + "/", writes = [], removed = [], root = new Set();
+  let replaced = 0, added = 0, bytes = 0;
+  for (const [p, e] of eventFiles(slug)) {
+    const rp = p.slice(prefix.length);
+    root.add(rp);
+    const cur = tree.get(rp);
+    if (cur && cur.sha === e.sha) continue;
+    writes.push({ path: rp, mode: e.mode, type: "blob", sha: e.sha });
+    cur ? replaced++ : added++;
+    bytes += e.size || 0;
+  }
+  if (o.mirrorData) DATA.forEach(f => { if (tree.has(f) && !root.has(f)) { writes.push({ path: f, mode: tree.get(f).mode, type: "blob", sha: null }); removed.push(f); } });
+  if (o.mirrorFolders) {
+    const inEvent = FOLDERS.filter(f => [...root].some(p => p.startsWith(f + "/")));   // only folders the event actually includes
+    for (const [p, e] of tree) {
+      if (p.startsWith("events/") || root.has(p)) continue;
+      if (inEvent.some(f => p.startsWith(f + "/"))) { writes.push({ path: p, mode: e.mode, type: "blob", sha: null }); removed.push(p); }
+    }
+  }
+  return { writes, removed, replaced, added, bytes };
+}
+
+function openApply(card, slug) {
+  const slot = card.querySelector(".slot"), m = meta[slug] || {};
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  slot.innerHTML = '<div class="panel">' +
+    '<label class="chk"><input type="checkbox" class="bk" checked> First save what is live now as an event named</label>' +
+    '<input type="text" class="bkName" value="Before ' + esc(m.name || slug) + " " + stamp + '">' +
+    '<label class="chk"><input type="checkbox" class="mD" checked> Remove live data files this event does not have <span class="sz">(for example stamps.csv if it had no passport)</span></label>' +
+    '<label class="chk"><input type="checkbox" class="mF"> Make the photo, spot, story and anim folders match the event exactly <span class="sz">(removes other files from them)</span></label>' +
+    '<div class="preview"></div><div class="row"><button class="go doIt" type="button">Apply now</button><button class="cx" type="button">Cancel</button></div></div>';
+  const q = s => slot.querySelector(s);
+  const refresh = () => {
+    const p = applyPlan(slug, { mirrorData: q(".mD").checked, mirrorFolders: q(".mF").checked });
+    q(".preview").innerHTML = !p.writes.length ? "The live site already matches this event." :
+      "<b>" + p.replaced + "</b> live files will be replaced, <b>" + p.added + "</b> added, <b>" + p.removed.length + "</b> removed." +
+      (p.removed.length ? '<br><span class="sz">Removed: ' + esc(p.removed.slice(0, 8).join(", ")) + (p.removed.length > 8 ? " and " + (p.removed.length - 8) + " more" : "") + "</span>" : "");
+    q(".doIt").disabled = !p.writes.length || (q(".bk").checked && !slugify(q(".bkName").value));
+  };
+  slot.querySelectorAll("input").forEach(i => i.addEventListener("input", refresh));
+  slot.querySelectorAll("input[type=checkbox]").forEach(i => i.addEventListener("change", refresh));
+  q(".cx").onclick = () => { slot.innerHTML = ""; };
+  q(".doIt").onclick = async () => {
+    const o = { mirrorData: q(".mD").checked, mirrorFolders: q(".mF").checked };
+    const plan = applyPlan(slug, o);
+    if (!confirm('Apply "' + (m.name || slug) + '" to the live site?\n\n' + plan.replaced + " replaced, " + plan.added + " added, " + plan.removed.length + " removed.")) return;
+    q(".doIt").disabled = true;
+    try {
+      say("Applying&hellip;");
+      let writes = plan.writes;
+      if (q(".bk").checked) {
+        const bn = q(".bkName").value.trim(), bs = slugify(bn);
+        if (bs === slug) throw new Error("Give the backup a different name than the event you are applying.");
+        writes = (await snapshotWrites(bs, bn, "Saved automatically before applying " + (m.name || slug), allSel(), false)).concat(writes);
+      }
+      const c = await commit(writes, "Apply event: " + (m.name || slug));
+      await load();
+      say("&#10004; Applied <b>" + esc(m.name || slug) + "</b> to the live site. The page updates in about a minute." + commitLink(c) +
+        "<br>Open the editors again (or reload them) so they pick up the new files.", "ok");
+    } catch (e) { say("Could not apply: " + esc(e.message), "err"); q(".doIt").disabled = false; }
+  };
+  refresh();
+}
+
+/* ---------- design an event: make its folder, then switch the editors to it ---------- */
+function fillDesignFrom() {
+  const sel = $("dnFrom"), keep = sel.value;
+  sel.innerHTML = '<option value="live">A copy of the live site (markers, spots, photos, everything)</option><option value="blank">A blank page for a new town or county (starts empty, nothing from the live site)</option><option value="settings">Just the settings and categories (a fresh start)</option>' +
+    eventSlugs().map(s => '<option value="event:' + esc(s) + '">A copy of the event: ' + esc((meta[s] && meta[s].name) || s) + "</option>").join("");
+  if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+function updateDesign() {
+  const slug = slugify($("dnName").value);
+  const bad = !slug ? "" : isReserved(slug) ? '"' + slug + '" is reserved. Choose another name.' : eventSlugs().includes(slug) ? "That name is already used. Pick another, or design the existing event below." : "";
+  $("dnSlug").textContent = slug ? (bad || "Folder: events/" + slug + "/") : "";
+  $("dnBtn").disabled = !slug || !!bad || !tree.size;
+}
+$("dnName").addEventListener("input", updateDesign);
+$("dnFrom").addEventListener("change", () => { $("dnHint").textContent = $("dnFrom").value === "blank" ? "Type the town or county name above (for example, Wayne County). It becomes the page title. Its page address will be the live page followed by ?event=that-name." : ""; });
+const BLANK_HEADERS = {
+  "locations.csv": "ID,NAME,EST.,LAT,LONG,DETAILS,BLURB,CATEGORY,MAJOR,RADIUS,PHOTO",
+  "childmarkers.csv": "CHILD_ID,PARENT_ID,NAME,HIST_NAMES,ADDRESS,DETAILS,BLURB,LAT,LONG,CONNECTION,CATEGORY,MAJOR,RADIUS,PHOTO",
+  "spots.csv": "SPOT_ID,TITLE,LAT,LONG,YEAR,PHOTO,DETAILS,BLURB,INTRO,CREDIT,KIND,CATEGORY,SERIES,ORDER,SOURCE,STAFF_NOTE,ICON,ICON_COLOR,EFFECT",
+  "tours.csv": "TOUR_ID,TITLE,INTRO,CATEGORY",
+  "tourstops.csv": "TOUR_ID,STEP,ITEM_ID,NOTE,VEHICLE",
+  "stamps.csv": "STAMP_ID,TITLE,VEHICLE,CATEGORY,STAR1,STAR2,STAR3,RANK1,RANK2,RANK3,GRAND_RANK,TASKS",
+  "tasks.csv": "TASK_ID,LABEL,HINT,BTN,SCOPE,TARGET,COUNT",
+  "prizes.csv": "PRIZE_ID,LABEL,REQUIREMENTS,REWARD,CODE,ORDER",
+  "photos.csv": "ITEM_ID,ORDER,PATH,CAPTION,CREDIT"
+};
+const csvq = t => /[",\r\n]/.test(t) ? '"' + String(t).replace(/"/g, '""') + '"' : String(t);
+// use the live file's own header row when there is one, so a blank page always matches what the editors write
+async function headerOf(file) {
+  const e = tree.get(file);
+  if (e) { try { const b = await api("/git/blobs/" + e.sha); const txt = new TextDecoder().decode(Uint8Array.from(atob(b.content.replace(/\s/g, "")), c => c.charCodeAt(0))); const line = txt.replace(/^\uFEFF/, "").split(/\r?\n/)[0]; if (line.trim()) return line; } catch (x) {} }
+  return BLANK_HEADERS[file];
+}
+const blobOf = async text => (await api("/git/blobs", "POST", { content: text, encoding: "utf-8" })).sha;
+const starterSite = place => ["KEY,VALUE", "PLACE," + csvq(place), "HEADER,Explore {PLACE}", "TAB_TITLE,Explore {PLACE}", "BAR_COLOR,#1f6f8b",
+  "CENTER_LAT,39.8283", "CENTER_LNG,-98.5795", "ZOOM,4", "BOUNDS_WEST,-125", "BOUNDS_SOUTH,24", "BOUNDS_EAST,-66", "BOUNDS_NORTH,50",
+  "FIT_TO_MARKERS,yes", "PASSPORT,no", "PASSPORT_RANKS,no", "PRIZES,no", "YEAR_SLIDER,no", "OVERLAY_SLIDER,no", "AERIAL_BUTTON,yes", "MAPS_LINK,yes",
+  "WELCOME_TEXT,Welcome to|{PLACE}"].join("\r\n") + "\r\n";
+// GitHub Pages needs about a minute to publish a new folder. Switching the editors before then would show them empty files.
+async function waitForSite(slug) {
+  for (let i = 0; i < 45; i++) {
+    try { const r = await fetch("events/" + slug + "/event.json?t=" + Date.now(), { cache: "no-store" }); if (r.ok) return true; } catch (x) {}
+    say("Waiting for the website to publish the new event folder, which usually takes about a minute&hellip; (" + (i * 5) + " seconds so far)");
+    await new Promise(r => setTimeout(r, 5000));
+  }
+  return false;
+}
+$("dnBtn").onclick = async () => {
+  const name = $("dnName").value.trim(), slug = slugify(name), from = $("dnFrom").value, prefix = "events/" + slug + "/";
+  if (!confirm((from === "blank" ? 'Create a blank page for "' + name + '" and switch the editor tabs to it?' : 'Create "' + name + '" and switch the editor tabs to it?') + ' They will reload, so save or publish anything unsaved in them first.')) return;
+  $("dnBtn").disabled = true;
+  try {
+    say("Creating the event&hellip;");
+    const writes = [];
+    let data = [], folders = [];
+    if (from === "blank") {
+      const files = { "site.csv": starterSite(name), "categories.csv": "CODE,LABEL,COLOR,ICON,RANKED,SHAPE,FILL,FILL_COLOR,FILL_COLOR2\r\nGEN,Places,#1f6f8b,house,no,circle,,,\r\n",
+        "overlays.json": "[]", "border.geojson": '{"type":"FeatureCollection","features":[]}' };
+      for (const f of Object.keys(BLANK_HEADERS)) files[f] = (await headerOf(f)) + "\r\n";
+      for (const [f, text] of Object.entries(files)) writes.push({ path: prefix + f, mode: "100644", type: "blob", sha: await blobOf(text) });
+      data = Object.keys(files);
+      if (tree.has("shapes.csv")) { const e = tree.get("shapes.csv"); writes.push({ path: prefix + "shapes.csv", mode: e.mode, type: "blob", sha: e.sha }); data.push("shapes.csv"); }
+    } else if (from.startsWith("event:")) {
+      const src = from.slice(6), sp = "events/" + src + "/";
+      for (const [p, e] of eventFiles(src)) writes.push({ path: prefix + p.slice(sp.length), mode: e.mode, type: "blob", sha: e.sha });
+      const m = meta[src] || {};
+      data = Array.isArray(m.data) ? m.data : []; folders = Array.isArray(m.folders) ? m.folders : [];
+    } else {
+      const sel = from === "live" ? allSel() : { data: ["site.csv", "categories.csv", "shapes.csv"].filter(f => tree.has(f)), folders: [] };
+      for (const p of livePaths(sel)) { const e = tree.get(p); writes.push({ path: prefix + p, mode: e.mode, type: "blob", sha: e.sha }); }
+      data = sel.data.filter(f => tree.has(f));
+      folders = sel.folders.filter(f => [...tree.keys()].some(p => p.startsWith(f + "/")));
+    }
+    const now = new Date().toISOString();
+    const b = await api("/git/blobs", "POST", { content: JSON.stringify({ name, note: "", created: now, saved: now, files: writes.length, public: false, data, folders }, null, 2), encoding: "utf-8" });
+    writes.push({ path: prefix + "event.json", mode: "100644", type: "blob", sha: b.sha });
+    const c = await commit(writes, "Start designing event: " + name);
+    await load();
+    if (!(await waitForSite(slug))) {
+      renderList(); updateDesign();
+      say("The event was created, but the website has not published its folder yet. Wait a minute or two, then press <b>Design this event</b> on its card below." + commitLink(c));
+      return;
+    }
+    Workspace.set(slug);
+    renderList();
+    say("&#10004; Now designing <b>" + esc(name) + "</b>. Use the other tabs as usual: publishing there saves into <code>events/" + esc(slug) + "/</code> and the live map is not changed. It stays hidden from visitors until you add it to the switcher or give it dates below." + commitLink(c), "ok");
+  } catch (x) { say("Could not create the event: " + esc(x.message), "err"); }
+  updateDesign();
+};
+
+/* ---------- dates ---------- */
+const guessZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Indiana/Indianapolis"; } catch (x) { return "America/Indiana/Indianapolis"; } };
+const pad2 = n => String(n).padStart(2, "0");
+function openSchedule(card, slug) {
+  const slot = card.querySelector(".slot2"), m = meta[slug] || { name: slug };
+  if (slot.innerHTML) { slot.innerHTML = ""; return; }
+  const s0 = Object.assign({ repeat: "once", tz: guessZone(), soonDays: 14 }, m.schedule || {});
+  const zones = [...new Set([s0.tz].concat(EventSchedule.ZONES))];
+  const A = EventSchedule.parseLocal(s0.start), B = EventSchedule.parseLocal(s0.end);
+  const part = (ms, k) => { if (ms == null) return k === "m" ? 11 : k === "d" ? 1 : ""; const d = new Date(ms); return k === "m" ? d.getUTCMonth() + 1 : k === "d" ? d.getUTCDate() : pad2(d.getUTCHours()) + ":" + pad2(d.getUTCMinutes()); };
+  const monthOpts = sel => EventSchedule.MONTHS.map((n, i) => '<option value="' + (i + 1) + '"' + (sel === i + 1 ? " selected" : "") + ">" + n + "</option>").join("");
+  const days = (s0.days || []).map(Number);
+  slot.innerHTML = '<div class="panel">' +
+    '<label>How often</label><select class="s-rep"><option value="once">Just once</option><option value="yearly">Every year</option><option value="monthly">Every month</option><option value="weekly">Every week</option></select>' +
+    '<label>Time zone</label><select class="s-tz">' + zones.map(z => '<option value="' + esc(z) + '"' + (z === s0.tz ? " selected" : "") + ">" + esc(z.replace(/_/g, " ")) + "</option>").join("") + "</select>" +
+    '<div class="s-once"><label>Starts</label><input type="datetime-local" class="s-start" value="' + esc(s0.repeat === "once" ? (s0.start || "") : "") + '"><label>Ends</label><input type="datetime-local" class="s-end" value="' + esc(s0.repeat === "once" ? (s0.end || "") : "") + '"></div>' +
+    '<div class="s-yearly"><label>Starts</label><div class="row"><select class="y-sm">' + monthOpts(part(A, "m")) + '</select><input type="number" class="y-sd" min="1" max="31" value="' + part(A, "d") + '" style="width:70px"><input type="time" class="y-st" value="' + (A != null ? part(A, "t") : "09:00") + '"></div>' +
+      '<label>Ends</label><div class="row"><select class="y-em">' + monthOpts(part(B, "m")) + '</select><input type="number" class="y-ed" min="1" max="31" value="' + part(B, "d") + '" style="width:70px"><input type="time" class="y-et" value="' + (B != null ? part(B, "t") : "18:00") + '"></div></div>' +
+    '<div class="s-monthly"><label>Starts on day of the month</label><div class="row"><input type="number" class="m-sd" min="1" max="31" value="' + esc(s0.startDay || 1) + '" style="width:70px"><input type="time" class="m-st" value="' + esc(s0.startTime || "09:00") + '"></div>' +
+      '<label>Ends on day of the month</label><div class="row"><input type="number" class="m-ed" min="1" max="31" value="' + esc(s0.endDay || 3) + '" style="width:70px"><input type="time" class="m-et" value="' + esc(s0.endTime || "17:00") + '"></div></div>' +
+    '<div class="s-weekly"><label>On these days</label><div class="row">' + EventSchedule.DAYS.map((n, i) => '<label class="chk" style="margin:0"><input type="checkbox" class="w-day" value="' + i + '"' + (days.includes(i) ? " checked" : "") + "> " + n + "</label>").join("") + '</div>' +
+      '<label>From</label><input type="time" class="w-st" value="' + esc(s0.startTime || "09:00") + '"><label>Until</label><input type="time" class="w-et" value="' + esc(s0.endTime || "17:00") + '"></div>' +
+    '<div class="s-soonbox"><label>Show "Coming soon" this many days before it starts</label><input type="number" class="s-soon" min="0" max="365" value="' + esc(s0.soonDays == null ? 14 : s0.soonDays) + '" style="width:90px"></div>' +
+    '<label class="chk"><input type="checkbox" class="s-auto"' + (m.auto ? " checked" : "") + '> Open this event automatically on the main map while it is on</label>' +
+    '<div class="preview s-prev"></div><div class="row"><button class="go s-save" type="button">Save dates</button><button class="s-clear" type="button">Remove dates</button><button class="s-cancel" type="button">Cancel</button></div></div>';
+  const q = x => slot.querySelector(x);
+  q(".s-rep").value = s0.repeat;
+  const read = () => {
+    const rep = q(".s-rep").value, s = { repeat: rep, tz: q(".s-tz").value, soonDays: +q(".s-soon").value || 0 };
+    if (rep === "once") { s.start = q(".s-start").value; s.end = q(".s-end").value; }
+    if (rep === "yearly") { s.start = "2000-" + pad2(q(".y-sm").value) + "-" + pad2(q(".y-sd").value || 1) + "T" + (q(".y-st").value || "00:00"); s.end = "2000-" + pad2(q(".y-em").value) + "-" + pad2(q(".y-ed").value || 1) + "T" + (q(".y-et").value || "00:00"); }
+    if (rep === "monthly") { s.startDay = +q(".m-sd").value; s.startTime = q(".m-st").value; s.endDay = +q(".m-ed").value; s.endTime = q(".m-et").value; }
+    if (rep === "weekly") { s.days = [...slot.querySelectorAll(".w-day:checked")].map(x => +x.value); s.startTime = q(".w-st").value; s.endTime = q(".w-et").value; }
+    return s;
+  };
+  const refresh = () => {
+    const rep = q(".s-rep").value;
+    ["once", "yearly", "monthly", "weekly"].forEach(k => { q(".s-" + k).hidden = k !== rep; });
+    q(".s-soonbox").hidden = rep === "weekly";
+    const s = read(), probs = EventSchedule.validate(s);
+    q(".s-prev").innerHTML = probs.length ? '<span style="color:#842029">' + esc(probs.join(" ")) + "</span>" : esc(EventSchedule.describe(s)) + "<br><b>" + esc(EventSchedule.statusText(EventSchedule.status(s))) + "</b>";
+    q(".s-save").disabled = probs.length > 0;
+  };
+  slot.querySelectorAll("input,select").forEach(i => { i.addEventListener("input", refresh); i.addEventListener("change", refresh); });
+  q(".s-cancel").onclick = () => { slot.innerHTML = ""; };
+  const saveInfo = async (info, msg, okText) => {
+    try {
+      say("Saving&hellip;");
+      const b = await api("/git/blobs", "POST", { content: JSON.stringify(info, null, 2), encoding: "utf-8" });
+      const c = await commit([{ path: "events/" + slug + "/event.json", mode: "100644", type: "blob", sha: b.sha }, await indexWrite({ [slug]: info })], msg);
+      await load();
+      say("&#10004; " + okText + commitLink(c), "ok");
+    } catch (x) { say("Could not save: " + esc(x.message), "err"); }
+  };
+  q(".s-save").onclick = () => {
+    const s = read();
+    if (EventSchedule.validate(s).length) return;
+    saveInfo(Object.assign({}, m, { schedule: s, auto: q(".s-auto").checked }), "Set dates for event: " + (m.name || slug), "Dates saved for <b>" + esc(m.name || slug) + "</b>. The map reads them straight away, so no one has to do anything on the day.");
+  };
+  q(".s-clear").onclick = () => {
+    const info = Object.assign({}, m); delete info.schedule; info.auto = false;
+    saveInfo(info, "Remove dates from event: " + (m.name || slug), "Dates removed.");
+  };
+  refresh();
+}
+
+$("refresh").onclick = load;
+$("gear").onclick = () => { if (window.GHPublish) GHPublish.settingsDialog(load); else say("publish.js was not found next to this page.", "err"); };
+load();
+</script>
+</body>
+</html>

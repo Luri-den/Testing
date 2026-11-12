@@ -1,0 +1,3634 @@
+<!DOCTYPE html>
+<html lang="en" class="settings-loading">
+<head>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#800000">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Explore Franklin County</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+
+<style>
+
+html,body{margin:0;height:100%;font-family:Arial,sans-serif}
+html.settings-loading #bar,
+html.settings-loading #tools { visibility: hidden; }
+
+#bar{position:absolute;z-index:5;top:0;left:0;right:0;background:none;color:#fff;padding:calc(8px + env(safe-area-inset-top)) 10px 0;box-sizing:border-box;display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px;pointer-events:none}
+#bar > *, #tools > *{pointer-events:auto}
+.bar-top{display:contents}
+#bar h1{display:none;font-size:15px;margin:0}  /* title hidden on the map; the welcome screen still shows it */
+
+#passportBtn{background:#fff;color:var(--bar,#E47303);border:0;border-radius:20px;padding:5px 12px;font-weight:bold;font-size:13px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+#passportBtn:hover{background:#fff8f0}
+
+#q{width:100%;box-sizing:border-box;padding:8px;font-size:16px;border:0;border-radius:4px}
+
+#res{list-style:none;margin:2px 0 0;padding:0;background:#fff;color:#000;border-radius:4px;max-height:40vh;overflow:auto}
+#res button{width:100%;text-align:left;padding:10px;border:0;background:none;font-size:15px;border-bottom:1px solid #eee}
+
+#map{position:absolute;inset:0}
+
+#leaders{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+#leaders path{fill:#E47303;stroke:#fff;stroke-width:1.5}
+
+.pin{width:44px;height:44px;border-radius:50%;border:3px solid var(--c,#E47303);background:#E47303;box-shadow:0 0 0 2px #fff,0 1px 4px #0007;padding:0;overflow:hidden;cursor:pointer}
+.pin img{width:100%;height:100%;object-fit:cover;display:block}
+.pin.parent{width:58px;height:58px;border:4px solid var(--c,#E47303);box-shadow:0 0 0 2px #fff,0 1px 5px #0008}
+.pin:focus-visible{outline:3px solid #ff9800}
+.pin.sel{border-color:#ff9800}
+.pin.gone{border-style:dashed}
+.pin.gone {filter:grayscale(1)}
+.pin img.is-default{object-fit:contain;padding:18%;background:#fffdf6;box-sizing:border-box}
+#panel img.is-default,#tourCard img.is-default{width:110px;height:110px;max-height:none;object-fit:contain;padding:10px;background:#fffdf6;box-sizing:border-box;cursor:default;border-radius:8px}
+
+#tools{display:flex;gap:6px;flex-wrap:wrap;font-size:13px;align-items:center}
+#tools button{padding:6px 10px;border:0;border-radius:4px;background:#fff;color:#000;cursor:pointer}
+#tools label{display:flex;align-items:center;gap:6px;flex:1 1 210px}
+#tools input[type=range]{flex:1}
+#aerialBtn[aria-pressed="true"]{background:#222;color:#fff}
+#tools [hidden]{display:none}
+/* More button: on a phone the less-used controls fold away; on a wide screen everything stays in one row */
+#toolsMore{display:contents}
+#moreBtn{display:none}
+#moreBtn.on::after{content:" \25CF";font-size:9px;color:var(--bar,#E47303)}
+@media (max-width:720px){
+  #moreBtn{display:inline-block}
+  #tools #moreBtn[hidden]{display:none}
+  #toolsMore{display:none;flex:1 1 100%;flex-wrap:wrap;align-items:flex-end;gap:8px 8px}
+  #tools.open #toolsMore{display:flex}
+}
+/* compact year slider with tick marks (one tick per step, a label every 50 years) */
+#tools label#yearBox{flex:0 0 190px;flex-direction:column;align-items:stretch;gap:0}
+.strack{position:relative;display:block;height:36px}
+#yr{-webkit-appearance:none;appearance:none;width:100%;height:20px;margin:0;background:transparent;position:relative;z-index:1}
+#yr::-webkit-slider-runnable-track{height:4px;background:rgba(255,255,255,.6);border-radius:2px}
+#yr::-moz-range-track{height:4px;background:rgba(255,255,255,.6);border-radius:2px}
+#yr::-webkit-slider-thumb{-webkit-appearance:none;box-sizing:border-box;width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid #333;margin-top:-6px}
+#yr::-moz-range-thumb{box-sizing:border-box;width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid #333}
+#yticks{position:absolute;left:8px;right:8px;top:21px;height:14px;pointer-events:none}
+#yticks i{position:absolute;top:0;width:1px;height:4px;margin-left:-.5px;background:rgba(255,255,255,.9)}
+#yticks i.maj{height:7px}
+#yticks em{position:absolute;top:8px;transform:translateX(-50%);font:normal 10px/1 Arial,sans-serif;color:#fff;white-space:nowrap}
+#tools label#ovw{flex:1 1 260px}   /* the label rule above would otherwise override the hidden attribute */
+
+#panel{position:absolute;z-index:6;left:0;right:0;bottom:0;max-height:55vh;overflow:auto;background:#fff;padding:12px 14px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -2px 8px #0005;box-sizing:border-box}
+
+/* Cover image inside the panel: sized, not left at natural size */
+#panel > img,
+#panel img:not(.gal img):not(.is-default){
+  display:block;
+  width:100%;
+  height:auto;
+  max-height:45vh;
+  object-fit:cover;
+  border-radius:6px;
+  cursor:zoom-in;
+}
+
+#panel h2{margin:8px 0 4px;font-size:19px}
+#panel h3{margin:12px 0 4px;font-size:15px}
+#x{position:absolute;right:8px;top:6px;font-size:26px;border:0;background:none;cursor:pointer}
+
+.kid{display:block;width:100%;text-align:left;padding:10px;margin:3px 0;border:1px solid #E47303;border-radius:6px;background:#fff;font-size:15px;cursor:pointer}
+.kid:hover{background:#fff8f0}
+
+@media(min-width:700px){
+  #panel{left:auto;width:380px;top:125px;bottom:auto;max-height:calc(100% - 140px);right:10px;border-radius:8px}
+}
+
+/* WELCOME GIF INTRO */
+#welcomeOverlay{position:fixed;inset:0;z-index:99999;overflow:hidden;pointer-events:auto;background:transparent;cursor:pointer}
+#welcomeImage{position:absolute;max-width:100vw;max-height:100vh;width:auto;height:auto;user-select:none;-webkit-user-drag:none;left:var(--welcome-x,50%);top:var(--welcome-y,50%);transform:translate(-50%,calc(-50% + 110vh));transition:transform 650ms cubic-bezier(.22,.61,.36,1)}
+#welcomeOverlay.show #welcomeImage{transform:translate(-50%,-50%)}
+#welcomeOverlay.exit #welcomeImage{transform:translate(-50%,calc(-50% - 110vh))}
+#welcomeSkip{position:absolute;z-index:2;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);padding:6px 12px;border-radius:4px;background:rgba(0,0,0,.45);color:#fff;font-size:12px;letter-spacing:.04em;pointer-events:none;opacity:.8}
+
+#spotBox{position:fixed;inset:0;z-index:9000;background:#000a;display:flex;align-items:center;justify-content:center;padding:14px}
+#spotBox[hidden]{display:none}
+.covernote{display:block;font-size:12px;color:#555;margin:2px 0 8px}
+.gal{display:grid;gap:10px;margin-top:12px}
+.gal figure{margin:0}
+#panel .gal img,#spotCard .gal img,.gal img{width:100%;max-height:220px;object-fit:cover;border-radius:8px;cursor:zoom-in;display:block}
+.gal figcaption{font-size:12px;color:#555;margin-top:3px}
+#eventBox{position:fixed;inset:0;z-index:9000;background:#000a;display:flex;align-items:center;justify-content:center;padding:14px}
+#eventBox[hidden]{display:none}
+#eventCard{position:relative;background:#fff;border:6px solid var(--bar,#E47303);border-radius:18px;max-width:560px;width:100%;max-height:92vh;overflow:auto;padding:14px 18px 18px}
+#eventCard h2{margin:6px 34px 10px 0}
+#eventCard p{margin:0;line-height:1.5;white-space:pre-line}
+#ev-x{position:absolute;right:8px;top:2px;font-size:30px;border:0;background:none;cursor:pointer}
+#eventCard h3{margin:16px 0 4px}
+.ev-link{display:block;padding:9px 12px;margin:6px 0;border:2px solid var(--bar,#E47303);border-radius:12px;text-decoration:none;color:#222;background:#fff}
+.ev-link small{display:block;opacity:.8}
+.ev-link.cur{background:var(--bar,#E47303);color:#fff;pointer-events:none}
+.ev-link.now:not(.cur){border-color:#d4351c}
+.ev-nowtag{font-weight:bold;color:#d4351c;opacity:1 !important}
+.ev-link.cur .ev-nowtag{color:#fff}
+#eventCard details{margin-top:10px}
+#eventCard summary{cursor:pointer;font-size:14px;margin-bottom:4px}
+#eventBtn.now{background:#d4351c;color:#fff;font-weight:bold}
+#spotCard{position:relative;background:#fff;border:6px solid #D55E00;border-radius:18px;max-width:560px;max-height:92vh;overflow:auto;padding:14px}
+#spotCard img{width:100%;max-height:52vh;object-fit:contain;border-radius:8px;background:#eee;cursor:zoom-in}
+#spotCard h2{margin:10px 0 4px}
+#sp-x{position:absolute;right:8px;top:2px;font-size:30px;border:0;background:none;cursor:pointer}
+#sp-go{display:block;margin-top:12px;padding:10px 14px;border:0;border-radius:6px;background:#D55E00;color:#fff;font-size:16px;cursor:pointer}
+.spotpin{width:22px;height:22px;border-radius:50%;background:#D55E00;border:4px solid #fff;box-shadow:0 0 0 4px #D55E00,0 0 12px #000a}
+
+#welcomeSite{position:absolute;inset:0;pointer-events:none}
+#wsLine{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+#wsLine path{stroke:#fff;stroke-width:2}
+#wsPhoto{position:absolute;left:14px;top:calc(104px + env(safe-area-inset-top));width:min(46vw,230px);height:min(46vw,230px);border-radius:50%;object-fit:cover;border:8px solid var(--c);background:#fff;box-shadow:0 0 0 3px #fff,0 4px 14px #0007}
+#wsBox{position:absolute;left:14px;top:calc(104px + min(46vw,230px) + 14px + env(safe-area-inset-top));width:min(calc(100vw - 28px),360px);box-sizing:border-box;background:#fff;border:6px solid var(--c);border-radius:18px;padding:12px 14px;box-shadow:0 0 0 3px #fff,0 4px 14px #0006;pointer-events:auto;cursor:pointer}
+#welcomeSite.right #wsPhoto,#welcomeSite.right #wsBox{left:auto;right:14px}
+#wsBox h2{margin:0 0 6px;font-size:21px}
+#wsBox p{margin:0;font-size:16px;line-height:1.35}
+#wsBox small{display:block;margin-top:6px;color:#555}
+#wsBox .go{margin-top:8px;display:inline-block;background:#E47303;color:#fff;border:0;border-radius:4px;padding:8px 12px;font-size:14px;cursor:pointer}
+#wsTag{display:inline-block;margin:0 0 6px;padding:3px 10px;border-radius:999px;font:700 12px/1.4 system-ui,Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase}
+#wsTag[hidden]{display:none}
+#wsTag.live::before,.ann-tag.live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-right:6px;animation:annPulse 1.4s ease-in-out infinite}
+@keyframes annPulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){#wsTag.live::before,.ann-tag.live::before{animation:none}}
+#welcomeSite.nophoto #wsPhoto{display:none}
+#welcomeSite.nophoto #wsBox{top:calc(96px + env(safe-area-inset-top))}
+.ann-item{margin:8px 0;padding:10px 12px;border-left:8px solid var(--c,#D55E00);background:#fff;border-radius:6px;box-shadow:0 1px 4px #0002}
+.ann-tag{display:inline-block;margin:0 8px 4px 0;padding:2px 9px;border-radius:999px;font:700 11px/1.4 system-ui,Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase}
+.ann-item b{font-size:16px}.ann-item small{display:block;color:#555;margin:2px 0 4px}.ann-item p{margin:4px 0 6px;font-size:14px;line-height:1.4}
+.ann-item button{margin:2px 6px 0 0;padding:6px 10px;border:0;border-radius:4px;background:#E47303;color:#fff;font-size:13px;cursor:pointer}
+#welcomeSite.in #wsPhoto,#welcomeSite.in #wsBox,#welcomeSite.in #wsLine{animation:wsIn 450ms cubic-bezier(.22,.61,.36,1) both}
+@keyframes wsIn{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:none}}
+.pin.spot{box-shadow:0 0 0 6px #fff,0 0 0 11px var(--c);animation:spotPulse 1.6s ease-out infinite}
+@keyframes spotPulse{
+  0%,100%{box-shadow:0 0 0 6px #fff,0 0 0 11px var(--c)}
+  50%    {box-shadow:0 0 0 6px #fff,0 0 0 18px color-mix(in srgb, var(--c) 55%, transparent)}
+}
+
+/* TOUR VEHICLE */
+.travel-clip{width:88px;height:56px;overflow:hidden;pointer-events:none;filter:drop-shadow(0 2px 3px #0006)}
+.travel-clip .scene{position:relative;width:100%;height:100%}
+.travel-clip .env{position:absolute;left:0;right:0;bottom:0;height:14px;background-repeat:repeat-x;background-size:60px 14px;animation:scrollEnv 800ms linear infinite}
+.travel-clip.rail .env{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='14' viewBox='0 0 60 14'><rect y='9' width='60' height='3' fill='%23444'/><rect x='2' y='5' width='3' height='9' fill='%23666'/><rect x='17' y='5' width='3' height='9' fill='%23666'/><rect x='32' y='5' width='3' height='9' fill='%23666'/><rect x='47' y='5' width='3' height='9' fill='%23666'/></svg>")}
+.travel-clip.boat .env{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='14' viewBox='0 0 60 14'><path d='M0 9 Q 15 4 30 9 T 60 9' stroke='%233a6ea8' stroke-width='2' fill='none'/><path d='M0 12 Q 15 8 30 12 T 60 12' stroke='%235a8ec8' stroke-width='1.5' fill='none'/></svg>")}
+.travel-clip.car .env{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='14' viewBox='0 0 60 14'><rect y='9' width='60' height='5' fill='%23555'/><rect y='9' width='8' height='1' fill='%23eee'/><rect x='30' y='9' width='8' height='1' fill='%23eee'/></svg>")}
+
+.travel-clip .vehicle{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);animation:vehicleBob 800ms ease-in-out infinite}
+@keyframes vehicleBob{
+  0%,100%{transform:translateX(-50%) translateY(0)}
+  50%    {transform:translateX(-50%) translateY(-1.5px)}
+}
+@keyframes scrollEnv{
+  from{background-position-x:0}
+  to  {background-position-x:-60px}
+}
+.travel-clip .puff{position:absolute;left:12px;bottom:30px;animation:puff 1600ms ease-out infinite;opacity:0}
+@keyframes puff{
+  0%{opacity:0;transform:translate(0,0) scale(.6)}
+  30%{opacity:.7}
+  100%{opacity:0;transform:translate(-14px,-10px) scale(1.3)}
+}
+
+
+/* PASSPORT / ACHIEVEMENTS DRAWER */
+#passportDrawer {
+  position: fixed;
+  top: 0;
+  right: -400px;
+  width: 360px;
+  max-width: 90vw;
+  height: 100%;
+  background: #fff;
+  z-index: 100000;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.3);
+  transition: right 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+#passportDrawer.open {
+  right: 0;
+}
+
+.passport-header {
+  background: var(--bar, #E47303);
+  color: #fff;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.passport-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+#closePassport {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: #fff;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  color: #C65F00;
+  font-size: 28px;
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+}
+
+#closePassport:hover {
+  background: #fff2e5;
+}
+
+.passport-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  background: #fafafa;
+}
+
+.passport-progress {
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fff8f0;
+  border: 1px solid #f0d2b5;
+  border-radius: 10px;
+}
+
+.passport-progress h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  color: #333;
+}
+
+.passport-progress-count {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+#passportCount2 {
+  font-size: 22px;
+  font-weight: bold;
+  color: #C65F00;
+}
+
+.passport-progress-count > span:last-child {
+  font-size: 13px;
+  color: #555;
+}
+
+#checkinBtn {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 6px;
+}
+
+#checkinMsg {
+  margin-bottom: 12px;
+}
+
+.passport-discover {
+  margin: 0 0 12px;
+}
+
+.passport-discover h3 {
+  margin: 0 0 5px;
+  font-size: 16px;
+}
+
+.passport-discover p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #555;
+}
+
+.stamp-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.stamp-card {
+  background: #eee;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+  color: #888;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 90px;
+  position: relative;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+}
+
+.stamp-card img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 6px;
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+
+@keyframes stampIn {
+  0% { transform: scale(2) rotate(15deg); opacity: 0; }
+  60% { transform: scale(0.9) rotate(-5deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.stamp-card.unlocked {
+  background: #fff8f0;
+  border: 2px solid #E47303;
+  color: #333;
+  font-weight: bold;
+  animation: stampIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.stamp-card.unlocked img {
+  filter: none;
+  opacity: 1;
+}
+
+#pStamps {
+  margin-top: 18px;
+  margin-bottom: 18px;
+  padding-top: 14px;
+  border-top: 2px solid #e8e8e8;
+}
+
+/* PHOTO LIGHTBOX */
+#imgView{position:fixed;inset:0;z-index:99998;background:#000e;display:flex;align-items:center;justify-content:center;cursor:zoom-out;overflow:hidden}
+#imgView[hidden]{display:none}
+#imgView .stage{position:relative;max-width:96vw;max-height:92vh;line-height:0}
+#imgView img,
+#imgView video{max-width:96vw;max-height:92vh;object-fit:contain;border-radius:12px;box-shadow:0 20px 40px rgba(0,0,0,.6);display:block}
+#imgView video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
+#imgView video[hidden]{display:none}
+#imgView .caption{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.75);color:#fff;padding:12px;font-size:14px;text-align:center;border-radius:0 0 12px 12px;pointer-events:none}
+#imgView button.close-lightbox{position:absolute;top:15px;right:20px;font-size:36px;color:#fff;background:none;border:0;cursor:pointer;z-index:99999}
+
+#imgView .lb-nav{
+  position:absolute;top:50%;transform:translateY(-50%);
+  width:52px;height:52px;border-radius:50%;
+  border:0;background:rgba(0,0,0,.55);color:#fff;
+  font-size:32px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  z-index:2;transition:background .15s;
+  padding:0;
+}
+#imgView .lb-nav:hover{background:rgba(0,0,0,.8)}
+#imgView .lb-prev{left:16px}
+#imgView .lb-next{right:16px}
+#imgView .lb-nav[hidden]{display:none}
+@media (max-width:640px){
+  #imgView .lb-nav{width:44px;height:44px;font-size:26px}
+  #imgView .lb-prev{left:8px}
+  #imgView .lb-next{right:8px}
+}
+
+.photo-anim{position:relative;display:block;line-height:0}
+.photo-anim img{width:100%;display:block;border-radius:6px}
+.photo-anim video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:6px;pointer-events:none}
+.photo-anim video[hidden]{display:none}
+
+@media(prefers-reduced-motion:reduce){
+  #welcomeSite.in #wsPhoto,#welcomeSite.in #wsBox,#welcomeSite.in #wsLine{animation:none}
+  #welcomeImage{transition:none}
+  .pin.spot{animation:none}
+  .travel-clip .vehicle{animation:none}
+  .travel-clip .env{animation:none}
+  .travel-clip .puff{animation:none}
+  .stamp-card.unlocked{animation:none}
+}
+
+/* HALF-SHEET PANEL (mobile drag) */
+#panel.grabber { padding-top: 22px; }
+#panel .grab{
+  position:absolute;left:50%;top:6px;transform:translateX(-50%);
+  width:44px;height:5px;border-radius:3px;background:#c9c9c9;
+  cursor:grab;touch-action:none;
+}
+#panel .grab:active{cursor:grabbing;background:#999}
+#panel.dragging{transition:none!important}
+@media (max-width:699px){
+  #panel{
+    border-radius:14px 14px 0 0;
+    transition:transform 220ms cubic-bezier(.22,.61,.36,1);
+    will-change:transform;
+    touch-action:pan-y;
+  }
+  #panel.snap-half{transform:translateY(calc(100% - 42vh))}
+  #panel.snap-full{transform:translateY(0)}
+  #panel.snap-closed{transform:translateY(100%)}
+}
+
+/* SHARE BUTTON & TOAST */
+.share-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  margin:8px 6px 0 0;padding:7px 12px;
+  border:2px solid var(--bar,#E47303);border-radius:8px;
+  background:#fff;color:var(--bar,#E47303);
+  font-size:13px;font-weight:600;cursor:pointer;
+}
+.share-btn:hover{background:#fff8f0}
+#toast{
+  position:fixed;left:50%;bottom:40px;transform:translateX(-50%) translateY(20px);
+  background:#222;color:#fff;padding:10px 16px;border-radius:20px;
+  font-size:13px;z-index:200000;opacity:0;pointer-events:none;
+  transition:opacity .2s,transform .2s;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* OFFLINE BUTTON */
+#offlineBtn{
+  display:block;width:100%;box-sizing:border-box;
+  margin:6px 0;padding:9px 12px;
+  border:2px solid var(--bar,#E47303);border-radius:8px;
+  background:#fff;color:var(--bar,#E47303);
+  font-size:13px;font-weight:600;cursor:pointer;text-align:left;
+}
+#offlineBtn.saved{background:#f4fbf4;border-color:#cfe8cf;color:#2e6e3a}
+#offlineBtn[disabled]{opacity:.6;cursor:default}
+
+/* PRIZES */
+.p-prize{
+  background:#fff8f0;border:2px solid #f0d2b5;border-radius:10px;
+  padding:10px 12px;margin:10px 0;
+}
+.p-prize.done{background:#f4fbf4;border-color:#cfe8cf}
+.p-prize h4{margin:0 0 4px;font-size:14px;color:#333}
+.p-prize .bar{
+  height:10px;border-radius:5px;background:#fff;overflow:hidden;
+  border:1px solid #e0c8a8;margin:6px 0;
+}
+.p-prize .bar>i{
+  display:block;height:100%;background:var(--bar,#E47303);
+  transition:width .3s;
+}
+.p-prize .meta{font-size:13px;color:#555;line-height:1.45}
+.p-prize.done .meta{color:#2e6e3a;font-weight:600}
+.p-prize .p-claim{
+  display:inline-block;margin-top:8px;padding:8px 14px;
+  background:#E47303;color:#fff;border:0;border-radius:6px;
+  font-size:14px;font-weight:bold;cursor:pointer;
+}
+.p-prize .p-claim:hover{background:#c65f00}
+
+/* CLAIM SLIP */
+#claimSlip{
+  position:fixed;inset:0;z-index:200000;
+  background:#000c;display:none;align-items:center;justify-content:center;padding:20px;
+}
+#claimSlip.on{display:flex}
+#claimSlip .slip{
+  position:relative;background:#fff8f0;
+  border:8px solid #E47303;border-radius:20px;
+  max-width:520px;width:100%;padding:28px 24px;text-align:center;
+  box-shadow:0 20px 60px #000a;
+}
+#claimSlip .slip h2{margin:0 0 10px;font-size:26px;color:#C65F00}
+#claimSlip .slip p{margin:0 0 14px;font-size:16px;line-height:1.5;color:#333}
+#claimSlip .slip .small{font-size:13px;color:#7a5c00;margin:14px 0 0}
+#claimSlip #slipCode{
+  background:#fff;border:2px dashed #E47303;border-radius:12px;
+  padding:14px;margin:14px 0;
+}
+#claimSlip #slipCode span{
+  display:block;font-size:11px;text-transform:uppercase;letter-spacing:.1em;
+  color:#7a5c00;font-weight:600;margin-bottom:6px;
+}
+#claimSlip #slipCode b{
+  display:block;font:bold 34px ui-monospace,Menlo,monospace;
+  letter-spacing:.1em;color:#C65F00;
+}
+#claimSlip .x{
+  position:absolute;top:6px;right:12px;font-size:32px;
+  border:0;background:none;cursor:pointer;color:#999;
+}
+
+/* ===== Floating search layout ===== */
+
+#q{
+  order:10;
+  flex:1 1 260px;
+  min-width:0;
+  width:auto;
+  padding:8px 16px;
+  border:2px solid var(--bar,#E47303);
+  border-radius:999px;
+  background:#fff;color:#000;
+  box-shadow:0 2px 8px rgba(0,0,0,.35);
+  -webkit-appearance:none;appearance:none;
+}
+
+#near      { order:20; }
+#eventBtn  { order:21; }
+#moreBtn   { order:22; }
+#passportBtn{ order:40; flex:0 0 auto; border:2px solid var(--bar,#E47303); padding:4px 12px; }
+
+#catChipsWrap{
+  order:30;
+  flex:0 1 auto;
+  min-width:0;
+  max-width:100%;
+}
+#catChips{
+  list-style:none;margin:0;padding:0;
+  display:flex;flex-wrap:nowrap;gap:6px;
+  overflow-x:auto;
+  scrollbar-width:none;
+}
+#catChips::-webkit-scrollbar{display:none}
+#catChips li{flex:0 0 auto}
+#catChips button{
+  pointer-events:auto;
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 11px;border:0;border-radius:999px;
+  background:#fff;color:#222;font:inherit;font-size:13px;font-weight:600;
+  white-space:nowrap;cursor:pointer;
+  box-shadow:0 1px 4px rgba(0,0,0,.35);
+}
+#catChips .swatch{
+  display:inline-block;width:10px;height:10px;border-radius:50%;
+  background:var(--sw,#E47303);
+  box-shadow:0 0 0 1.5px #fff,0 0 0 2.5px rgba(0,0,0,.25);
+}
+#catChips button[aria-pressed="false"]{opacity:.55}
+#catChips .reset{background:var(--bar,#E47303);color:#fff}
+
+#res{
+  order:45;
+  flex:1 1 100%;
+  margin:0;
+  border-radius:16px;
+  box-shadow:0 2px 8px rgba(0,0,0,.35);
+}
+
+/* --- Desktop: everything inline, More folds away --- */
+@media (min-width:721px){
+  #tools{display:contents}
+  #moreBtn{display:none!important}
+  #toolsMore{display:contents!important}
+  #tour      { order:23; }
+  #tours     { order:24; }
+  #stories   { order:25; }
+  #aerialBtn { order:22; }
+  #yearBox   { order:60; flex:0 0 auto; }
+  #ovw       { order:61; flex:0 0 auto; }
+  #yearBox,#ovw{
+    background:var(--bar,#E47303);
+    color:#fff;
+    padding:6px 12px;
+    border-radius:14px;
+    box-shadow:0 1px 4px rgba(0,0,0,.35);
+  }
+  #passportBtn{margin-left:auto}
+  #tools button{
+    padding:7px 13px;
+    border-radius:999px;
+    font-weight:600;
+    box-shadow:0 1px 4px rgba(0,0,0,.35);
+  }
+}
+
+/* --- Mobile: search on its own row; Near Me · About · More · Passport on the next --- */
+@media (max-width:720px){
+  #q{flex:1 1 100%}
+  #near      { order:20; }
+  #eventBtn  { order:21; }
+  #moreBtn   { order:22; display:inline-block!important; }
+  #passportBtn{ order:40; margin-left:auto; }
+  #tools{display:contents}
+  #toolsMore{display:none!important}
+  #tools.open #toolsMore{
+    display:flex!important;
+    order:50;
+    flex:1 1 100%;
+    flex-wrap:wrap;
+    gap:8px;
+    background:var(--bar,#E47303);
+    padding:10px;
+    border-radius:16px;
+    box-shadow:0 2px 8px rgba(0,0,0,.35);
+    box-sizing:border-box;
+  }
+  #catChipsWrap{flex:1 1 100%}
+  #catChips{flex-wrap:wrap;overflow-x:visible}
+}
+
+
+/* ===== Layout settings from site.csv: LAYOUT_TOP / LAYOUT_MORE / LAYOUT_OFF, SEARCH_WIDTH(_PHONE), BAR_STYLE ===== */
+.lay-off{display:none!important}
+.lay-sp{flex:1 1 0;min-width:0;pointer-events:none}
+.lay-nr{flex:1 1 100%;height:0}
+@media (min-width:721px){ html.qwd #q{flex:0 0 var(--qw-d)!important} }
+@media (max-width:720px){ html.qwp #q{flex:0 0 var(--qw-p)!important} }
+html.lay #passportBtn{margin-left:0!important}
+html.lay #moreBtn{display:inline-block!important}
+html.lay #moreBtn[hidden]{display:none!important}
+html.lay #toolsMore{display:none!important}
+html.lay #tools.open #toolsMore{display:flex!important;order:50;flex:1 1 100%;flex-wrap:wrap;align-items:flex-end;gap:8px;background:var(--bar,#E47303);padding:10px;border-radius:16px;box-shadow:0 2px 8px rgba(0,0,0,.35);box-sizing:border-box}
+html.sq #q,html.sq #tools button,html.sq #passportBtn,html.sq #catChips button,html.sq #yearBox,html.sq #ovw{border-radius:4px!important}
+html.sq #tools.open #toolsMore{border-radius:6px}
+
+</style>
+</head>
+
+<body>
+
+<div id="welcomeOverlay" role="button" aria-label="Skip welcome introduction">
+  <img id="welcomeImage" alt="Explore Franklin County">
+  <div id="welcomeSite" hidden>
+    <svg id="wsLine"></svg>
+    <img id="wsPhoto" alt="">
+    <div id="wsBox">
+      <span id="wsTag" hidden></span>
+      <h2 id="wsName"></h2>
+      <p id="wsText"></p>
+      <small id="wsIn"></small>
+      <button class="go" id="wsGo" type="button">Go There</button>
+    </div>
+  </div>
+  <div id="welcomeSkip">TAP OR CLICK TO SKIP</div>
+</div>
+
+<div id="spotBox" hidden role="dialog" aria-modal="true" aria-labelledby="sp-title">
+  <div id="spotCard">
+    <button id="sp-x" type="button" aria-label="Close">&times;</button>
+    <img id="sp-img" alt="" onerror="this.hidden=true">
+    <h2 id="sp-title"></h2>
+    <p id="sp-when"><b></b></p>
+    <p id="sp-text"></p>
+    <small id="sp-credit"></small>
+    <button id="sp-go" type="button">Explore the Map</button>
+  </div>
+</div>
+
+<div id="eventBox" hidden role="dialog" aria-modal="true" aria-labelledby="ev-title">
+  <div id="eventCard">
+    <button id="ev-x" type="button" aria-label="Close">&times;</button>
+    <h2 id="ev-title"></h2>
+    <p id="ev-text"></p>
+    <div id="ev-switch"></div>
+  </div>
+</div>
+
+<div id="bar">
+  <div class="bar-top">
+    <h1>Explore Franklin County</h1>
+    <button id="passportBtn" type="button">🏆 <span id="passportCount">0/0</span> Found</button>
+  </div>
+  <input id="q" type="search" placeholder="Search places..." aria-label="Search places">
+  <ul id="res" hidden></ul>
+  <div id="tools">
+    <button id="near" type="button">Near Me</button>
+    <button id="eventBtn" type="button" hidden>About</button>
+    <button id="moreBtn" type="button" aria-expanded="false" aria-controls="toolsMore" hidden>More &#9662;</button>
+    <div id="toolsMore">
+      <button id="tour" type="button" hidden>Take the Tour</button>
+      <button id="tours" type="button" hidden>Tours &amp; Trails</button>
+      <button id="stories" type="button" aria-pressed="false">Show All Stories and Spots</button>
+      <div id="catChipsWrap" hidden>
+        <ul id="catChips" aria-label="Filter by category"></ul>
+      </div>
+      <button id="aerialBtn" type="button" aria-pressed="false">Aerial</button>
+      <label id="yearBox"><span>Year: <b id="yv">All</b></span><span class="strack"><input id="yr" type="range" aria-label="Show sites that existed in this year"><span id="yticks" aria-hidden="true"></span></span></label>
+      <label id="ovw" hidden>Old Maps <select id="ovs"></select> <input id="ov" type="range" min="0" max="100" value="0" aria-label="Old map opacity"></label>
+    </div>
+  </div>
+</div>
+
+<div id="map"></div>
+<aside id="panel" hidden aria-live="polite"></aside>
+
+<div id="passportDrawer">
+  <div class="passport-header">
+    <h2>History Passport</h2>
+    <button id="closePassport" type="button" aria-label="Close History Passport">&times;</button>
+  </div>
+
+  <div class="passport-body">
+    <section class="passport-progress">
+      <h3>Your progress</h3>
+      <div class="passport-progress-count">
+        <span id="passportCount2">0 of 0</span>
+        <span>places discovered</span>
+      </div>
+    </section>
+
+    <button id="checkinBtn" type="button" class="p-checkin">📍 I'm here: check in</button>
+    <div id="checkinMsg" class="p-checkin-msg" aria-live="polite"></div>
+
+    <section class="passport-discover">
+      <h3 class="p-h">Places to discover</h3>
+      <p>Open a place on the map, scan its QR sign, or check in when you're standing there to light up its stamp. Tap a stamp to see where it is.</p>
+    </section>
+
+    <div class="stamp-grid" id="stampGrid"></div>
+  </div>
+</div>
+
+<div id="imgView" hidden role="dialog" aria-label="Enlarged photo">
+  <button type="button" class="close-lightbox" aria-label="Close">&times;</button>
+  <div class="stage">
+    <img id="lightboxImg" alt="">
+    <video id="lightboxVid" muted playsinline preload="metadata" hidden></video>
+    <button type="button" class="lb-nav lb-prev" aria-label="Previous photo">&#8249;</button>
+    <button type="button" class="lb-nav lb-next" aria-label="Next photo">&#8250;</button>
+    <div class="caption" style="display:none"></div>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="welcome-themes.js"></script>
+<script src="marker-shapes.js"></script>
+<script src="lines-style.js"></script>
+<script src="ets-config.js"></script>
+<script src="schedule.js"></script>
+<script src="announcements.js"></script>
+<script src="marker-fill.js"></script>
+<script src="spot-markers.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script>
+  if (typeof Papa === "undefined") {
+    document.write('<script src="https://unpkg.com/papaparse@5.4.1/dist/papaparse.min.js"><\/script>');
+  }
+</script>
+<script src="icons.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
+  "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+}[c]));
+
+const key = s => String(s || "").trim().toLowerCase();
+
+/* ============================================================
+   EVENTS
+   ============================================================ */
+const EVENT_SLUG = (() => { const v = new URLSearchParams(location.search).get("event") || ""; return v.toLowerCase() !== "main" && /^[a-z0-9][a-z0-9_-]*$/i.test(v) ? v.toLowerCase() : ""; })();
+const EVENT_DIR = EVENT_SLUG ? "events/" + EVENT_SLUG + "/" : "";
+const KEY_SUFFIX = EVENT_SLUG ? "@" + EVENT_SLUG : "";
+
+window.EVENT_DIR = EVENT_DIR;
+window.KEY_SUFFIX = KEY_SUFFIX;
+
+let EVENT_INFO = null;
+const EVENT_READY = EVENT_SLUG
+  ? fetch(EVENT_DIR + "event.json", { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null).then(j => { EVENT_INFO = j; })
+  : Promise.resolve();
+
+let EVENTS_INDEX = [];
+const EVENTS_INDEX_READY = fetch("events/index.json", { cache: "no-store" })
+  .then(r => r.ok ? r.json() : [])
+  .catch(() => [])
+  .then(a => { EVENTS_INDEX = Array.isArray(a) ? a.filter(x => x && /^[a-z0-9][a-z0-9_-]*$/i.test(x.slug || "")) : []; });
+
+/* WHAT'S ON: notices from announcements.csv, plus full events (events/index.json) that have dates.
+   ANN_ALL is everything; ANN is what is on now or starting soon (the welcome screen and the Events button use it). */
+let ANN_ALL = [], ANN = [];
+const findItem = id => places.concat(kids).find(i => key(i.id) === key(id)) || null;
+const ANN_READY = Promise.all([window.Announcements ? Announcements.load() : [], EVENTS_INDEX_READY]).then(([a]) => {
+  try {
+    ANN_ALL = a.concat(Announcements.fromEventsIndex(EVENTS_INDEX, EVENT_SLUG));
+    ANN = Announcements.active(ANN_ALL);
+    refreshEventButton();
+  } catch (e) { console.warn("Announcements could not be read", e); }
+});
+
+const AUTO_CHECK = EVENTS_INDEX_READY.then(() => {
+  if (EVENT_SLUG || !window.EventSchedule) return;
+  if (/[?&](event|spot|site|skipWelcome)=/i.test(location.search)) return;
+  const on = EVENTS_INDEX.filter(e => e.auto && e.schedule && EventSchedule.status(e.schedule).state === "now")
+    .sort((a, b) => EventSchedule.status(b.schedule).start - EventSchedule.status(a.schedule).start)[0];
+  if (on) location.replace(location.pathname + "?event=" + encodeURIComponent(on.slug) + location.hash);
+});
+
+const EVENT_FOLDERS = () => (EVENT_INFO && Array.isArray(EVENT_INFO.folders)) ? EVENT_INFO.folders : ["photos", "spots", "stories", "anims"];
+
+function assetUrl(path) {
+  const p = String(path || "");
+  if (!EVENT_SLUG || /^([a-z]+:)?\/\//i.test(p) || p.startsWith("data:")) return p;
+  const m = /^(photos|spots|stories|anims)\//.exec(p);
+  return m && EVENT_FOLDERS().includes(m[1]) ? EVENT_DIR + p : p;
+}
+
+async function dataFetch(file, opts) {
+  await EVENT_READY;
+  await AUTO_CHECK;
+  if (EVENT_SLUG) {
+    const listed = !!(EVENT_INFO && Array.isArray(EVENT_INFO.data));
+    if (!listed || EVENT_INFO.data.includes(file)) {
+      try { const r = await fetch(EVENT_DIR + file, opts); if (r.ok) return r; } catch (e) {}
+    }
+    if (listed) return new Response("", { status: 404 });
+  }
+  return fetch(file, opts);
+}
+
+const UNLOCKED_KEY = "ets_unlocked_stamps" + KEY_SUFFIX;
+
+function getUnlockedStamps() {
+  try { return JSON.parse(localStorage.getItem(UNLOCKED_KEY)) || []; } catch { return []; }
+}
+window.getUnlockedStamps = getUnlockedStamps;
+
+function unlockStamp(id) {
+  if (!id) return;
+  const unlocked = getUnlockedStamps();
+  const cleanId = String(id).trim();
+  if (!unlocked.includes(cleanId)) {
+    unlocked.push(cleanId);
+    localStorage.setItem(UNLOCKED_KEY, JSON.stringify(unlocked));
+    updatePassportUI();
+  }
+}
+
+
+// How a place or spot earns its stamp, set per item in the editors (CHECKIN column):
+//   blank = just opening it counts (the way it has always worked)   gps = be within its radius
+//   qr = scan its QR link   either = scan or be near   both = scan while standing within its radius   none = no stamp
+const stampMode = row => { const m = String((row && row.CHECKIN) || "").trim().toLowerCase(); return ["gps", "qr", "either", "both", "none"].includes(m) ? m : "view"; };
+function stampNote(t) { const o = document.getElementById("checkinMsg"); if (o) o.textContent = t; }
+function earnStamp(id, row, how, ll) {   // how: "view" (opened it), "qr" (arrived by its QR link) or "gps" (the check-in button)
+  const m = stampMode(row);
+  if (m === "view" || (m === "qr" && how === "qr") || (m === "gps" && how === "gps") || (m === "either" && (how === "qr" || how === "gps"))) { unlockStamp(id); return; }
+  if (m === "both" && how === "qr") {   // the scan only counts if the phone is also at the place
+    if (!navigator.geolocation || !ll) { return; }
+    navigator.geolocation.getCurrentPosition(pos => {
+      const here = [pos.coords.longitude, pos.coords.latitude];
+      if (distM(here, ll) <= (parseFloat(row.RADIUS) || 75) + Math.min(pos.coords.accuracy || 0, 50)) { unlockStamp(id); }
+      else { stampNote("Scan this sign while you're standing at the place to collect its stamp."); }
+    }, () => stampNote("Allow location access to collect this stamp."), { enableHighAccuracy: true, timeout: 10000 });
+  }
+}
+
+const isYes = v => ["yes", "true", "1", "y"].includes(key(v));
+
+function majorSites() {
+  const flagged = places.concat(kids).filter(s => isYes(s.d && s.d.MAJOR));
+  return flagged.length ? flagged : places;
+}
+
+function updatePassportUI() {
+  const unlocked = getUnlockedStamps();
+  const sites = majorSites();
+  const total = sites.length || 1;
+  const foundCount = sites.filter(s => unlocked.includes(String(s.id))).length;
+  const c2 = $("passportCount2");
+  if (c2) c2.textContent = foundCount + " of " + sites.length;
+  const countEl = $("passportCount");
+  if (countEl) countEl.textContent = `${foundCount}/${total}`;
+  const grid = $("stampGrid");
+  if (!grid) return;
+
+  grid.innerHTML = sites.map(s => {
+    const isUnlocked = unlocked.includes(String(s.id));
+    const thumbSrc = PHOTO_SRC[s.id] || iconFor(s.d && s.d.CATEGORY);
+    return `
+      <div class="stamp-card ${isUnlocked ? 'unlocked' : ''}" data-id="${esc(s.id)}">
+        <img src="${esc(thumbSrc)}" alt="" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'40\' height=\'40\'><rect width=\'40\' height=\'40\' fill=\'%23ddd\'/></svg>'">
+        <div>${esc(s.name)}</div>
+      </div>
+    `;
+  }).join("");
+
+  grid.onclick = e => {
+    const card = e.target.closest(".stamp-card");
+    if (!card) return;
+    $("passportDrawer").classList.remove("open");
+    if (window.passportShow) window.passportShow(card.dataset.id);
+  };
+}
+
+/* ============================================================
+   WELCOME GIF INTRO
+   ============================================================ */
+const WELCOME_DISPLAY_TIME = 3000;
+const WELCOME_TRANSITION_TIME = 650;
+const WELCOME_SITE_TIME = 4000;
+
+const WELCOME_STEPS = [
+  { gif: "welcome1.gif" },
+  { type: "sites" }
+];
+
+function startWelcome(featuredId){
+  const overlay = document.getElementById("welcomeOverlay");
+  const image   = document.getElementById("welcomeImage");
+  if (!overlay || !image || !WELCOME_STEPS.length) return;
+
+  let index = 0;
+  let timer = null;
+  let stopped = false;
+
+  WELCOME_STEPS.forEach(step => { const p = new Image(); if (step.gif) p.src = step.gif; });
+
+  let siteTimer = null, lastId = null, tries = 0;
+  let featuredShown = false;
+  let currentItem = null;
+  const siteBox = document.getElementById("welcomeSite");
+
+  const tagEl = document.getElementById("wsTag"), photoEl = document.getElementById("wsPhoto"), goBtn = document.getElementById("wsGo");
+  let annIdx = 0, slideN = 0, currentAnn = null;
+
+  function startSites() {
+    image.hidden = true;
+    siteBox.hidden = false;
+    ANN_READY.then(() => { if (!stopped) nextSite(); });
+  }
+
+  const annFor = id => ANN.find(a => a.venues.some(v => key(v) === key(id))) || null;   // an announcement that happens at this place
+  const venueOf = a => { for (const v of a.venues) { const it = findItem(v); if (it) return it; } return null; };
+  function setTag(a) {
+    if (!a) { tagEl.hidden = true; return; }
+    tagEl.hidden = false;
+    tagEl.textContent = a.tag;
+    tagEl.style.background = a.color;
+    tagEl.style.color = Announcements.readable(a.color);
+    tagEl.classList.toggle("live", !!(a.st && a.st.state === "now"));
+  }
+  function point(tgt, color) {                                  // the pointer from the box to a marker on the map
+    const line = document.getElementById("wsLine");
+    if (!tgt) { line.innerHTML = ""; return; }
+    const p = map.project(tgt.ll);
+    siteBox.classList.toggle("right", p.x < window.innerWidth * 0.5);
+    const box = document.getElementById("wsBox");
+    const bl = box.offsetLeft, bt = box.offsetTop, br = bl + box.offsetWidth, bb = bt + box.offsetHeight;
+    const sx = Math.max(bl, Math.min(p.x, br)), sy = Math.max(bt, Math.min(p.y, bb));
+    let dx = p.x - sx, dy = p.y - sy;
+    const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+    const w = 14;
+    line.innerHTML = `<path style="fill:${color}" d="M${sx - dy * w},${sy + dx * w}L${p.x},${p.y}L${sx + dy * w},${sy - dx * w}Z"/>`;
+  }
+
+  function showAnnouncement(a) {                                // a "what's on" slide: tag, name, when, one line about it
+    const it = venueOf(a);
+    currentItem = it; currentAnn = a;
+    if (it) lastId = it.id;
+    const tgt = it ? (it.el.style.display !== "none" ? it : (it.parent || it)) : null;
+    siteBox.classList.add("nophoto");
+    siteBox.style.setProperty("--c", a.color);
+    setTag(a);
+    let blurb = a.blurb;
+    if (blurb.length > 170) blurb = blurb.slice(0, 167) + "...";
+    document.getElementById("wsName").textContent = a.name;
+    document.getElementById("wsText").textContent = blurb;
+    document.getElementById("wsIn").textContent = [EventSchedule.statusText(a.st), it ? "at " + it.name : ""].filter(Boolean).join(" \u00b7 ");
+    goBtn.textContent = it ? "See it on the map" : (a.link ? (a.linkText || "Learn more") : "Close");
+    if (tgt) tgt.el.classList.add("spot");
+    siteBox.classList.remove("in"); void siteBox.offsetWidth; siteBox.classList.add("in");   // after "nophoto", so the pointer measures the final position
+    point(tgt, a.color);
+    siteTimer = setTimeout(nextSite, WELCOME_SITE_TIME);
+  }
+
+  function nextSite() {
+    if (stopped) return;
+    document.querySelectorAll(".pin.spot").forEach(e => e.classList.remove("spot"));
+    const featuredFirst = featuredId && !featuredShown;         // a QR visitor's own place always comes first
+    if (ANN.length && !featuredFirst && slideN++ % 2 === 0) { showAnnouncement(ANN[annIdx++ % ANN.length]); return; }   // what's on, then a place, then what's on...
+    const pool = places.concat(kids).filter(i => PHOTO_SRC[i.id]);
+    if (!pool.length) { if (++tries > 20) finish(); else siteTimer = setTimeout(nextSite, 600); return; }
+
+    let it = null;
+    if (featuredId && !featuredShown) {
+      it = pool.find(i => key(i.id) === key(featuredId)) || null;
+      if (it) featuredShown = true;
+    }
+    if (!it) {
+      const choices = pool.length > 1 ? pool.filter(i => i.id !== lastId) : pool;
+      it = choices[Math.floor(Math.random() * choices.length)];
+    }
+    lastId = it.id;
+    currentItem = it; currentAnn = null;
+    siteBox.classList.remove("nophoto");
+    goBtn.textContent = "Go There";
+    setTag(annFor(it.id));                                      // a place that hosts something that is on now wears its tag
+
+    const tgt = it.el.style.display !== "none" ? it : (it.parent || it);
+    siteBox.style.setProperty("--c", it.color);
+
+    const t = (it.d.DETAILS || "").trim(), m = /[.!?](\s|$)/.exec(t);
+    let blurb = m ? t.slice(0, m.index + 1) : t;
+    if (blurb.length > 170) blurb = blurb.slice(0, 167) + "...";
+    const e = yr4(it.d.EST);
+
+    document.getElementById("wsPhoto").src = PHOTO_SRC[it.id];
+    document.getElementById("wsName").textContent = it.name;
+    document.getElementById("wsText").textContent = blurb;
+    document.getElementById("wsIn").textContent =
+      [it.parent ? "In " + it.parent.name : "", e ? "Established " + e : ""].filter(Boolean).join(" \u00b7 ");
+
+    tgt.el.classList.add("spot");
+    siteBox.classList.remove("in"); void siteBox.offsetWidth; siteBox.classList.add("in");
+    point(tgt, it.color);
+    siteTimer = setTimeout(nextSite, WELCOME_SITE_TIME);
+  }
+
+  function goToFeatured() {
+    const ann = currentAnn;
+    if (!currentItem) {
+      if (!ann) return;                                         // a "what's on" slide with no place on the map
+      if (ann.link) { if (ann.kind === "event") location.href = location.pathname + ann.link; else window.open(ann.link, "_blank", "noopener"); }
+      finish();
+      return;
+    }
+    const item = currentItem;
+    finish();
+    setTimeout(() => {
+      select(item);
+      map.easeTo({ center: item.ll, zoom: Math.max(map.getZoom(), item.parent ? 17 : 15) });
+    }, WELCOME_TRANSITION_TIME);
+  }
+
+  document.getElementById("wsGo").addEventListener("click", e => { e.stopPropagation(); goToFeatured(); });
+
+  function finish(){
+    if (stopped) return;
+    stopped = true;
+    clearTimeout(timer);
+    clearTimeout(siteTimer);
+    document.querySelectorAll(".pin.spot").forEach(e => e.classList.remove("spot"));
+    overlay.classList.remove("show");
+    overlay.classList.add("exit");
+    setTimeout(() => { overlay.remove(); }, WELCOME_TRANSITION_TIME);
+  }
+
+  function showNext(){
+    if (stopped) return;
+    if (index >= WELCOME_STEPS.length) { finish(); return; }
+    const step = WELCOME_STEPS[index];
+    index++;
+    if (step.type === "sites") { startSites(); return; }
+
+    image.src = step.gif;
+    overlay.classList.remove("show", "exit");
+    void image.offsetWidth;
+
+    requestAnimationFrame(() => {
+      if (stopped) return;
+      overlay.classList.add("show");
+      timer = setTimeout(() => {
+        if (stopped) return;
+        overlay.classList.remove("show");
+        overlay.classList.add("exit");
+        setTimeout(() => {
+          if (stopped) return;
+          overlay.classList.remove("exit");
+          showNext();
+        }, WELCOME_TRANSITION_TIME);
+      }, WELCOME_DISPLAY_TIME);
+    });
+  }
+
+  overlay.addEventListener("click", e => {
+    const pin = document.querySelector(".pin.spot");
+    if (pin) {
+      const r = pin.getBoundingClientRect();
+      const hit = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      if (hit) { goToFeatured(); return; }
+    }
+    finish();
+  });
+
+  document.addEventListener("keydown", e => { if (e.key === "Escape") finish(); }, { once:true });
+  showNext();
+}
+
+/* ============================================================
+   SITE SETTINGS
+   ============================================================ */
+const SITE = {
+  center: [-98.5795, 39.8283],
+  zoom: 4,
+  maxBounds: [[-180,-85],[180,85]],
+  childZoom: 16,
+  colors: {
+    IND:"#AF350A", CIV:"#E2E1E0",
+    COMM:"#E47303", RES:"#BDD76B",
+    RAIL:"#8B6F47", CANAL:"#4A7C8C",
+    default:"#E47303"
+  },
+  yearMin: 1850,
+  yearMax: 2030,
+  overlays: [],
+  memoryUrl: "",
+  files: {
+    locations: "locations.csv",
+    children: "childmarkers.csv",
+    boundary: "border.geojson"
+  }
+};
+window.SITE = SITE;
+
+SITE.fitMarkers = true;
+SITE.fromCsv = false;
+SITE.passport = true;
+SITE.passportRanks = true;
+SITE.prizes = true;
+SITE.yearSlider = true;
+SITE.aerialButton = true;
+SITE.overlaySlider = true;
+SITE.welcomeTheme = "";
+SITE.welcomeText = "";
+SITE.place = "";
+SITE.fills = {};
+SITE.shapes = {};
+SITE.customShapes = {};
+SITE.event = { button: "About", title: "", text: "" };
+
+function applyLayout(S){
+  const root = document.documentElement, g = k => (S[k] || "").split(",").map(x => x.trim()).filter(Boolean);
+  const pct = k => { const v = parseFloat(S[k]); return v >= 20 && v <= 100 ? v : null; };
+  const css = v => v >= 100 ? "100%" : "calc(" + v + "% - 4px)";
+  const wd = pct("SEARCH_WIDTH"), wp = pct("SEARCH_WIDTH_PHONE");
+  if (wd) { root.style.setProperty("--qw-d", css(wd)); root.classList.add("qwd"); }
+  if (wp) { root.style.setProperty("--qw-p", css(wp)); root.classList.add("qwp"); }
+  if ((S.BAR_STYLE || "").toLowerCase() === "bar") root.classList.add("sq");
+
+  let top = g("LAYOUT_TOP"), more = g("LAYOUT_MORE"), off = g("LAYOUT_OFF");
+  if (!top.length && !more.length && !off.length) return;      // no saved layout: keep the built-in one
+  const el = { search: $("q"), near: $("near"), event: $("eventBtn"), more: $("moreBtn"), tour: $("tour"), tours: $("tours"),
+    stories: $("stories"), chips: $("catChipsWrap"), aerial: $("aerialBtn"), year: $("yearBox"), oldmaps: $("ovw"), passport: $("passportBtn") };
+  const helper = id => id === "spacer" || id === "newrow";
+  const seen = new Set();
+  const uniq = a => a.filter(id => (el[id] || helper(id)) && !seen.has(id) && seen.add(id));
+  top = uniq(top);
+  more = uniq(more.filter(id => id !== "search" && id !== "more" && !helper(id)));
+  off = uniq(off.filter(id => id !== "search" && id !== "more"));
+  Object.keys(el).forEach(id => { if (!seen.has(id)) { top.push(id); seen.add(id); } });   // anything not listed stays in the bar
+
+  root.classList.add("lay");
+  const T = $("tools"), M = $("toolsMore"), mk = c => { const s = document.createElement("span"); s.className = c; return s; };
+  top.forEach((id, i) => {
+    const n = helper(id) ? mk(id === "spacer" ? "lay-sp" : "lay-nr") : el[id];
+    n.style.order = 10 + i;
+    if (helper(id) || n.parentNode === M) T.appendChild(n);
+  });
+  more.forEach((id, i) => { el[id].style.order = i; M.appendChild(el[id]); });
+  off.forEach(id => { if (el[id]) el[id].classList.add("lay-off"); });
+  if (typeof syncMoreBtn === "function") syncMoreBtn();
+}
+
+const SETTINGS_READY = dataFetch("site.csv", { cache: "no-store" })
+  .then(r => r.ok ? r.text() : "")
+  .catch(() => "")
+  .then(txt => {
+    if (!txt.trim()) return;
+    const S = {};
+    Papa.parse(txt, { header: true, skipEmptyLines: "greedy" }).data.forEach(r => {
+      const k = String(r.KEY || "").trim().toUpperCase();
+      if (k) S[k] = String(r.VALUE == null ? "" : r.VALUE).trim();
+    });
+    const num = k => { const v = parseFloat(S[k]); return isNaN(v) ? null : v; };
+    const fill = t => t.replace(/\{PLACE\}/g, S.PLACE || "");
+
+    if (S.HEADER)    document.querySelector("#bar h1").textContent = fill(S.HEADER);
+    if (S.TAB_TITLE) document.title = fill(S.TAB_TITLE);
+    if (/^#[0-9a-f]{3,8}$/i.test(S.BAR_COLOR || "")) document.documentElement.style.setProperty("--bar", S.BAR_COLOR);
+
+    const lng = num("CENTER_LNG"), lat = num("CENTER_LAT"), z = num("ZOOM");
+    if (lng !== null && lat !== null) SITE.center = [lng, lat];
+    if (z !== null) SITE.zoom = z;
+    const w = num("BOUNDS_WEST"), s = num("BOUNDS_SOUTH"), e = num("BOUNDS_EAST"), n = num("BOUNDS_NORTH");
+    if ([w, s, e, n].every(v => v !== null) && w < e && s < n) SITE.maxBounds = [[w, s], [e, n]];
+    SITE.minZoom = num("MIN_ZOOM");
+    SITE.maxZoom = num("MAX_ZOOM");
+    SITE.fitMarkers = (S.FIT_TO_MARKERS || "yes").toLowerCase() !== "no";
+    SITE.passport = (S.PASSPORT || "yes").toLowerCase() !== "no";
+    SITE.passportRanks = (S.PASSPORT_RANKS || "yes").toLowerCase() !== "no";
+    SITE.prizes = (S.PRIZES || "yes").toLowerCase() !== "no";
+    SITE.yearSlider = (S.YEAR_SLIDER || "yes").toLowerCase() !== "no";
+    SITE.overlaySlider = (S.OVERLAY_SLIDER || "yes").toLowerCase() !== "no";
+    SITE.aerialButton = (S.AERIAL_BUTTON || "yes").toLowerCase() !== "no";
+    SITE.welcomeTheme = (S.WELCOME_THEME || "").toLowerCase();
+    SITE.welcomeText = S.WELCOME_TEXT || "";
+    SITE.place = S.PLACE || "";
+    SITE.event = { button: S.EVENT_BUTTON || "About", title: fill(S.EVENT_TITLE || ""), text: fill(S.EVENT_TEXT || "") };
+    SITE.fromCsv = true;
+    try { applyLayout(S); } catch (e) { console.warn("Layout settings skipped:", e); }
+  });
+
+Promise.race([SETTINGS_READY, new Promise(r => setTimeout(r, 1500))])
+  .finally(() => document.documentElement.classList.remove("settings-loading"));
+
+/* ===== photos.csv ===== */
+const PHOTO_ROWS = {};
+const PHOTOS_READY = dataFetch("photos.csv", { cache: "no-store" })
+  .then(r => r.ok ? r.text() : "")
+  .catch(() => "")
+  .then(txt => {
+    if (!txt.trim()) return;
+    Papa.parse(txt, { header: true, skipEmptyLines: "greedy" }).data.forEach(r => {
+      const id = String(r.ITEM_ID || "").trim();
+      if (!id) return;
+      (PHOTO_ROWS[id] = PHOTO_ROWS[id] || []).push({
+        order: parseFloat(r.ORDER) || 0,
+        path: String(r.PATH || "").trim(),
+        caption: String(r.CAPTION || "").trim(),
+        credit: String(r.CREDIT || "").trim()
+      });
+    });
+    Object.values(PHOTO_ROWS).forEach(a => a.sort((x, y) => x.order - y.order));
+  });
+
+const photoNote = p => [p.caption, p.credit ? "Photo: " + p.credit : ""].filter(Boolean).join(" · ");
+function coverPath(id, fallback){ const a = PHOTO_ROWS[id]; return (a && a[0] && a[0].path) || fallback; }
+function coverNote(id, fallbackCredit){ const a = PHOTO_ROWS[id]; return a && a[0] ? photoNote({ caption: a[0].caption, credit: a[0].credit || fallbackCredit || "" }) : ""; }
+function buildGallery(id){
+  const list = (PHOTO_ROWS[id] || []).slice(1).filter(p => p.path);
+  if (!list.length) return null;
+  const g = document.createElement("div");
+  g.className = "gal";
+  list.forEach(p => {
+    const f = document.createElement("figure");
+    const im = new Image();
+    im.alt = p.caption || "";
+    im.loading = "lazy";
+    im.dataset.caption = photoNote(p);
+    im.onerror = () => f.remove();
+    im.src = assetUrl(p.path);
+    f.appendChild(im);
+    if (photoNote(p)) { const c = document.createElement("figcaption"); c.textContent = photoNote(p); f.appendChild(c); }
+    g.appendChild(f);
+  });
+  return g;
+}
+
+async function applySettingsToMap(){
+  await SETTINGS_READY;
+  if (!SITE.fromCsv) return;
+  if (!SITE.passport) $("passportBtn").style.display = "none";
+  if (!SITE.yearSlider) $("yr").closest("label").style.display = "none";
+  if (!SITE.aerialButton) $("aerialBtn").hidden = true;
+  if (SITE.event.title || SITE.event.text) {
+    $("eventBtn").textContent = SITE.event.button;
+    $("eventBtn").hidden = false;
+  }
+  map.setMaxBounds(SITE.maxBounds);
+  if (SITE.minZoom !== null) map.setMinZoom(SITE.minZoom);
+  if (SITE.maxZoom !== null) map.setMaxZoom(SITE.maxZoom);
+  if (!SITE.fitMarkers && !spotId && !siteId) map.jumpTo({ center: SITE.center, zoom: SITE.zoom });
+}
+
+const map = new maplibregl.Map({
+  container: "map",
+  style: {
+    version: 8,
+    sources: {
+      osm: {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }
+    },
+    layers: [ { id:"osm", type:"raster", source:"osm" } ]
+  },
+  center: SITE.center,
+  zoom: SITE.zoom,
+  maxBounds: SITE.maxBounds
+});
+window.map = map;
+
+const spotId = new URLSearchParams(location.search).get("spot");
+const siteId = new URLSearchParams(location.search).get("site");
+const skipWelcome = new URLSearchParams(location.search).has("skipWelcome") || !!siteId;
+
+if (skipWelcome) {
+  const w = document.getElementById("welcomeOverlay");
+  if (w) w.remove();
+} else {
+  SETTINGS_READY.then(() => {
+    if (window.WelcomeThemes && SITE.welcomeTheme && WelcomeThemes.list[SITE.welcomeTheme]) {
+      const motion = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+      WELCOME_STEPS[0] = { gif: WelcomeThemes.url(SITE.welcomeTheme, SITE.welcomeText, SITE.place, motion) };
+    }
+    startWelcome(spotId);
+  });
+}
+
+map.addControl(new maplibregl.NavigationControl({ showCompass:false }), "bottom-right");
+map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+
+const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+svg.id = "leaders";
+svg.setAttribute("aria-hidden", "true");
+map.getCanvasContainer().appendChild(svg);
+
+let places = [], kids = [], focus = null, sel = null, prev = null;
+Object.defineProperty(window, "places", { get: () => places });
+Object.defineProperty(window, "kids",   { get: () => kids });
+Object.defineProperty(window, "sel",    { get: () => sel });
+let returning = false, year = null, stops = [], tourI = -1, me = null;
+let tourGeoJSON = null;
+let travelInProgress = false;
+
+const EXT = ["jpg","jpeg","png","webp","JPG","PNG"];
+const PHOTO_SRC = {};
+
+function thumb(id, category, path){
+  const im = new Image();
+  im.alt = "";
+  let i = 0;
+  let typed = String(path || "").trim();
+  const go = () => { im.src = assetUrl(typed || ("photos/" + encodeURIComponent(id) + "." + EXT[i])); };
+  im.onerror = () => {
+    if (typed) { console.warn("Photo path not found for " + id + ": " + typed); typed = ""; i = 0; go(); return; }
+    if (++i < EXT.length) { go(); return; }
+    console.warn("No photo for " + id + ", using category icon");
+    im.onerror = null;
+    im.classList.add("is-default");
+    if (hasFill(category)) im.classList.add("is-fill");
+    im.src = iconFor(category);
+  };
+  im.onload = () => {
+    if (im.classList.contains("is-default")) return;
+    PHOTO_SRC[id] = im.currentSrc || im.src;
+    updatePassportUI();
+  };
+  go();
+  return im;
+}
+
+const DEFAULT_CATEGORY_ICON = { CIV:"courthouse", COMM:"store", RES:"house", IND:"factory", RAIL:"train", RAILROAD:"train", CANAL:"boat" };
+const hasFill = cat => !!(SITE.fills && SITE.fills[String(cat || "").trim().toUpperCase()]);
+function iconFor(cat){
+  const code = String(cat || "").trim().toUpperCase();
+  const f = SITE.fills && SITE.fills[code];
+  if (f && window.MarkerFill) return MarkerFill.url(f.fill, f.fillColor, f.fillColor2);
+  return iconUrl((SITE.icons && SITE.icons[code]) || DEFAULT_CATEGORY_ICON[code] || "generic");
+}
+
+async function load(file){
+  try {
+    const r = await dataFetch(file);
+    if (!r.ok) throw new Error(String(r.status));
+    return Papa.parse(await r.text(), { header: true, skipEmptyLines: "greedy" }).data;
+  } catch (e) { console.warn("Could not load " + file); return []; }
+}
+
+let STAMPS = [];
+let TASKS  = [];
+window.__stampsData = STAMPS;
+
+async function loadPassportData(){
+  try {
+    const [S, T] = await Promise.all([
+      dataFetch("stamps.csv", { cache:"no-store" }).then(r => r.ok ? r.text() : "").catch(() => ""),
+      dataFetch("tasks.csv",  { cache:"no-store" }).then(r => r.ok ? r.text() : "").catch(() => "")
+    ]);
+    if (S) {
+      const parsed = Papa.parse(S, { header:true, skipEmptyLines:"greedy" });
+      STAMPS = parsed.data.filter(r => key(r.STAMP_ID)).map(r => ({
+        row: r,
+        tasks: String(r.TASKS||"").split("|").map(s => s.trim()).filter(Boolean)
+      }));
+      window.__stampsData = STAMPS;
+    }
+    if (T) {
+      const parsed = Papa.parse(T, { header:true, skipEmptyLines:"greedy" });
+      TASKS = parsed.data.filter(r => key(r.TASK_ID)).map(r => ({ row: r }));
+    }
+    console.info("Passport data loaded:", STAMPS.length, "stamps,", TASKS.length, "tasks");
+  } catch (e) { console.warn("Couldn't load passport data:", e); }
+}
+
+function makePin(item, cls){
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "pin " + cls;
+  if (/\d{4}/.test(item.d.CLSD || "")) b.classList.add("gone");
+  b.setAttribute("aria-label", item.name);
+  b.appendChild(thumb(item.id, item.d.CATEGORY, coverPath(item.id, item.d.PHOTO)));
+  item.r = cls === "parent" ? 29 : 22;
+  item.color = SITE.colors[String(item.d.CATEGORY || "").trim().toUpperCase()] || SITE.colors.default;
+  b.style.setProperty("--c", item.color);
+  const shape = SITE.shapes[String(item.d.CATEGORY || "").trim().toUpperCase()];
+  if (shape && window.MarkerShapes) MarkerShapes.apply(b, shape, SITE.customShapes);
+  b.onclick = e => { e.stopPropagation(); select(item); };
+  item.el = b;
+  item.marker = new maplibregl.Marker({ element:b }).setLngLat(item.ll).addTo(map);
+}
+
+map.on("load", async () => {
+  await EVENT_READY;
+  map.addSource("boundary", { type:"geojson", data: (EVENT_SLUG && EVENT_INFO && Array.isArray(EVENT_INFO.data) && EVENT_INFO.data.includes(SITE.files.boundary)) ? EVENT_DIR + SITE.files.boundary : SITE.files.boundary });
+  map.addLayer({
+    id: "boundary",
+    type: "line",
+    source: "boundary",
+    paint: { "line-color":"#E47303", "line-width":2, "line-dasharray":[3,2] }
+  });
+
+  try {   // hand-drawn lines and trails (lines.geojson, made in the Lines editor)
+    const lr = await fetch("lines.geojson", { cache:"no-cache" });
+    window.LINES_DATA = lr.ok ? await lr.json() : { type:"FeatureCollection", features:[] };
+    map.addSource("lines", { type:"geojson", data: window.LINES_DATA });
+    ETSLines.add(map, "lines");
+  } catch (e) { /* no lines file yet */ }
+
+  await applySettingsToMap();
+  await PHOTOS_READY;
+  await EVENTS_INDEX_READY;
+  refreshEventButton();
+  syncMoreBtn();
+
+  const [L,C,CATS,SHAPEROWS] = await Promise.all([
+    load(SITE.files.locations),
+    load(SITE.files.children),
+    load("categories.csv"),
+    load("shapes.csv")
+  ]);
+  if (window.MarkerShapes) SITE.customShapes = MarkerShapes.parseRows(SHAPEROWS);
+
+  SITE.icons = {};
+  SITE.ranked = null;
+  SITE.catNames = {};
+  if (CATS.length && Object.prototype.hasOwnProperty.call(CATS[0], "RANKED")) SITE.ranked = {};
+  CATS.forEach(r => {
+    const code = String(r.CODE || "").trim().toUpperCase();
+    const color = String(r.COLOR || "").trim();
+    const icon = String(r.ICON || "").trim();
+    if (!code) return;
+    if (/^#[0-9a-f]{3,8}$/i.test(color)) SITE.colors[code === "DEFAULT" ? "default" : code] = color;
+    if (icon && ICONS[icon]) SITE.icons[code] = icon;
+    if (window.MarkerFill) { const f = MarkerFill.fromRow(r, color); if (f) SITE.fills[code] = f; }
+    SITE.catNames[code] = String(r.LABEL || code).trim();
+    if (window.MarkerShapes && r.SHAPE) SITE.shapes[code] = MarkerShapes.slug(r.SHAPE);
+    if (SITE.ranked) SITE.ranked[code] = String(r.RANKED || "").trim().toLowerCase() === "yes";
+  });
+
+  L.forEach(r => {
+    const ll = [parseFloat(r.LONG), parseFloat(r.LAT)];
+    if (!key(r.ID) || ll.some(isNaN)) { console.warn("Skipped location row:", r); return; }
+    places.push({ id: r.ID.trim(), name: r.NAME || r.ID, ll, d:r, kids:[] });
+  });
+
+  C.forEach(r => {
+    const id = (r.CHILD_ID || r.CHILD_IS || "").trim();
+    const ll = [parseFloat(r.LONG), parseFloat(r.LAT)];
+    const parent = places.find(p => key(p.id) === key(r.PARENT_ID));
+    if (!id || ll.some(isNaN) || !parent) { console.warn("Skipped child row:", r); return; }
+    const k = { id, name: r.NAME || id, ll, d:r, parent, off:[0,0] };
+    parent.kids.push(k);
+    kids.push(k);
+  });
+
+  places.forEach(p => makePin(p, p.kids.length ? "parent" : "place"));
+  kids.forEach(k => makePin(k, "child"));
+
+  stops = places.concat(kids)
+    .filter(i => parseFloat(i.d.TOUR) > 0)
+    .sort((a,b) => parseFloat(a.d.TOUR) - parseFloat(b.d.TOUR));
+  $("tour").hidden = !stops.length;
+
+  await Promise.all([ loadPassportData(), initOverlays() ]);
+  update();
+  updatePassportUI();
+  if (window.renderStampCards) renderStampCards();
+  if (window.__buildChips) window.__buildChips();
+});
+
+const yr4 = v => { const m = /\d{4}/.exec(v || ""); return m ? +m[0] : null; };
+
+function alive(i){
+  if (year === null) return true;
+  const e = yr4(i.d.EST);
+  const c = yr4(i.d.CLSD);
+  return (e === null || e <= year) && (c === null || c > year);
+}
+
+function update(){
+  const deep = !returning && map.getZoom() >= SITE.childZoom;
+  const show = (i,v) => {
+    const cat = String((i.d && i.d.CATEGORY) || "").trim().toUpperCase();
+    const catHidden = window.catVisible && !window.catVisible(cat);
+    i.el.style.display = (v && alive(i) && !catHidden) ? "" : "none";
+  };
+  places.forEach(p => show(p, !focus && !(p.kids.length && deep)));
+  kids.forEach(k => show(k, focus ? k.parent === focus : deep));
+  declutter();
+  drawLeaders();
+}
+window.update = update;
+
+function segDist(px,py,ax,ay,bx,by){
+  const dx = bx - ax, dy = by - ay;
+  let t = ((px-ax)*dx + (py-ay)*dy) / ((dx*dx + dy*dy) || 1);
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - ax - t*dx, py - ay - t*dy);
+}
+
+function declutter(){
+  const rank = i => (i.kids && i.kids.length) ? 0 : (i.parent ? 2 : 1);
+  const vis = places.concat(kids).filter(i => i.el.style.display !== "none").sort((a,b) => rank(a) - rank(b));
+  const placed = [];
+  vis.forEach(it => {
+    const p = map.project(it.ll);
+    const base = it.r + 12;
+    const fixed = rank(it) === 0;
+    let o = [0,-base];
+    let bestScore = Infinity;
+    search:
+    for (let ring=0; ring<8; ring++){
+      const R = base + ring*34;
+      const n = ring ? 8 + ring*4 : 1;
+      for (let i=0; i<n; i++){
+        const step = Math.ceil(i/2) * (i%2 ? 1 : -1);
+        const a = -Math.PI/2 + 2*Math.PI*step/n;
+        const dx = Math.cos(a)*R, dy = Math.sin(a)*R;
+        const t = { x: p.x + dx, y: p.y + dy };
+        let pen = 0;
+        if (!fixed) {
+          placed.forEach(q => {
+            pen += Math.max(0, q.r + it.r + 4 - Math.hypot(q.x - t.x, q.y - t.y));
+            pen += Math.max(0, it.r + 3 - segDist(t.x, t.y, q.tx, q.ty, q.x, q.y));
+            if (Math.hypot(q.x - p.x, q.y - p.y) > q.r + 3) {
+              pen += Math.max(0, q.r + 3 - segDist(q.x, q.y, p.x, p.y, t.x, t.y));
+            }
+          });
+        }
+        if (pen < bestScore) { bestScore = pen; o = [dx, dy]; }
+        if (pen === 0) break search;
+      }
+    }
+    it.off = o;
+    it.marker.setOffset(o);
+    placed.push({ x: p.x + o[0], y: p.y + o[1], r: it.r, tx: p.x, ty: p.y });
+  });
+}
+
+function drawLeaders(){
+  let h = "";
+  places.concat(kids).forEach(it => {
+    if (it.el.style.display === "none" || !it.off) return;
+    const t = map.project(it.ll);
+    const L = Math.hypot(it.off[0], it.off[1]) || 1;
+    const ux = it.off[0] / L, uy = it.off[1] / L;
+    const w = it.r * 0.4;
+    const bx = t.x + it.off[0] - ux * (it.r - 3);
+    const by = t.y + it.off[1] - uy * (it.r - 3);
+    h += `<path style="fill:${it.color}" d="M${bx - uy*w},${by + ux*w}L${t.x},${t.y}L${bx + uy*w},${by - ux*w}Z"/>`;
+  });
+  svg.innerHTML = h;
+}
+
+map.on("zoomend", update);
+map.on("render", drawLeaders);
+
+function setTourLine(coords){
+  if (map.getLayer("tour-line")) map.removeLayer("tour-line");
+  if (map.getSource("tour-line")) map.removeSource("tour-line");
+  if (!coords || coords.length < 2) return;
+  tourGeoJSON = { type: "Feature", geometry: { type: "LineString", coordinates: coords } };
+  map.addSource("tour-line", { type: "geojson", data: tourGeoJSON });
+  map.addLayer({
+    id: "tour-line", type: "line", source: "tour-line",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": "#D55E00", "line-width": 4, "line-opacity": 0.75, "line-dasharray": [2, 1.5] }
+  }, "boundary");
+}
+
+function clearTourLine(){
+  if (map.getLayer("tour-line")) map.removeLayer("tour-line");
+  if (map.getSource("tour-line")) map.removeSource("tour-line");
+  tourGeoJSON = null;
+}
+
+function vehicleSVG(k){
+  const i = ICONS[k] || ICONS.train;
+  return `<svg viewBox="${i.vb}" width="60" height="30" aria-hidden="true">${i.art}</svg>`;
+}
+const VEHICLE_SVG = new Proxy({}, {
+  get: (_, k) => (typeof k === "string" && Object.prototype.hasOwnProperty.call(ICONS, k)) ? vehicleSVG(k) : undefined
+});
+const SCENE_CLASS = { rail: "rail", water: "boat", road: "car" };
+
+const VEHICLE_PUFF = `
+  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+    <circle cx="6" cy="10" r="4" fill="#fff" opacity=".85"/>
+    <circle cx="10" cy="7" r="3" fill="#fff" opacity=".6"/>
+  </svg>`;
+
+/* ---- Tour routes: follow the lines drawn in the Lines editor ---- */
+function routeLines(ids) {   // the drawn lines (as lists of points) that a tour follows
+  const want = String(ids || "").split(/[|;,]/).map(s => s.trim()).filter(Boolean);
+  return ((window.LINES_DATA && window.LINES_DATA.features) || []).filter(f => want.includes(String((f.properties || {}).ID))).map(f => f.geometry.coordinates);
+}
+function nearOnLine(line, p) {   // closest spot on a line to a point: segment number, how far along it, and the distance in meters
+  const k = Math.cos(p[1] * Math.PI / 180); let best = null;
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i], b = line[i + 1], dx = (b[0] - a[0]) * k, dy = b[1] - a[1], L = dx * dx + dy * dy;
+    const t = L ? Math.max(0, Math.min(1, ((p[0] - a[0]) * k * dx + (p[1] - a[1]) * dy) / L)) : 0;
+    const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t, d = Math.hypot((p[0] - x) * k, p[1] - y) * 111320;
+    if (!best || d < best.d) best = { i: i, t: t, d: d, pt: [x, y] };
+  }
+  return best;
+}
+function legPath(lines, from, to) {   // the part of a drawn line between two stops, in travel order; null if no line passes near both
+  let best = null;
+  const tol = lines.length === 1 ? Infinity : 600;   // a tour with one route always follows it, even if a stop sits a little off the line
+  lines.forEach(l => {
+    if (l.length < 2) return;
+    const a = nearOnLine(l, from), b = nearOnLine(l, to);
+    if (a.d < tol && b.d < tol && (!best || a.d + b.d < best.s)) best = { l: l, a: a, b: b, s: a.d + b.d };
+  });
+  if (!best) return null;
+  const fwd = best.a.i < best.b.i || (best.a.i === best.b.i && best.a.t <= best.b.t), s = fwd ? best.a : best.b, e = fwd ? best.b : best.a;
+  const path = [s.pt].concat(best.l.slice(s.i + 1, e.i + 1), [e.pt]);
+  return fwd ? path : path.reverse();
+}
+function pathInfo(path) {
+  const k = Math.cos(path[0][1] * Math.PI / 180), seg = []; let total = 0;
+  for (let i = 0; i < path.length - 1; i++) { const d = Math.hypot((path[i + 1][0] - path[i][0]) * k, path[i + 1][1] - path[i][1]) * 111320; seg.push(d); total += d; }
+  return { path: path, seg: seg, total: total };
+}
+function alongPath(P, t) {   // the point t (0 to 1) of the way along a path
+  let want = t * P.total;
+  for (let i = 0; i < P.seg.length; i++) {
+    if (want <= P.seg[i] || i === P.seg.length - 1) { const f = P.seg[i] ? Math.min(1, want / P.seg[i]) : 0, a = P.path[i], b = P.path[i + 1]; return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]; }
+    want -= P.seg[i];
+  }
+  return P.path[P.path.length - 1];
+}
+
+const MODE_NAMES = { walk: "Walk", hike: "Hike", bike: "Bike", drive: "Drive", virtual: "Virtual" };
+function tourBadge(t) {   // "Tour: Hike, Bike" or "Trail: Walk"
+  const m = String(t.modes || "").split(/[|;,]/).map(x => MODE_NAMES[x.trim().toLowerCase()]).filter(Boolean);
+  return (t.type === "trail" ? "Trail" : "Tour") + (m.length ? " (" + m.join(", ") + ")" : "") + (t.length ? ", " + t.length + " mi" : "");
+}
+
+function travelTo(fromLl, toLl, vehicleKey, path){
+  return new Promise(resolve => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches || !vehicleKey) {
+      map.easeTo({ center: toLl, duration: 600 });
+      setTimeout(resolve, 600);
+      return;
+    }
+    const v = ICONS[vehicleKey] ? vehicleKey : "train";
+    const meta = ICONS[v];
+    const wrap = document.createElement("div");
+    wrap.className = "travel-clip " + (SCENE_CLASS[meta.scene] || "");
+    wrap.innerHTML = `
+      <div class="scene">
+        <div class="env"></div>
+        <div class="vehicle">${vehicleSVG(v)}</div>
+        ${meta.puff ? `<div class="puff">${VEHICLE_PUFF}</div>` : ""}
+      </div>`;
+    const marker = new maplibregl.Marker({ element: wrap, anchor: "center" }).setLngLat(fromLl).addTo(map);
+    const midZoom = Math.max(map.getZoom() - 0.3, 14.5);
+    map.jumpTo({ center: fromLl, zoom: midZoom });
+    const t0 = performance.now();
+    const P = path && path.length > 1 ? pathInfo(path) : null;   // follow a drawn route if there is one
+    const DURATION = P ? Math.min(4000, Math.max(1100, P.total * 3)) : 1100;
+    function frame(now){
+      const t = Math.min((now - t0) / DURATION, 1);
+      const pos = P ? alongPath(P, t) : [fromLl[0] + (toLl[0] - fromLl[0]) * t, fromLl[1] + (toLl[1] - fromLl[1]) * t];
+      const lng = pos[0], lat = pos[1];
+      marker.setLngLat([lng, lat]);
+      map.jumpTo({ center: [lng, lat] });
+      if (t < 1) requestAnimationFrame(frame);
+      else {
+        marker.remove();
+        map.easeTo({ center: toLl, zoom: 17, duration: 500 });
+        setTimeout(resolve, 500);
+      }
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+function select(it){
+  window.sel = it;
+  window.__sel = it;
+  if (tourI >= 0 && stops[tourI] !== it) tourI = -1;
+  if (!sel && !prev) prev = { center: map.getCenter(), zoom: map.getZoom() };
+  sel = it;
+  places.concat(kids).forEach(i => i.el.classList.toggle("sel", i === it));
+  earnStamp(it.id, it.d, window.__qrEntry ? "qr" : "view", it.ll);
+  if (window.passportEvent) passportEvent("view", {
+    id: it.id,
+    category: (it.d && it.d.CATEGORY) || null,
+    source: it.parent ? "childmarkers" : "locations"
+  });
+  if (it.kids && it.kids.length) {
+    focus = it;
+    const b = new maplibregl.LngLatBounds();
+    it.kids.forEach(k => b.extend(k.ll));
+    map.fitBounds(b, { padding:90, maxZoom:18 });
+  } else {
+    focus = it.parent || null;
+    map.easeTo({ center: it.ll, zoom: Math.max(map.getZoom(), it.parent ? 17 : 15) });
+  }
+  const d = it.d;
+  const panel = $("panel");
+  panel.innerHTML =
+    `<button id="x" aria-label="Close">&times;</button>` +
+    `<h2>${esc(it.name)}</h2>` +
+    (d.HIST_NAMES ? `<p><b>Also known as:</b> ${esc(d.HIST_NAMES)}</p>` : "") +
+    (d.ADDRESS ? `<p><b>Address:</b> ${esc(d.ADDRESS)}</p>` : "") +
+    `<p>${esc(d.DETAILS || "")}</p>` +
+    (it.kids && it.kids.length
+      ? "<h3>Places here</h3>" +
+        it.kids.map(k => `<button class="kid" data-id="${esc(k.id)}">${esc(k.name)}</button>`).join("")
+      : "");
+  const cov = thumb(it.id, d.CATEGORY, coverPath(it.id, d.PHOTO));
+  cov.dataset.caption = coverNote(it.id);
+  panel.insertBefore(cov, panel.querySelector("h2"));
+  if (coverNote(it.id)) { const s = document.createElement("small"); s.className = "covernote"; s.textContent = coverNote(it.id); cov.after(s); }
+  const gal = buildGallery(it.id);
+  if (gal) panel.appendChild(gal);
+  const e = yr4(d.EST);
+  const c = yr4(d.CLSD);
+  const when = [e ? "Established " + e : "", c ? "Closed " + c : (e ? "Still standing" : "")].filter(Boolean).join(" &middot; ");
+  if (when) panel.querySelector("h2").insertAdjacentHTML("afterend", `<p><b>${when}</b></p>`);
+  if (SITE.memoryUrl) {
+    const m = SITE.memoryUrl.startsWith("mailto:")
+      ? SITE.memoryUrl + "?subject=" + encodeURIComponent("Memory of " + it.name + " (" + it.id + ")")
+      : SITE.memoryUrl;
+    panel.insertAdjacentHTML("beforeend",
+      `<p><a href="${esc(m)}" target="_blank" rel="noopener">Do you have a memory or photo of this place? Share it</a></p>`);
+  }
+  if (tourI >= 0 && stops[tourI] === it) {
+    panel.insertAdjacentHTML("beforeend",
+      `<p><b>Tour stop ${tourI + 1} of ${stops.length}</b></p>` +
+      `<button class="kid" data-t="-1" ${tourI ? "" : "disabled"}>&larr; Back</button>` +
+      `<button class="kid" data-t="1" ${tourI < stops.length - 1 ? "" : "disabled"}>Next: ${esc((stops[tourI + 1] || {}).name || "end of tour")} &rarr;</button>`);
+  }
+  panel.hidden = false;
+  update();
+}
+window.select = select;
+
+function deselect(){
+  if (!sel) return;
+  sel = null; focus = null; tourI = -1;
+  $("panel").hidden = true;
+  clearTourLine();
+  places.concat(kids).forEach(i => i.el.classList.remove("sel"));
+  if (prev) {
+    returning = true;
+    update();
+    map.flyTo({ center: prev.center, zoom: prev.zoom });
+    prev = null;
+    map.once("moveend", () => { returning = false; update(); });
+  } else { update(); }
+}
+
+$("panel").onclick = async e => {
+  if (e.target.closest("#x")) { deselect(); return; }
+  const t = e.target.closest("[data-t]");
+  if (t && !t.disabled) {
+    if (travelInProgress) return;
+    travelInProgress = true;
+    try {
+      const from = stops[tourI];
+      const to   = stops[tourI + +t.dataset.t];
+      if (!from || !to) return;
+      const vehicle = (from.d.VEHICLE || stops[tourI].d.VEHICLE || "train").trim().toLowerCase();
+      await travelTo(from.ll, to.ll, vehicle);
+      tourGo(tourI + +t.dataset.t);
+    } finally { travelInProgress = false; }
+    return;
+  }
+  const b = e.target.closest(".kid");
+  if (b) {
+    const k = kids.find(x => x.id === b.dataset.id);
+    if (k) select(k);
+  }
+};
+
+map.on("click", () => { $("res").hidden = true; deselect(); });
+map.on("resize", update);
+
+function tourGo(n){
+  tourI = n;
+  select(stops[n]);
+  if (n === stops.length - 1 && window.passportEvent) {
+    const stop = stops[n];
+    passportEvent("tour", {
+      id: stop?.d?.TOUR_ID || null,
+      category: stop?.d?.CATEGORY || null,
+      source: "tours"
+    });
+  }
+}
+
+$("tour").onclick = () => { setTourLine(stops.map(s => s.ll)); tourGo(0); };
+
+$("yr").min = SITE.yearMin;
+$("yr").max = SITE.yearMax;
+$("yr").step = 10;
+$("yr").value = SITE.yearMax;
+
+function buildYearTicks(){
+  const min = +$("yr").min, max = +$("yr").max, step = +$("yr").step || 1, n = Math.max(1, Math.round((max - min) / step));
+  const box = $("yticks");
+  box.innerHTML = "";
+  for (let i = 0; i <= n; i++) {
+    const y = min + i * step, major = y % 50 === 0 || i === n, left = (i / n * 100) + "%";
+    const t = document.createElement("i");
+    t.style.left = left;
+    if (major) t.className = "maj";
+    box.appendChild(t);
+    if (major) { const l = document.createElement("em"); l.style.left = left; l.textContent = i === n ? "All" : y; box.appendChild(l); }
+  }
+}
+buildYearTicks();
+
+function closeMore(){
+  $("tools").classList.remove("open");
+  $("moreBtn").setAttribute("aria-expanded", "false");
+  $("moreBtn").innerHTML = "More &#9662;";
+}
+function updateMoreDot(){
+  const on = $("aerialBtn").getAttribute("aria-pressed") === "true" || year !== null || (!$("ovw").hidden && +$("ov").value > 0);
+  $("moreBtn").classList.toggle("on", on);
+}
+function syncMoreBtn(){
+  const any = [...$("toolsMore").children].some(el => !el.hidden && el.style.display !== "none");
+  $("moreBtn").hidden = !any;
+  if (!any) closeMore();
+  updateMoreDot();
+}
+$("moreBtn").onclick = e => {
+  e.stopPropagation();
+  const open = !$("tools").classList.contains("open");
+  $("tools").classList.toggle("open", open);
+  $("moreBtn").setAttribute("aria-expanded", String(open));
+  $("moreBtn").innerHTML = open ? "Less &#9652;" : "More &#9662;";
+};
+document.addEventListener("click", e => { if (!e.target.closest("#tools")) closeMore(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeMore(); });
+
+$("yr").oninput = e => {
+  const v = +e.target.value;
+  year = v >= SITE.yearMax ? null : v;
+  $("yv").textContent = year === null ? "All" : year;
+  updateMoreDot();
+  update();
+};
+
+async function initOverlays(){
+  await SETTINGS_READY;
+  if (!SITE.overlaySlider) return;
+  try {
+    const res = await dataFetch("overlays.json", { cache:"no-store" });
+    if (res.ok) {
+      const loaded = await res.json();
+      if (Array.isArray(loaded) && loaded.length) SITE.overlays = loaded;
+    }
+  } catch (e) { console.warn("Couldn't load overlays.json", e); }
+
+  const o = SITE.overlays;
+  if (!o.length) return;
+
+  o.forEach((x,n) => {
+    map.addSource("ov" + n, { type:"image", url: x.url, coordinates: x.coords });
+    map.addLayer({
+      id: "ov" + n, type: "raster", source: "ov" + n,
+      paint: { "raster-opacity": 0 }
+    }, "boundary");
+  });
+
+  $("ovs").innerHTML = o.map((x,n) => `<option value="${n}">${esc(x.name)}</option>`).join("");
+  $("ovs").hidden = o.length < 2;
+  $("ovw").hidden = false;
+  syncMoreBtn();
+
+  const apply = () => o.forEach((x,n) =>
+    map.setPaintProperty("ov" + n, "raster-opacity", n == $("ovs").value ? $("ov").value / 100 : 0)
+  );
+  $("ov").oninput = () => { apply(); updateMoreDot(); };
+  $("ovs").onchange = apply;
+}
+
+$("near").onclick = () => {
+  const r = $("res");
+  const say = t => { r.innerHTML = `<li style="padding:10px">${t}</li>`; r.hidden = false; };
+  if (!navigator.geolocation) { say("Location isn't available on this device."); return; }
+  say("Finding you...");
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const ll = [pos.coords.longitude, pos.coords.latitude];
+      const b = SITE.maxBounds;
+      if (ll[0] < b[0][0] || ll[0] > b[1][0] || ll[1] < b[0][1] || ll[1] > b[1][1]) { say("You appear to be outside the map area."); return; }
+      if (me) me.remove();
+      const dot = document.createElement("div");
+      dot.style.cssText = "width:16px;height:16px;border-radius:50%;background:#0072B2;border:3px solid #fff;box-shadow:0 0 0 2px #0072B2";
+      me = new maplibregl.Marker({ element: dot }).setLngLat(ll).addTo(map);
+      const mi = c => {
+        const q = Math.PI / 180;
+        const a = Math.sin((c[1]-ll[1])*q/2)**2 + Math.cos(ll[1]*q)*Math.cos(c[1]*q)*Math.sin((c[0]-ll[0])*q/2)**2;
+        return 2 * 3958.8 * Math.asin(Math.sqrt(a));
+      };
+      const hits = places.concat(kids).filter(alive).map(h => ({ i:h, d:mi(h.ll) })).sort((a,b) => a.d - b.d).slice(0,5);
+      r._hits = hits.map(h => h.i);
+      r.innerHTML = "<li style='padding:8px 10px;font-size:12px'>Nearest to you (approximate; not for navigation)</li>" +
+        hits.map((h,n) => `<li><button data-i="${n}">${esc(h.i.name)} <small>${h.d < 0.1 ? Math.round(h.d*5280) + " ft" : h.d.toFixed(1) + " mi"}</small></button></li>`).join("");
+      map.easeTo({ center: ll, zoom: Math.max(map.getZoom(), 15) });
+    },
+    () => say("Couldn't get your location. Check your browser's location permission."),
+    { enableHighAccuracy:true, timeout:10000 }
+  );
+};
+
+$("q").oninput = e => {
+  const s = e.target.value.trim().toLowerCase();
+  const r = $("res");
+  if (!s) { r.hidden = true; return; }
+  const hits = places.concat(kids).filter(i =>
+    (i.name + " " + (i.d.HIST_NAMES || "") + " " + (i.d.ADDRESS || "")).toLowerCase().includes(s)
+  ).slice(0,8);
+  r.innerHTML = hits.map((h,i) => `<li><button data-i="${i}">${esc(h.name)}</button></li>`).join("") || "<li style='padding:10px'>No matches</li>";
+  r._hits = hits;
+  r.hidden = false;
+};
+
+$("res").onclick = e => {
+  const b = e.target.closest("button");
+  if (b) { select($("res")._hits[b.dataset.i]); $("res").hidden = true; }
+};
+
+/* QR SPOTS */
+(function () {
+  const id = new URLSearchParams(location.search).get("spot");
+  if (!id) return;
+  const box = $("spotBox");
+  const close = () => { box.hidden = true; };
+  $("sp-x").onclick = close;
+  $("sp-go").onclick = close;
+  box.onclick = e => { if (e.target === box) close(); };
+  document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+  map.once("load", async () => {
+    const r = (await load("spots.csv")).find(x => key(x.SPOT_ID) === key(id));
+    if (!r) { console.warn("No spot called " + id); return; }
+    const ll = [parseFloat(r.LONG), parseFloat(r.LAT)];
+    if (ll.some(isNaN)) { console.warn("Spot " + id + " has bad coordinates"); return; }
+    map.jumpTo({ center: ll, zoom: 18 });
+    const pin = document.createElement("div");
+    pin.className = "spotpin";
+    new maplibregl.Marker({ element: pin }).setLngLat(ll).addTo(map);
+    const qcp = coverPath(id, r.PHOTO);
+    $("sp-img").hidden = !qcp;
+    if (qcp) $("sp-img").src = assetUrl(qcp);
+    $("sp-title").textContent = r.TITLE || "What used to be here?";
+    $("sp-when").textContent = r.YEAR || "";
+    $("sp-text").textContent = r.DETAILS || "";
+    $("sp-credit").textContent = coverNote(id, r.CREDIT) || (r.CREDIT ? "Photo: " + r.CREDIT : "");
+    $("sp-img").dataset.caption = coverNote(id);
+    const qGal = buildGallery(id);
+    if (qGal) $("sp-credit").after(qGal);
+    box.hidden = false;
+    earnStamp(id, r, "qr", [parseFloat(r.LONG), parseFloat(r.LAT)]);
+    if (window.passportEvent) passportEvent(key(r.KIND) === "story" ? "story" : "spot", {
+      id, category: r.CATEGORY || null, source: "qr"
+    });
+  });
+})();
+
+/* PHOTO SPOTS, STORIES, TOURS */
+(function () {
+  document.head.insertAdjacentHTML("beforeend", `<style>
+.kmark{width:44px;height:44px;border:0;background:none;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.kmark svg{filter:drop-shadow(0 0 2px #fff) drop-shadow(0 0 2px #fff)}
+.tring{width:64px;height:64px;border-radius:50%;border:5px solid #D55E00;box-shadow:0 0 0 3px #fff,0 0 14px #000a;pointer-events:none;animation:kring 1.6s ease-out infinite}
+@keyframes kring{0%{transform:scale(.8)}70%{transform:scale(1.15)}100%{transform:scale(.8)}}
+@media(prefers-reduced-motion:reduce){.tring{animation:none}}
+#klegend{position:absolute;left:8px;bottom:42px;z-index:4;background:#fffe;padding:4px 8px;border-radius:6px;font-size:12px;display:flex;gap:12px}
+#klegend span{display:flex;align-items:center;gap:4px}
+#tourCard{position:fixed;left:0;right:0;bottom:0;z-index:7;max-height:48vh;overflow:auto;background:#fff;border-top:6px solid #D55E00;padding:12px 14px calc(14px + env(safe-area-inset-bottom));box-sizing:border-box}
+#tourCard[hidden]{display:none}
+#tourCard img{max-height:150px;max-width:100%;border-radius:8px;display:block;margin-bottom:6px;cursor:zoom-in}
+#tourCard h2{margin:4px 0}
+#tourCard small{display:block;color:#555}
+</style>`);
+
+  const icon = (kind, c) => kind === "story"
+    ? `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 1l2.6 7.4L22 11l-7.4 2.6L12 21l-2.6-7.4L2 11l7.4-2.6z" fill="${c}" stroke="#fff" stroke-width="1.2"/></svg>`
+    : `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1" fill="${c}"/><rect x="2" y="6" width="20" height="14" rx="3" fill="${c}" stroke="#fff" stroke-width="1.2"/><circle cx="12" cy="13" r="4" fill="#fff"/></svg>`;
+
+  let items = [];
+  let showAll = false;
+  let tours = [];
+  let T = null;
+  let ti = 0;
+  let ring = null;
+  const box = $("spotBox");
+
+  function setSpotUrl(id) {
+    try {
+      const q = new URLSearchParams(location.search);
+      if (id) q.set("spot", id); else q.delete("spot");
+      const s = q.toString();
+      history.replaceState(null, "", location.pathname + (s ? "?" + s : ""));
+    } catch (e) {}
+  }
+
+  new MutationObserver(() => { if (box.hidden) setSpotUrl(null); }).observe(box, { attributes: true, attributeFilter: ["hidden"] });
+
+  if (!new URLSearchParams(location.search).has("spot")) {
+    $("sp-x").onclick = $("sp-go").onclick = () => { box.hidden = true; };
+    box.onclick = e => { if (e.target === box) box.hidden = true; };
+  }
+  document.addEventListener("keydown", e => { if (e.key === "Escape") box.hidden = true; });
+
+  function showSpot(it) {
+    const r = it.r;
+    const cp = coverPath(it.id, r.PHOTO);
+    const holder = $("sp-img").parentNode;
+    let wrap = holder.querySelector(".photo-anim");
+    if (!wrap) {
+      wrap = document.createElement("div");
+      wrap.className = "photo-anim";
+      $("sp-img").parentNode.insertBefore(wrap, $("sp-img"));
+      wrap.appendChild($("sp-img"));
+      const v = document.createElement("video");
+      v.muted = true; v.playsInline = true; v.preload = "metadata"; v.hidden = true;
+      wrap.appendChild(v);
+    }
+    const vid = wrap.querySelector("video");
+    vid.pause();
+    vid.hidden = true;
+    vid.removeAttribute("src");
+    if (cp) {
+      $("sp-img").hidden = false;
+      $("sp-img").src = assetUrl(cp);
+      const anim = /(?:^|\/)([^/]+)\.(jpe?g|png|webp)$/i.exec(cp || "");
+      if (anim) {
+        const path = assetUrl("anims/" + anim[1] + ".mp4");
+        vid.onloadeddata = () => { vid.hidden = false; vid.play().catch(() => { vid.hidden = true; }); };
+        vid.onended      = () => { vid.hidden = true; };
+        vid.onerror      = () => { vid.hidden = true; };
+        vid.src = path;
+        vid.load();
+      }
+    } else { $("sp-img").hidden = true; }
+    $("sp-title").textContent = r.TITLE || "";
+    $("sp-when").textContent = r.YEAR || "";
+    $("sp-text").textContent = r.DETAILS || "";
+    $("sp-credit").textContent = [coverNote(it.id, r.CREDIT) || (r.CREDIT ? "Photo: " + r.CREDIT : ""), r.SOURCE ? "Source: " + r.SOURCE : ""].filter(Boolean).join(" · ");
+    $("sp-img").dataset.caption = coverNote(it.id);
+    const oldGal = $("spotCard").querySelector(".gal");
+    if (oldGal) oldGal.remove();
+    const gal = buildGallery(it.id);
+    if (gal) $("sp-credit").after(gal);
+    box.hidden = false;
+    setSpotUrl(it.id);
+    earnStamp(it.id, it.r, "view", [parseFloat(it.r.LONG), parseFloat(it.r.LAT)]);
+    if (window.passportEvent) passportEvent(it.kind, { id: it.id, category: it.r.CATEGORY || null, source: "spots" });
+  }
+
+  const vis = () => {
+    const z = map.getZoom();
+    items.forEach(i => { if (i.el) i.el.style.display = (showAll || z >= 16) ? "" : "none"; });
+  };
+
+  const byId = id => {
+    const k = key(id);
+    return places.concat(kids).find(p => key(p.id) === k) || items.find(i => key(i.id) === k);
+  };
+
+  function clearHi() { if (ring) { ring.remove(); ring = null; } }
+
+  function go(n) {
+    ti = n;
+    clearHi();
+    const st = T.stops[n];
+    const it = byId(st.ITEM_ID);
+    const card = $("tourCard");
+    let name = "Missing item: " + st.ITEM_ID;
+    let when = "", text = "", credit = "", ll = null, img = null;
+    if (it && it.r) {
+      const r = it.r;
+      const cp = coverPath(it.id, r.PHOTO);
+      name = r.TITLE;
+      when = r.YEAR || "";
+      text = r.DETAILS || "";
+      ll = it.ll;
+      if (cp) {
+        const wrap = document.createElement("div");
+        wrap.className = "photo-anim";
+        const still = new Image();
+        still.alt = "";
+        still.src = assetUrl(cp);
+        still.onerror = () => { still.remove(); };
+        wrap.appendChild(still);
+        const m = /(?:^|\/)([^/]+)\.(jpe?g|png|webp)$/i.exec(cp);
+        if (m) {
+          const v = document.createElement("video");
+          v.muted = true; v.playsInline = true; v.preload = "metadata"; v.hidden = true;
+          v.onloadeddata = () => { v.hidden = false; v.play().catch(() => { v.hidden = true; }); };
+          v.onended      = () => { v.hidden = true; };
+          v.onerror      = () => { v.hidden = true; };
+          v.src = assetUrl("anims/" + m[1] + ".mp4");
+          wrap.appendChild(v);
+        }
+        img = wrap;
+      }
+      credit = [coverNote(it.id, r.CREDIT) || (r.CREDIT ? "Photo: " + r.CREDIT : ""), r.SOURCE ? "Source: " + r.SOURCE : ""].filter(Boolean).join(" · ");
+      earnStamp(it.id, r, "view");
+    } else if (it) {
+      name = it.name;
+      text = it.d.DETAILS || "";
+      ll = it.ll;
+      img = thumb(it.id, it.d.CATEGORY, coverPath(it.id, it.d.PHOTO));
+      credit = coverNote(it.id);
+      earnStamp(it.id, it.d, "view", it.ll);
+    }
+    if (ll) {
+      focus = (it && it.parent) || null;
+      update();
+      const d = document.createElement("div");
+      d.className = "tring";
+      ring = new maplibregl.Marker({ element: d }).setLngLat(ll).addTo(map);
+      map.flyTo({ center: ll, zoom: Math.max(map.getZoom(), 17) });
+    }
+    const nxt = T.stops[n + 1] && byId(T.stops[n + 1].ITEM_ID);
+    card.innerHTML =
+      `<h2></h2>` +
+      `<small id="tw"></small>` +
+      `<p id="tt"></p>` +
+      `<p id="tn"><i></i></p>` +
+      `<small id="tc"></small>` +
+      `<p><b>${esc(T.title)}: stop ${n + 1} of ${T.stops.length}</b></p>` +
+      `<button class="kid" data-g="-1" ${n ? "" : "disabled"}>&larr; Back</button>` +
+      `<button class="kid" data-g="1" ${n < T.stops.length - 1 ? "" : "disabled"}>Next: ${esc(nxt ? (nxt.r ? nxt.r.TITLE : nxt.name) : "end of tour")} &rarr;</button>` +
+      `<button class="kid" data-g="x">End tour</button>`;
+    card.querySelector("h2").textContent = name;
+    $("tw").textContent = when;
+    $("tt").textContent = text;
+    card.querySelector("#tn i").textContent = st.NOTE || "";
+    $("tc").textContent = credit;
+    if (img) card.insertBefore(img, card.firstChild);
+    card.hidden = false;
+    if (n === T.stops.length - 1 && window.passportEvent) {
+      passportEvent("tour", { id: T.id, category: T.category || null, source: "tours" });
+    }
+  }
+
+  function listTours() {
+    const card = $("tourCard");
+    card.innerHTML = `<h2>Tours</h2>` +
+      tours.map((t,i) => `<button class="kid" data-t="${i}"><b>${esc(t.title)}</b><br><small>${esc(tourBadge(t))}: ${esc(t.intro)} (${t.stops.length} stops)</small></button>`).join("") +
+      `<button class="kid" data-g="x">Close</button>`;
+    card.hidden = false;
+  }
+
+  document.body.insertAdjacentHTML("beforeend",
+    `<aside id="tourCard" hidden aria-live="polite"></aside>` +
+    `<div id="klegend">` +
+      `<span>${icon("spot","#333333")} Photo spot</span>` +
+      `<span>${icon("story","#D55E00")} Story</span>` +
+    `</div>`);
+
+  $("tours").onclick = listTours;
+
+  // Visitor switch for marker animation (remembered in their browser)
+  if (window.SpotMarkers) {
+    const mo = SpotMarkers.motion("kfx-site");
+    $("klegend").insertAdjacentHTML("beforeend",
+      `<label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="kfxToggle"> Motion</label>`);
+    const cb = $("kfxToggle");
+    cb.checked = mo.on;
+    cb.onchange = () => mo.set(cb.checked);
+  }
+
+  $("stories").onclick = () => {
+    showAll = !showAll;
+    $("stories").setAttribute("aria-pressed", showAll);
+    $("stories").textContent = showAll ? "Hide Stories / Spots" : "Show All Stories and Spots";
+    vis();
+  };
+
+  const mapLineIds = new Set();   // lines that belong to plain Map Lines: always visible
+  function lineVisibility(active, tries) {   // a tour's or trail's line shows only while it is open; map lines always show
+    if (!map.getLayer("lines-solid")) { if ((tries || 0) < 40) setTimeout(() => lineVisibility(active, (tries || 0) + 1), 300); return; }   // the lines may still be loading
+    const hide = new Set();
+    tours.forEach(t => String(t.route || "").split(/[|;,]/).map(s => s.trim()).filter(Boolean).forEach(id => hide.add(id)));
+    ((window.LINES_DATA && window.LINES_DATA.features) || []).forEach(f => { const id = String((f.properties || {}).ID || ""); if (id.indexOf("R-") === 0) hide.add(id); });   // route lines, including any left behind by a deleted tour
+    (active || []).forEach(id => hide.delete(id));
+    mapLineIds.forEach(id => hide.delete(id));
+    ETSLines.setHidden(map, "lines", Array.from(hide));
+  }
+  function showRoute(T) {   // a trail with no stops: show its route and a short description
+    const pts = [].concat.apply([], routeLines(T.route));
+    if (pts.length) { const b = new maplibregl.LngLatBounds(); pts.forEach(p => b.extend(p)); map.fitBounds(b, { padding: 80, maxZoom: 16 }); }
+    const card = $("tourCard");
+    card.innerHTML = "<b>" + esc(T.title) + "</b><br><small>" + esc(tourBadge(T)) + "</small><p>" + esc(T.intro) + "</p><button type=\"button\" data-g=\"x\">Close</button>";
+    card.hidden = false;
+  }
+
+  $("tourCard").onclick = async e => {
+    const t = e.target.closest("[data-t]");
+    const g = e.target.closest("[data-g]");
+    if (t) {
+      T = tours[+t.dataset.t];
+      lineVisibility(String(T.route || "").split(/[|;,]/).map(s => s.trim()).filter(Boolean));
+      const coords = T.stops.map(st => { const it = byId(st.ITEM_ID); return it && it.ll ? it.ll : null; }).filter(Boolean);
+      if (routeLines(T.route).length) clearTourLine(); else setTourLine(coords);   // a drawn route replaces the straight dashed line
+      if (!T.stops.length) { showRoute(T); return; }
+      go(0);
+    } else if (g && !g.disabled) {
+      if (g.dataset.g === "x") {
+        $("tourCard").hidden = true;
+        clearHi();
+        clearTourLine();
+        lineVisibility([]);
+        T = null;
+        focus = null;
+        update();
+      } else {
+        if (travelInProgress) return;
+        travelInProgress = true;
+        try {
+          const fromIt = byId(T.stops[ti].ITEM_ID);
+          const toIt   = byId(T.stops[ti + +g.dataset.g].ITEM_ID);
+          const vehicle = (T.stops[ti].VEHICLE || "train").trim().toLowerCase();
+          if (fromIt && toIt) await travelTo(fromIt.ll, toIt.ll, vehicle, legPath(routeLines(T.route), fromIt.ll, toIt.ll));
+          go(ti + +g.dataset.g);
+        } finally { travelInProgress = false; }
+      }
+    }
+  };
+
+  map.once("load", async () => {
+    const [S, TR, TS] = await Promise.all([load("spots.csv"), load("tours.csv"), load("tourstops.csv")]);
+    S.forEach(r => {
+      const id = (r.SPOT_ID || "").trim();
+      if (!id) return;
+      const kind = key(r.KIND) === "story" ? "story" : "spot";
+      const ll = [parseFloat(r.LONG), parseFloat(r.LAT)];
+      const ok = !ll.some(isNaN);
+      const it = { id, r, kind, ll: ok ? ll : null };
+      if (ok) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "kmark " + kind;
+        b.setAttribute("aria-label", (kind === "story" ? "Story: " : "Photo spot: ") + (r.TITLE || id));
+        if (window.SpotMarkers) SpotMarkers.fill(b, r, kind);   // icon, color and effect from spots.csv
+        else b.innerHTML = icon(kind, kind === "story" ? "#D55E00" : "#333333");
+        b.onclick = e => { e.stopPropagation(); showSpot(it); };
+        it.el = b;
+        it.marker = new maplibregl.Marker({ element: b }).setLngLat(ll).addTo(map);
+      }
+      items.push(it);
+    });
+    TR.forEach(r => {
+      const id = (r.TOUR_ID || "").trim();
+      if (!id) return;
+      if (String(r.TYPE || "").toLowerCase() === "line") { String(r.ROUTE || "").split(/[|;,]/).map(s => s.trim()).filter(Boolean).forEach(x => mapLineIds.add(x)); return; }   // map lines are drawn, not listed as tours
+      const stops = TS.filter(x => key(x.TOUR_ID) === key(id)).sort((a,b) => parseFloat(a.STEP) - parseFloat(b.STEP));
+      tours.push({ id, title: r.TITLE || id, intro: r.INTRO || "", category: r.CATEGORY || null, route: r.ROUTE || "", type: String(r.TYPE || "tour").toLowerCase(), modes: r.MODES || "", length: parseFloat(r.LENGTH_MI) || 0, stops });
+    });
+    $("tours").hidden = !tours.length;
+    lineVisibility([]);
+    vis();
+    map.on("zoomend", vis);
+  });
+
+  const fitPoints = (pts, maxZoom) => {
+    const b = new maplibregl.LngLatBounds();
+    pts.forEach(p => b.extend(p));
+    if (!b.isEmpty()) map.fitBounds(b, { padding: 80, maxZoom: maxZoom || 17 });
+  };
+  const pulse = it => {
+    if (!it || !it.el) return;
+    it.el.classList.add("spot");
+    setTimeout(() => it.el.classList.remove("spot"), 7000);
+  };
+  window.passportReveal = kind => {
+    showAll = true;
+    $("stories").setAttribute("aria-pressed", true);
+    $("stories").textContent = "Hide Stories / Spots";
+    vis();
+    fitPoints(items.filter(i => i.ll && i.kind === kind).map(i => i.ll), 17);
+  };
+  window.passportOpenTours = () => listTours();
+  window.passportShowCategory = code => {
+    const c = key(code);
+    const pts = places.concat(kids).filter(p => key(p.d.CATEGORY) === c).map(p => p.ll)
+      .concat(items.filter(i => i.ll && key(i.r.CATEGORY) === c).map(i => i.ll));
+    focus = null; update();
+    fitPoints(pts, 17);
+  };
+  window.passportShow = id => {
+    const k = key(id);
+    const ti = tours.findIndex(t => key(t.id) === k);
+    if (ti >= 0) {
+      T = tours[ti];
+      if (routeLines(T.route).length) clearTourLine(); else setTourLine(T.stops.map(st => (byId(st.ITEM_ID) || {}).ll).filter(Boolean));
+      go(0);
+      return true;
+    }
+    const it = byId(id);
+    if (!it || !it.ll) return false;
+    if (!it.r) { focus = it.parent || null; update(); }
+    map.flyTo({ center: it.ll, zoom: Math.max(map.getZoom(), it.parent ? 17 : 16) });
+    pulse(it);
+    return true;
+  };
+})();
+
+/* ============================================================
+   PHOTO LIGHTBOX
+   ============================================================ */
+(function () {
+  const view    = document.getElementById("imgView");
+  const imgEl   = document.getElementById("lightboxImg");
+  const vidEl   = document.getElementById("lightboxVid");
+  const caption = view.querySelector(".caption");
+  const prevBtn = view.querySelector(".lb-prev");
+  const nextBtn = view.querySelector(".lb-next");
+
+  let group = [];
+  let gi = 0;
+  let currentSrc = null;
+  let playing    = false;
+
+  function animPathFor(photoSrc) {
+    const m = /(?:^|\/)([^/]+)\.(jpe?g|png|webp)$/i.exec(photoSrc || "");
+    return m ? assetUrl("anims/" + m[1] + ".mp4") : null;
+  }
+
+  function collectGroup(im) {
+    const holder = im.closest("#panel, #spotCard, #tourCard");
+    if (!holder) return [im];
+    const seen = new Set();
+    const out = [];
+    holder.querySelectorAll("img").forEach(x => {
+      if (x.classList.contains("is-default")) return;
+      const src = x.currentSrc || x.src;
+      if (!src || seen.has(src)) return;
+      seen.add(src);
+      out.push(x);
+    });
+    return out.length ? out : [im];
+  }
+
+  function closeView() {
+    view.hidden = true;
+    vidEl.pause();
+    vidEl.removeAttribute("src");
+    vidEl.hidden = true;
+    imgEl.removeAttribute("src");
+    currentSrc = null;
+    playing = false;
+    group = [];
+    gi = 0;
+  }
+
+  function showAt(i) {
+    if (!group.length) return;
+    gi = (i + group.length) % group.length;
+    const im = group[gi];
+    const photo = im.currentSrc || im.src;
+    imgEl.src = photo;
+    imgEl.onerror = () => { imgEl.onerror = null; imgEl.src = photo; };
+    currentSrc = photo;
+    const text = im.dataset.caption || "";
+    caption.textContent = text;
+    caption.style.display = text ? "block" : "none";
+    vidEl.hidden = true;
+    vidEl.pause();
+    vidEl.removeAttribute("src");
+    playing = false;
+    const anim = animPathFor(photo);
+    if (anim) {
+      vidEl.onloadeddata = () => {
+        vidEl.hidden = false;
+        playing = true;
+        vidEl.play().catch(() => { vidEl.hidden = true; playing = false; });
+      };
+      vidEl.onended = () => { vidEl.hidden = true; playing = false; };
+      vidEl.onerror = () => { vidEl.hidden = true; playing = false; };
+      vidEl.src = anim;
+      vidEl.load();
+    }
+    const multi = group.length > 1;
+    prevBtn.hidden = !multi;
+    nextBtn.hidden = !multi;
+  }
+
+  function openLightbox(listOrSrc, indexOrFallback, text) {
+    if (Array.isArray(listOrSrc)) {
+      group = listOrSrc;
+      const cap = (group[indexOrFallback] && group[indexOrFallback].dataset.caption) || text || "";
+      view.hidden = false;
+      showAt(indexOrFallback);
+      if (!group[gi].dataset.caption && cap) {
+        caption.textContent = cap;
+        caption.style.display = cap ? "block" : "none";
+      }
+    } else {
+      group = [];
+      const fake = { currentSrc: listOrSrc, src: listOrSrc, dataset: { caption: text || "" }, classList: { contains: () => false } };
+      group = [fake];
+      view.hidden = false;
+      showAt(0);
+    }
+  }
+
+  document.addEventListener("click", e => {
+    const im = e.target.closest("#panel img, #spotCard img, #tourCard img, .photo-anim img");
+    if (!im) return;
+    if (im.classList.contains("is-default")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const holder = im.closest("#panel, #spotCard, #tourCard");
+    const h2 = holder && holder.querySelector("h2");
+    const fallbackCaption = im.dataset.caption || (h2 ? h2.textContent : "");
+    if (holder && holder.id === "tourCard") { openLightbox([im], 0, fallbackCaption); return; }
+    const grp = collectGroup(im);
+    const idx = grp.indexOf(im);
+    openLightbox(grp, idx < 0 ? 0 : idx, fallbackCaption);
+  });
+
+  view.addEventListener("click", () => {
+    if (playing) { vidEl.pause(); vidEl.hidden = true; playing = false; return; }
+    closeView();
+  });
+  view.querySelector(".close-lightbox").addEventListener("click", e => { e.stopPropagation(); closeView(); });
+  prevBtn.addEventListener("click", e => { e.stopPropagation(); showAt(gi - 1); });
+  nextBtn.addEventListener("click", e => { e.stopPropagation(); showAt(gi + 1); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !view.hidden) { closeView(); e.stopPropagation(); return; }
+    if (view.hidden) return;
+    if (e.key === "ArrowLeft")  { showAt(gi - 1); e.stopPropagation(); }
+    if (e.key === "ArrowRight") { showAt(gi + 1); e.stopPropagation(); }
+  }, true);
+
+  const _q = new URLSearchParams(location.search);
+if (!_q.has("spot") && !_q.has("site")) {
+  const fitMarkers = () => {
+    if (!places.length || !SITE.fitMarkers) return;
+    const b = new maplibregl.LngLatBounds();
+    places.forEach(p => b.extend(p.ll));
+    if (b.isEmpty()) return;
+
+    // Take the panel, chips, and header into account.
+    const barH    = ($("bar")   && $("bar").offsetHeight)   || 160;
+    const chipH   = ($("catChipsWrap") && !$("catChipsWrap").hidden && $("catChipsWrap").offsetHeight) || 0;
+    const topPad  = barH + chipH + 20;
+    // On mobile the panel sits at the bottom; leave room for it.
+    const bottomPad = matchMedia("(max-width: 699px)").matches ? 60 : 60;
+
+    const cam = map.cameraForBounds(b, {
+      padding: { top: topPad, bottom: bottomPad, left: 40, right: 40 },
+      maxZoom: 16
+    });
+    if (!cam) return;
+    SITE.center = [cam.center.lng, cam.center.lat];
+    SITE.zoom = cam.zoom;
+    map.jumpTo({ center: SITE.center, zoom: SITE.zoom });
+  };
+
+  // First fit as soon as places exist; second fit after layout settles.
+  let tries = 0;
+  const t = setInterval(() => {
+    if (!places.length && ++tries <= 50) return;
+    clearInterval(t);
+    if (!places.length) return;
+    fitMarkers();
+    // And once more after the bar has had time to lay out fully.
+        setTimeout(fitMarkers, 900);
+    setTimeout(fitMarkers, 1600);
+  }, 100);
+}
+  window.openLightbox = openLightbox;
+})();
+
+/* ============================================================
+   PASSPORT — stamps & tasks
+   ============================================================ */
+(function () {
+  const STAMP_KEY = "ets_stamps_v2" + KEY_SUFFIX;
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const LAST_STARS_KEY = "ets_last_stars" + KEY_SUFFIX;
+
+  const loadProgress = () => { try { return JSON.parse(localStorage.getItem(STAMP_KEY)) || {}; } catch { return {}; } };
+  const saveProgress = p => { try { localStorage.setItem(STAMP_KEY, JSON.stringify(p)); } catch {} };
+
+  function starsFor(row, n){
+    const t1 = +row.STAR1||Infinity, t2 = +row.STAR2||Infinity, t3 = +row.STAR3||Infinity;
+    if (n >= t3) return 3;
+    if (n >= t2) return 2;
+    if (n >= t1) return 1;
+    return 0;
+  }
+  function rankFor(row, stars){
+    if (stars === 3) return row.RANK3 || "";
+    if (stars === 2) return row.RANK2 || "";
+    if (stars === 1) return row.RANK1 || "";
+    return "";
+  }
+  function countFor(stamp){
+    const p = loadProgress();
+    const bucket = p[String(stamp.row.STAMP_ID).trim()] || {};
+    return stamp.tasks.filter(id => (p._done && p._done[id]) || bucket[id]).length;
+  }
+  function isRanked(cat){
+    if (!SITE.ranked) return true;
+    const c = String(cat || "").trim().toUpperCase();
+    return !c || SITE.ranked[c] === true;
+  }
+  const stampActive = stamp => SITE.passportRanks !== false && isRanked(stamp.row.CATEGORY);
+
+  function taskState(task){
+    const p = loadProgress();
+    const id = String(task.row.TASK_ID).trim();
+    const need = parseInt(task.row.COUNT, 10) || 1;
+    const done = !!(p._done && p._done[id]);
+    const seen = (p._seen && p._seen[id]) || [];
+    return { done, need, have: done ? need : Math.min(seen.length, need) };
+  }
+
+  function runTaskAction(task){
+    const r = task.row;
+    const scope = String(r.SCOPE || "").trim().toLowerCase();
+    const target = String(r.TARGET || "").trim();
+    $("passportDrawer").classList.remove("open");
+    if (scope === "behavior"){
+      const t = target.toLowerCase().replace(/s$/, "");
+      if (t === "tour" && window.passportOpenTours) return window.passportOpenTours();
+      if ((t === "story" || t === "spot") && window.passportReveal) return window.passportReveal(t);
+    } else if (scope === "item" && window.passportShow){
+      return window.passportShow(target);
+    } else if (scope === "category" && window.passportShowCategory){
+      return window.passportShowCategory(target);
+    }
+  }
+
+  function taskRowHTML(task){
+    const r = task.row, st = taskState(task);
+    return `<div class="p-task ${st.done ? "done" : ""}">
+      <div class="chk" aria-hidden="true">${st.done ? "\u2713" : ""}</div>
+      <div class="body">
+        <div class="lbl">${esc(r.LABEL || r.TASK_ID)}${st.need > 1 ? ` <span class="cnt">${st.have}/${st.need}</span>` : ""}</div>
+        ${!st.done && r.HINT ? `<div class="th">${esc(r.HINT)}</div>` : ""}
+        ${!st.done && r.BTN ? `<button type="button" class="p-task-btn" data-task="${esc(r.TASK_ID)}">${esc(r.BTN)}</button>` : ""}
+      </div>
+    </div>`;
+  }
+
+  function distM(a, b){
+    const q = Math.PI / 180, R = 6371000;
+    const dLat = (b[1] - a[1]) * q, dLng = (b[0] - a[0]) * q;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * q) * Math.cos(b[1] * q) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  function taskMatches(task, type, context){
+    const scope  = String(task.SCOPE||"").trim().toLowerCase();
+    const target = String(task.TARGET||"").trim().toLowerCase();
+    if (scope === "behavior"){ const t = target.replace(/s$/, ""); return t === type; }
+    if (scope === "item"){ return !!context.id && target === String(context.id).trim().toLowerCase(); }
+    if (scope === "category"){ return !!context.category && target === String(context.category).trim().toLowerCase(); }
+    return false;
+  }
+
+  const qs = new URLSearchParams(location.search);
+  if (qs.has("resetpassport")) {
+    try {
+      localStorage.removeItem(STAMP_KEY);
+      localStorage.removeItem(UNLOCKED_KEY);
+      localStorage.removeItem(LAST_STARS_KEY);
+      localStorage.removeItem("ets_demo_passport");
+    } catch {}
+    qs.delete("resetpassport");
+    const rest = qs.toString();
+    history.replaceState(null, "", location.pathname + (rest ? "?" + rest : ""));
+  }
+
+  window.__lastStars = (() => { try { return JSON.parse(localStorage.getItem(LAST_STARS_KEY)) || {}; } catch { return {}; } })();
+
+  document.head.insertAdjacentHTML("beforeend", `<style>
+#passportBtn{position:relative}
+@keyframes pNudge{
+  0%,88%,100%{transform:none}
+  90%{transform:rotate(-12deg)}
+  92%{transform:rotate(10deg)}
+  94%{transform:rotate(-8deg)}
+  96%{transform:rotate(6deg)}
+  98%{transform:rotate(-3deg)}
+}
+#passportBtn.nudge{animation:pNudge 6s ease-in-out 4}
+#passportBtn.nudge::after{content:"";position:absolute;top:-3px;right:-3px;width:11px;height:11px;border-radius:50%;background:#d40000;box-shadow:0 0 0 2px #fff}
+
+#pStamps{margin-bottom:18px}
+#pStamps h3{margin:0 0 8px;font-size:16px}
+.p-featured{background:linear-gradient(180deg,#fffdf6,#fff);border:3px solid #D55E00;border-radius:14px;padding:16px 14px;text-align:center;box-shadow:0 3px 12px #D55E0022;cursor:pointer;transition:transform .15s}
+.p-featured:active{transform:scale(.99)}
+.p-featured .emblem{width:100px;height:100px;border-radius:50%;background:#fffdf6;border:6px solid #D55E00;box-shadow:inset 0 0 0 3px #fffdf6,inset 0 0 0 5px #D55E00;display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0 auto 10px}
+.p-featured .emblem svg{width:60%;height:auto}
+.p-featured .emblem b{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#D55E00;margin-top:2px}
+.p-featured h4{margin:0 0 6px;font-size:20px;color:#D55E00}
+.p-featured .stars{display:flex;gap:6px;justify-content:center;margin:6px 0}
+.p-featured .stars svg{width:40px;height:40px;display:block}
+.p-featured .stars .on path{fill:#FFC20E;stroke:#c98a00;stroke-width:1.2}
+.p-featured .stars .off path{fill:#fff;stroke:#ccc;stroke-width:1.5}
+.p-featured .rank{font-size:17px;font-weight:600;margin-top:6px}
+.p-featured .prog{font-size:12px;color:#7a5c00;margin-top:6px}
+.p-featured .grand{font-size:14px;color:#D55E00;font-weight:600;margin-top:8px}
+
+.p-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.p-tile{background:#fafbfd;border:2px solid #eef1f5;border-radius:10px;padding:10px 6px;text-align:center;cursor:pointer;transition:border-color .12s,transform .12s}
+.p-tile:hover{border-color:#cfe0f3}
+.p-tile.sel{border-color:#D55E00;background:#fff8f0}
+.p-tile .emblem{width:44px;height:44px;border-radius:50%;background:#fffdf6;border:3px solid #D55E00;display:flex;align-items:center;justify-content:center;margin:0 auto 6px}
+.p-tile .emblem svg{width:70%;height:auto}
+.p-tile .name{font-size:11px;font-weight:600;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p-tile .stars{display:flex;gap:2px;justify-content:center;margin-top:3px}
+.p-tile .stars svg{width:14px;height:14px;display:block}
+.p-tile .stars .on path{fill:#FFC20E;stroke:#c98a00;stroke-width:1.2}
+.p-tile .stars .off path{fill:#fff;stroke:#ccc;stroke-width:1.5}
+
+#pSlam{position:fixed;inset:0;z-index:100001;display:none;align-items:center;justify-content:center;background:#000b;overflow:hidden;cursor:pointer;text-align:center;color:#fff;font-family:Arial,sans-serif}
+#pSlam.on{display:flex}
+#pSlam .rays{position:absolute;left:50%;top:50%;width:160vmax;height:160vmax;margin:-80vmax 0 0 -80vmax;background:repeating-conic-gradient(rgba(228,115,3,.6) 0 8deg,rgba(255,194,14,0) 8deg 16deg);-webkit-mask-image:radial-gradient(circle,#000 8%,transparent 60%);mask-image:radial-gradient(circle,#000 8%,transparent 60%);animation:pSpin 30s linear infinite}
+@keyframes pSpin{to{transform:rotate(360deg)}}
+#pSlam canvas{position:absolute;inset:0;pointer-events:none}
+#pSlam .box{position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;padding:0 16px;max-width:520px}
+#pSlam.hit .box{animation:pShake .35s .28s}
+@keyframes pShake{
+  0%,100%{transform:none}
+  20%{transform:translate(-8px,5px)}
+  40%{transform:translate(7px,-6px)}
+  60%{transform:translate(-5px,3px)}
+  80%{transform:translate(3px,-2px)}
+}
+#pSlam .seal{width:min(62vw,250px);height:min(62vw,250px);box-sizing:border-box;border-radius:50%;background:#fffdf6;border:10px solid #D55E00;box-shadow:inset 0 0 0 4px #fffdf6,inset 0 0 0 7px #D55E00;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#D55E00;transform:rotate(-6deg);filter:url(#pInk);animation:pSlamIn .5s cubic-bezier(.2,.8,.3,1) both}
+#pSlam .seal svg{width:58%;height:auto}
+#pSlam .seal b{font-size:19px;letter-spacing:.1em;text-transform:uppercase}
+@keyframes pSlamIn{
+  0%{transform:scale(3.4) rotate(-20deg);opacity:0}
+  55%{transform:scale(.9) rotate(-4deg);opacity:1}
+  75%{transform:scale(1.05) rotate(-7deg)}
+  100%{transform:scale(1) rotate(-6deg);opacity:1}
+}
+#pSlam .stars{display:flex;gap:10px}
+#pSlam .stars svg{width:52px;height:52px;display:block;filter:drop-shadow(0 2px 3px #0008)}
+#pSlam .stars .on path{fill:#FFC20E;stroke:#fff;stroke-width:1.2}
+#pSlam .stars .off path{fill:#ffffff33;stroke:#fff9;stroke-width:1.2}
+#pSlam .stars .new{animation:pThump .45s .75s cubic-bezier(.3,1.6,.5,1) both}
+@keyframes pThump{from{transform:scale(0) rotate(-90deg);opacity:0}to{transform:none;opacity:1}}
+#pSlam .rank{font-size:clamp(22px,6vw,32px);font-weight:bold;text-shadow:0 2px 6px #000a;animation:pFade .5s 1s both}
+#pSlam .grand{font-size:clamp(20px,5.5vw,28px);font-weight:bold;color:#FFC20E;text-shadow:0 2px 6px #000a;animation:pFade .5s 1.6s both}
+#pSlam .note{font-size:15px;animation:pFade .5s 2s both}
+#pSlam .tap{font-size:12px;letter-spacing:.05em;opacity:.8;margin-top:6px}
+@keyframes pFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+#pSlam.plain{background:#0006}
+
+@media(prefers-reduced-motion:reduce){
+  #pSlam *{animation:none!important}
+  #passportBtn.nudge{animation:none;outline:3px solid #fff}
+}
+
+#pSlam.plain .rays{display:none}
+#pSlam.plain.hit .box{animation:none}
+#pSlam.plain .seal{animation:pSlamPlain .45s cubic-bezier(.3,1.4,.5,1) both}
+@keyframes pSlamPlain{
+  0%{transform:scale(2.6) rotate(-14deg);opacity:0}
+  60%{transform:scale(.94) rotate(-5deg);opacity:1}
+  100%{transform:scale(1) rotate(-6deg);opacity:1}
+}
+#pSlam.plain .stars .new{animation:none}
+
+.p-h{margin:0 0 6px;font-size:16px}
+.p-sub{font-weight:normal;font-size:13px;color:#777}
+.p-checkin{width:100%;padding:10px;border:0;border-radius:8px;background:var(--bar,#E47303);color:#fff;font-weight:bold;font-size:14px;cursor:pointer}
+.p-checkin-msg{font-size:12px;color:#555;margin:6px 0 10px;min-height:16px}
+.p-tasks-h{margin:16px 0 6px;font-size:15px}
+.p-none{font-size:13px;color:#999;margin:4px 0}
+.p-task{display:flex;gap:10px;align-items:flex-start;background:#fff;border:2px solid #eee;border-radius:10px;padding:10px;margin:6px 0}
+.p-task.done{background:#f4fbf4;border-color:#cfe8cf}
+.p-task .chk{flex:none;width:22px;height:22px;border-radius:50%;border:2px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;background:#fff}
+.p-task.done .chk{background:#2e9e44;border-color:#2e9e44}
+.p-task .body{flex:1;min-width:0}
+.p-task .lbl{font-size:14px;font-weight:600}
+.p-task .lbl .cnt{font-weight:normal;color:#777;font-size:12px;margin-left:4px}
+.p-task .th{font-size:13px;color:#555;margin-top:3px}
+.p-task-btn{margin-top:8px;padding:7px 12px;border:0;border-radius:6px;background:var(--bar,#E47303);color:#fff;font-size:13px;font-weight:bold;cursor:pointer}
+</style>`);
+
+  const STAR = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>`;
+  const starRow = (n, newest) =>
+    [1, 2, 3].map(i => `<span class="${i <= n ? "on" : "off"}${i === newest ? " new" : ""}">${STAR}</span>`).join("");
+
+  document.body.insertAdjacentHTML("beforeend", `
+<div id="pSlam" role="dialog" aria-modal="true" aria-labelledby="pRank" tabindex="-1">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="pInk"><feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.5"/></filter>
+  </svg>
+  <div class="rays"></div>
+  <canvas></canvas>
+  <div class="box"></div>
+</div>`);
+
+  document.querySelector(".passport-body").insertAdjacentHTML("beforeend", `<div id="pStamps"></div>`);
+
+  const slam = document.getElementById("pSlam");
+
+  let stopConfetti = null;
+  function confetti(canvas) {
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width = innerWidth, H = canvas.height = innerHeight;
+    const colors = ["#E47303", "#AF350A", "#91AF45", "#BDD76B", "#FFC20E", "#ffffff"];
+    const bits = Array.from({ length: 150 }, () => ({
+      x: Math.random() * W, y: -20 - Math.random() * H * 0.6,
+      w: 6 + Math.random() * 6, h: 10 + Math.random() * 8,
+      vx: -1 + Math.random() * 2, vy: 2 + Math.random() * 3.5,
+      r: Math.random() * 6.28, vr: -0.2 + Math.random() * 0.4,
+      c: colors[Math.floor(Math.random() * colors.length)]
+    }));
+    const t0 = performance.now();
+    let id = 0;
+    (function tick(now) {
+      ctx.clearRect(0, 0, W, H);
+      bits.forEach(b => {
+        b.x += b.vx; b.y += b.vy; b.r += b.vr;
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(b.r);
+        ctx.fillStyle = b.c;
+        ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h);
+        ctx.restore();
+      });
+      if (now - t0 < 4500) id = requestAnimationFrame(tick);
+      else ctx.clearRect(0, 0, W, H);
+    })(t0);
+    return () => { cancelAnimationFrame(id); ctx.clearRect(0, 0, W, H); };
+  }
+
+  let queue = [], showing = false, autoTimer = 0;
+
+  function rewardPriority(job){
+    if (job.kind === "grand") return 4;
+    if (job.kind === "star" && job.stars >= 3) return 3;
+    if (job.kind === "star") return 2;
+    return 1;
+  }
+
+  function enqueueRewards(jobs){
+    if (!jobs.length) return;
+    queue.push(...jobs);
+    queue.sort((a, b) => rewardPriority(a) - rewardPriority(b));
+    pump();
+  }
+
+  function allRanksComplete(){
+    const active = STAMPS.filter(stampActive);
+    return active.length > 0 && active.every(stamp => starsFor(stamp.row, countFor(stamp)) >= 3);
+  }
+
+  function pump(){
+    if (showing || !queue.length) return;
+    if (document.getElementById("welcomeOverlay")) { setTimeout(pump, 500); return; }
+    showing = true;
+    const job = queue.shift();
+    setTimeout(() => render(job), job.replay ? 0 : 600);
+  }
+
+  function render(job){
+    const { stamp, stars, replay, kind } = job;
+    const row = stamp.row;
+    const rank = rankFor(row, stars);
+    const done = stars >= 3;
+    const isStar = kind === "star";
+    const isGrand = kind === "grand";
+    const taskLabel = job.taskLabel || "";
+    slam.classList.toggle("plain", !isStar && !isGrand);
+
+    if (isGrand) {
+      slam.querySelector(".box").innerHTML =
+        `<div class="seal">${VEHICLE_SVG.train}<b>MASTER HISTORIAN</b></div>` +
+        `<div class="rank" id="pRank" aria-live="polite">Every category mastered!</div>` +
+        `<div class="grand">Three stars in every active rank</div>` +
+        `<div class="note">You've completed the History Passport challenge!</div>` +
+        `<div class="tap">TAP TO CONTINUE</div>`;
+    } else {
+      slam.querySelector(".box").innerHTML =
+        `<div class="seal">${VEHICLE_SVG[String(row.VEHICLE||"train").toLowerCase()] || VEHICLE_SVG.train}<b>${esc(row.TITLE||"")}</b></div>` +
+        (isStar
+          ? `<div class="stars">${starRow(stars, replay ? 0 : stars)}</div>` +
+            `<div class="rank" id="pRank" aria-live="polite">${esc(rank)}</div>` +
+            (done ? `<div class="grand">${esc(row.GRAND_RANK || "")}</div>` : "")
+          : `<div class="rank" style="font-size:20px">${esc(taskLabel || "Task complete!")}</div>`) +
+        `<div class="tap">TAP TO CONTINUE</div>`;
+    }
+
+    slam.classList.add("on");
+    if (isStar || isGrand) slam.classList.add("hit");
+    slam.focus();
+    if ((isGrand || (isStar && done)) && !REDUCED) {
+      stopConfetti = confetti(slam.querySelector("canvas"));
+    }
+    const duration = isGrand ? 12000 : (isStar && done ? 10000 : (isStar ? 6000 : 2600));
+    autoTimer = setTimeout(() => dismiss(replay), duration);
+  }
+
+  function dismiss(replay){
+    if (!slam.classList.contains("on")) return;
+    clearTimeout(autoTimer);
+    if (stopConfetti) { stopConfetti(); stopConfetti = null; }
+    slam.classList.remove("on", "hit", "plain");
+    if (replay !== true) $("passportBtn").classList.add("nudge");
+    renderStampCards();
+    showing = false;
+    pump();
+  }
+
+  slam.addEventListener("click", () => dismiss());
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && slam.classList.contains("on")) { dismiss(); e.stopPropagation(); }
+  }, true);
+
+  let featuredId = null;
+
+  window.renderStampCards = function(){
+    const box = document.getElementById("pStamps");
+    if (!box) return;
+    if (!STAMPS.length && !TASKS.length){
+      box.innerHTML = `<h3 class="p-h">Ranks and tasks</h3><p style="color:#9aa3ad;font-size:13px;margin:0">Loading…</p>`;
+      return;
+    }
+    const active = STAMPS.filter(stampActive);
+    const inActive = new Set();
+    active.forEach(s => s.tasks.forEach(id => inActive.add(key(id))));
+    const loose = TASKS.filter(t => !inActive.has(key(t.row.TASK_ID)));
+
+    let html = "";
+    if (active.length){
+      if (!featuredId || !active.find(s => key(s.row.STAMP_ID) === key(featuredId))){
+        let best = active[0], bestCount = -1;
+        active.forEach(s => { const c = countFor(s); if (c > bestCount){ best = s; bestCount = c; } });
+        featuredId = best.row.STAMP_ID;
+      }
+      const featured = active.find(s => key(s.row.STAMP_ID) === key(featuredId));
+      const fr = featured.row;
+      const fCount = countFor(featured);
+      const fStars = starsFor(fr, fCount);
+      const fRank = rankFor(fr, fStars);
+      const totalTasks = featured.tasks.length;
+      const next = [+fr.STAR1 || 0, +fr.STAR2 || 0, +fr.STAR3 || 0].find(t => t > fCount);
+      const toGo = next && next <= totalTasks ? next - fCount : 0;
+      const featTasks = featured.tasks.map(id => TASKS.find(t => key(t.row.TASK_ID) === key(id))).filter(Boolean);
+
+      html += `
+        <h3 class="p-h">Ranks</h3>
+        <div class="p-featured" data-id="${esc(fr.STAMP_ID)}">
+          <div class="emblem">
+            ${VEHICLE_SVG[String(fr.VEHICLE||"train").toLowerCase()] || VEHICLE_SVG.train}
+            <b>${esc(fr.TITLE||"")}</b>
+          </div>
+          <h4>${esc(fr.TITLE||"")}</h4>
+          <div class="stars">${starRow(fStars, 0)}</div>
+          <div class="rank">${esc(fRank || "Not started yet")}</div>
+          <div class="prog">${fCount} of ${totalTasks} tasks done${toGo ? " · " + toGo + " more for the next star" : ""}</div>
+          ${fStars >= 3 && fr.GRAND_RANK ? `<div class="grand">${esc(fr.GRAND_RANK)}</div>` : ""}
+        </div>
+        <div class="p-tiles">
+          ${active.map(s => {
+            const r = s.row;
+            const st = starsFor(r, countFor(s));
+            const sel = key(r.STAMP_ID) === key(fr.STAMP_ID);
+            return `
+              <div class="p-tile ${sel ? "sel" : ""}" data-id="${esc(r.STAMP_ID)}">
+                <div class="emblem">${VEHICLE_SVG[String(r.VEHICLE||"train").toLowerCase()] || VEHICLE_SVG.train}</div>
+                <div class="name">${esc(r.TITLE||"")}</div>
+                <div class="stars">${starRow(st, 0)}</div>
+              </div>`;
+          }).join("")}
+        </div>
+        <h4 class="p-tasks-h">Tasks: ${esc(fr.TITLE||"")}</h4>
+        ${featTasks.map(taskRowHTML).join("") || `<p class="p-none">No tasks set up for this rank yet.</p>`}`;
+    }
+    if (loose.length){
+      html += `<h4 class="p-tasks-h">${active.length ? "More to do" : "Tasks"}</h4>` + loose.map(taskRowHTML).join("");
+    }
+    box.innerHTML = html;
+
+    box.querySelectorAll(".p-featured[data-id], .p-tile[data-id]").forEach(el => {
+      el.onclick = () => { featuredId = el.dataset.id; renderStampCards(); };
+    });
+    box.querySelectorAll(".p-task-btn").forEach(btn => {
+      btn.onclick = () => {
+        const t = TASKS.find(x => key(x.row.TASK_ID) === key(btn.dataset.task));
+        if (t) runTaskAction(t);
+      };
+    });
+  };
+
+  $("passportBtn").onclick = () => {
+    $("passportBtn").classList.remove("nudge");
+    updatePassportUI();
+    renderStampCards();
+    $("passportDrawer").classList.add("open");
+  };
+
+  $("checkinBtn").onclick = () => {
+    const out = $("checkinMsg");
+    if (!navigator.geolocation) { out.textContent = "Location isn't available on this device."; return; }
+    out.textContent = "Checking where you are…";
+    navigator.geolocation.getCurrentPosition(pos => {
+      const here = [pos.coords.longitude, pos.coords.latitude];
+      const slack = Math.min(pos.coords.accuracy || 0, 50);
+      const near = majorSites().filter(s => distM(here, s.ll) <= (parseFloat(s.d.RADIUS) || 75) + slack);
+      if (!near.length){ out.textContent = "No passport places are close by. Get a little nearer and try again."; return; }
+      const stampable = near.filter(s => ["view", "gps", "either"].includes(stampMode(s.d)));
+      if (!stampable.length) { out.textContent = "You're at " + near.map(s => s.name).join(", ") + ". Scan its QR sign to collect the stamp."; return; }
+      stampable.forEach(s => {
+        earnStamp(s.id, s.d, "gps", s.ll);
+        if (window.passportEvent) passportEvent("view", { id: s.id, category: (s.d && s.d.CATEGORY) || null, source: "gps" });
+      });
+      updatePassportUI();
+      out.textContent = "You're at " + stampable.map(s => s.name).join(", ") + "!";
+    }, () => { out.textContent = "Couldn't get your location. Check your browser's location permission."; },
+    { enableHighAccuracy: true, timeout: 10000 });
+  };
+
+  window.passportEvent = (type, context = {}) => {
+    if (SITE.passport === false || !TASKS.length) return;
+    const wasAllRanksComplete = allRanksComplete();
+    const progress = loadProgress();
+    progress._done = progress._done || {};
+    progress._seen = progress._seen || {};
+    const hit = [];
+    for (const t of TASKS){
+      const id = String(t.row.TASK_ID).trim();
+      if (progress._done[id]) continue;
+      if (!taskMatches(t.row, type, context)) continue;
+      const need = parseInt(t.row.COUNT, 10) || 1;
+      if (need > 1){
+        const seen = progress._seen[id] || (progress._seen[id] = []);
+        const cid = String(context.id || "");
+        if (cid && !seen.includes(cid)) seen.push(cid);
+        if (seen.length < need) continue;
+      }
+      progress._done[id] = true;
+      hit.push(t);
+    }
+    saveProgress(progress);
+    if (!hit.length) return;
+
+    const jobs = [];
+    window.__lastStars = window.__lastStars || {};
+    for (const t of hit){
+      const owners = STAMPS.filter(s => stampActive(s) && s.tasks.some(x => key(x) === key(t.row.TASK_ID)));
+      const label = t.row.LABEL || "Task complete!";
+      if (!owners.length){
+        jobs.push({ stamp: { row: { TITLE: "", VEHICLE: "generic" } }, stars: 0, replay: false, kind: "plain", taskLabel: label });
+        continue;
+      }
+      for (const stamp of owners){
+        const sid = String(stamp.row.STAMP_ID).trim();
+        const stars = starsFor(stamp.row, countFor(stamp));
+        const prev = Number(window.__lastStars[sid] || 0);
+        if (stars > prev){
+          jobs.push({ stamp, stars, replay: false, kind: "star" });
+          window.__lastStars[sid] = stars;
+        } else {
+          jobs.push({ stamp, stars, replay: false, kind: "plain", taskLabel: label });
+        }
+      }
+    }
+    try { localStorage.setItem(LAST_STARS_KEY, JSON.stringify(window.__lastStars)); } catch {}
+    if (!wasAllRanksComplete && allRanksComplete()){
+      jobs.push({ stamp: { row: { TITLE: "MASTER HISTORIAN", VEHICLE: "train", GRAND_RANK: "" } }, stars: 3, replay: false, kind: "grand" });
+    }
+    enqueueRewards(jobs);
+    renderStampCards();
+  };
+
+  function nudgeWhenReady(){
+    if (document.getElementById("welcomeOverlay")) { setTimeout(nudgeWhenReady, 2000); return; }
+    if (!localStorage.getItem(STAMP_KEY)) $("passportBtn").classList.add("nudge");
+  }
+  setTimeout(nudgeWhenReady, 8000);
+})();
+
+/* SITE QR LINKS */
+(function () {
+  const sid = new URLSearchParams(location.search).get("site");
+  if (!sid) return;
+  let tries = 0;
+  const t = setInterval(() => {
+    const it = places.concat(kids).find(p => key(p.id) === key(sid));
+    if (!it && ++tries < 60) return;
+    clearInterval(t);
+    if (!it) { console.warn("No place called " + sid); return; }
+    window.__qrEntry = true; select(it); window.__qrEntry = false;   // arrived by scanning its QR sign
+  }, 250);
+})();
+
+$("closePassport").onclick = () => { $("passportDrawer").classList.remove("open"); };
+
+/* AERIAL VIEW */
+const AERIAL = {
+  usgs: {
+    tiles: ["https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}"],
+    maxzoom: 16,
+    attribution: "Imagery: USGS The National Map / USDA NAIP"
+  },
+  indiana: {
+    tiles: ["https://di-ingov.img.arcgis.com/arcgis/rest/services/DynamicWebMercator/Indiana_Current_Imagery/ImageServer/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=jpgpng&f=image"],
+    maxzoom: 20,
+    attribution: "Imagery: Indiana Geographic Information Office (IGIO)"
+  }
+};
+const inIndiana = c => c.lng > -88.1 && c.lng < -84.78 && c.lat > 37.77 && c.lat < 41.77;
+function setAerial(on){
+  try {
+    if (on && !map.getSource("usgs-tiles")) {
+      const order = map.getStyle().layers.map(l => l.id);
+      const beforeId = order[order.indexOf("osm") + 1];
+      map.addSource("usgs-tiles", { type: "raster", tiles: AERIAL.usgs.tiles, tileSize: 256, maxzoom: AERIAL.usgs.maxzoom, attribution: AERIAL.usgs.attribution });
+      map.addLayer({ id: "aerial-usgs", type: "raster", source: "usgs-tiles" }, beforeId);
+      if (inIndiana(map.getCenter())) {
+        map.addSource("indiana-tiles", { type: "raster", tiles: AERIAL.indiana.tiles, tileSize: 256, maxzoom: AERIAL.indiana.maxzoom, attribution: AERIAL.indiana.attribution });
+        map.addLayer({ id: "aerial-indiana", type: "raster", source: "indiana-tiles", minzoom: 13 }, beforeId);
+      }
+    }
+    ["aerial-usgs", "aerial-indiana"].forEach(id => { if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none"); });
+    map.setLayoutProperty("osm", "visibility", on ? "none" : "visible");
+    $("aerialBtn").setAttribute("aria-pressed", on ? "true" : "false");
+    updateMoreDot();
+  } catch (e) { console.warn("Aerial view is not ready yet", e); }
+}
+$("aerialBtn").onclick = () => setAerial($("aerialBtn").getAttribute("aria-pressed") !== "true");
+
+/* EVENT / FOCUS PANEL */
+const evStatus = ev => (window.EventSchedule && ev.schedule) ? EventSchedule.status(ev.schedule) : null;
+function renderWhatsOn(box){                                    // the announcements, above the list of events
+  const items = window.Announcements ? Announcements.withStatus(ANN_ALL.filter(a => a.kind === "announcement")) : [];
+  if (!items.length) return;
+  const h = document.createElement("h3");
+  h.textContent = "What\u2019s on";
+  box.appendChild(h);
+  items.forEach(a => {
+    const d = document.createElement("div");
+    d.className = "ann-item";
+    d.style.setProperty("--c", a.color);
+    const tag = document.createElement("span");
+    tag.className = "ann-tag" + (a.st.state === "now" ? " live" : "");
+    tag.textContent = a.tag;
+    tag.style.background = a.color;
+    tag.style.color = Announcements.readable(a.color);
+    const t = document.createElement("b");
+    t.textContent = a.name;
+    const s = document.createElement("small");
+    s.textContent = EventSchedule.statusText(a.st);
+    d.append(tag, t, s);
+    if (a.blurb) { const p = document.createElement("p"); p.textContent = a.blurb; d.appendChild(p); }
+    const venue = a.venues.map(findItem).find(Boolean);
+    if (venue) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "See it on the map";
+      b.onclick = () => { closeEventPanel(); select(venue); map.easeTo({ center: venue.ll, zoom: Math.max(map.getZoom(), venue.parent ? 17 : 15) }); };
+      d.appendChild(b);
+    }
+    if (a.link) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = a.linkText || "Learn more";
+      b.onclick = () => window.open(a.link, "_blank", "noopener");
+      d.appendChild(b);
+    }
+    box.appendChild(d);
+  });
+}
+function renderEventSwitcher(){
+  const box = $("ev-switch");
+  box.innerHTML = "";
+  renderWhatsOn(box);
+  const list = EVENTS_INDEX.filter(e => e.public !== false);
+  if (!list.length) return;
+  const h = document.createElement("h3");
+  h.textContent = "Events";
+  box.appendChild(h);
+  const add = (parent, label, lines, href, current, live) => {
+    const a = document.createElement("a");
+    a.className = "ev-link" + (current ? " cur" : "") + (live ? " now" : "");
+    a.href = href;
+    if (current) a.setAttribute("aria-current", "page");
+    const t = document.createElement("span");
+    t.textContent = label;
+    a.appendChild(t);
+    lines.filter(Boolean).forEach(x => { const s = document.createElement("small"); s.textContent = x.text; if (x.live) s.className = "ev-nowtag"; a.appendChild(s); });
+    parent.appendChild(a);
+  };
+  add(box, "Main map", [], location.pathname + "?event=main", !EVENT_SLUG, false);
+  const rank = { now: 0, soon: 1, later: 2, none: 3, ended: 4 };
+  const rows = list.map(ev => ({ ev, st: evStatus(ev) || { state: "none" } }))
+    .sort((a, b) => (rank[a.st.state] - rank[b.st.state]) || ((a.st.start || 0) - (b.st.start || 0)) || String(a.ev.name).localeCompare(String(b.ev.name)));
+  const line = r => [r.st.state !== "none" && { text: (r.st.state === "now" ? "\u25CF " : "") + EventSchedule.statusText(r.st), live: r.st.state === "now" }, r.ev.note && { text: r.ev.note }];
+  const link = r => location.pathname + "?event=" + encodeURIComponent(r.ev.slug);
+  rows.filter(r => r.st.state !== "ended").forEach(r => add(box, r.ev.name || r.ev.slug, line(r), link(r), r.ev.slug === EVENT_SLUG, r.st.state === "now"));
+  const past = rows.filter(r => r.st.state === "ended");
+  if (past.length) {
+    const det = document.createElement("details");
+    det.innerHTML = "<summary>Past events</summary>";
+    box.appendChild(det);
+    past.forEach(r => add(det, r.ev.name || r.ev.slug, line(r), link(r), r.ev.slug === EVENT_SLUG, false));
+  }
+}
+function refreshEventButton(){
+  const own = !!(SITE.event.title || SITE.event.text);
+  const pub = EVENTS_INDEX.filter(e => e.public !== false);
+  const notices = ANN_ALL.filter(a => a.kind === "announcement");
+  if (!own && !pub.length && !notices.length) return;
+  const liveNow = pub.some(e => { const s = evStatus(e); return s && s.state === "now" && e.slug !== EVENT_SLUG; }) || ANN.some(a => a.kind === "announcement" && a.st.state === "now");
+  $("eventBtn").textContent = liveNow ? "Happening Now" : (own ? SITE.event.button : "Events");
+  $("eventBtn").classList.toggle("now", liveNow);
+  $("eventBtn").hidden = false;
+}
+function openEventPanel(){
+  $("ev-title").textContent = SITE.event.title;
+  $("ev-title").hidden = !SITE.event.title;
+  $("ev-text").textContent = SITE.event.text;
+  $("ev-text").hidden = !SITE.event.text;
+  renderEventSwitcher();
+  $("eventBox").hidden = false;
+  $("ev-x").focus();
+}
+function closeEventPanel(){
+  if ($("eventBox").hidden) return;
+  $("eventBox").hidden = true;
+  $("eventBtn").focus();
+}
+$("eventBtn").onclick = openEventPanel;
+$("ev-x").onclick = closeEventPanel;
+$("eventBox").addEventListener("click", e => { if (e.target === $("eventBox")) closeEventPanel(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeEventPanel(); });
+
+/* ============================================================
+   POST-LOAD ENHANCEMENTS
+   - Mobile half-sheet panel
+   - Category filter chips
+   - Deep-linking & share
+   - Offline cache
+   - Prize progress (uses prizes.csv)
+   ============================================================ */
+(function(){
+
+const $id = id => document.getElementById(id);
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const isPhone = () => matchMedia("(max-width: 699px)").matches;
+
+function toast(msg, ms){
+  const t = $id("toast");
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove("show"), ms || 2200);
+}
+window.toast = toast;
+
+/* ------------------------------------------------------------
+   CHUNK 1 — HALF-SHEET PANEL (mobile drag)
+   ------------------------------------------------------------ */
+{
+  const panel = $id("panel");
+  if (panel) {
+    const grab = document.createElement("div");
+    grab.className = "grab";
+    grab.setAttribute("aria-hidden", "true");
+    panel.prepend(grab);
+    panel.classList.add("grabber");
+
+    let dragStartY = 0, dragStartT = 0, dragging = false, panelHeight = 0;
+
+    function snapClass(){
+      if (!isPhone()) return;
+      panel.classList.remove("snap-half","snap-full","snap-closed");
+      panel.style.transform = "";
+    }
+    function setSnap(which){
+      if (!isPhone()) return;
+      panel.classList.remove("snap-half","snap-full","snap-closed");
+      panel.classList.add("snap-" + which);
+      if (which === "half" && window.__sel) {
+        window.map && window.map.easeTo({
+          center: window.__sel.ll,
+          padding: { bottom: Math.round(window.innerHeight * 0.42) },
+          duration: reduceMotion ? 0 : 300
+        });
+      }
+    }
+
+    new MutationObserver(() => {
+      if (panel.hidden) return;
+      if (isPhone()){
+        panel.classList.remove("snap-full","snap-closed");
+        panel.classList.add("snap-half");
+      } else {
+        panel.classList.remove("snap-half","snap-full","snap-closed");
+        panel.style.transform = "";
+      }
+    }).observe(panel, { attributes:true, attributeFilter:["hidden"] });
+
+    function pointerDown(e){
+      if (!isPhone()) return;
+      dragging = true;
+      dragStartY = e.touches ? e.touches[0].clientY : e.clientY;
+      dragStartT = panel.getBoundingClientRect().top;
+      panelHeight = panel.getBoundingClientRect().height;
+      panel.classList.add("dragging");
+      e.preventDefault();
+    }
+    function pointerMove(e){
+      if (!dragging) return;
+      const y = e.touches ? e.touches[0].clientY : e.clientY;
+      const dy = y - dragStartY;
+      const newTop = Math.max(0, Math.min(dragStartT + dy, panelHeight - 60));
+      panel.style.transform = "translateY(" + newTop + "px)";
+    }
+    function pointerUp(){
+      if (!dragging) return;
+      dragging = false;
+      panel.classList.remove("dragging");
+      const top = panel.getBoundingClientRect().top;
+      const h = window.innerHeight;
+      if (top < h * 0.35) setSnap("full");
+      else if (top > h * 0.85) setSnap("closed");
+      else setSnap("half");
+    }
+
+    grab.addEventListener("pointerdown", pointerDown);
+    panel.addEventListener("pointerdown", e => {
+      if (e.target === grab || e.target.classList.contains("grab")) pointerDown(e);
+    });
+    window.addEventListener("pointermove", pointerMove, { passive:false });
+    window.addEventListener("pointerup", pointerUp);
+    window.addEventListener("pointercancel", pointerUp);
+    window.addEventListener("resize", snapClass);
+  }
+}
+
+/* ------------------------------------------------------------
+   CHUNK 4 — CATEGORY FILTER CHIPS
+   ------------------------------------------------------------ */
+const HIDDEN_CATS_KEY = "ets_hidden_cats" + (window.KEY_SUFFIX || "");
+let hiddenCats = new Set();
+try { hiddenCats = new Set(JSON.parse(localStorage.getItem(HIDDEN_CATS_KEY)) || []); } catch {}
+
+function catVisible(code){
+  return !hiddenCats.has(String(code || "").trim().toUpperCase());
+}
+window.catVisible = catVisible;
+
+function buildChips(){
+  const wrap = $id("catChipsWrap");
+  const ul = $id("catChips");
+  if (!wrap || !ul) return;
+  if (!window.SITE || !SITE.catNames || !Object.keys(SITE.catNames).length) return;
+
+  const counts = {};
+  (window.places || []).concat(window.kids || []).forEach(p => {
+    const c = String((p.d && p.d.CATEGORY) || "").trim().toUpperCase();
+    if (c) counts[c] = (counts[c] || 0) + 1;
+  });
+
+  const codes = Object.keys(SITE.catNames).filter(c => counts[c]);
+  if (!codes.length){ wrap.hidden = true; if (typeof syncMoreBtn === "function") syncMoreBtn(); return; }
+  wrap.hidden = false;
+  if (typeof syncMoreBtn === "function") syncMoreBtn();
+
+  ul.innerHTML = codes.map(code => {
+    const on = catVisible(code);
+    const color = (SITE.colors && SITE.colors[code]) || "#E47303";
+    return `<li><button type="button" data-cat="${code}" aria-pressed="${on}">
+      <span class="swatch" style="--sw:${color};background:${color}"></span>
+      ${esc(SITE.catNames[code] || code)}
+    </button></li>`;
+  }).join("") +
+  (hiddenCats.size ? `<li><button type="button" class="reset" id="catReset">Reset</button></li>` : "");
+
+  ul.onclick = e => {
+    const b = e.target.closest("button[data-cat]");
+    if (b){
+      const code = b.dataset.cat;
+      if (hiddenCats.has(code)) hiddenCats.delete(code); else hiddenCats.add(code);
+      try { localStorage.setItem(HIDDEN_CATS_KEY, JSON.stringify([...hiddenCats])); } catch {}
+      buildChips();
+      window.update && window.update();
+      return;
+    }
+    if (e.target.id === "catReset"){
+      hiddenCats.clear();
+      try { localStorage.removeItem(HIDDEN_CATS_KEY); } catch {}
+      buildChips();
+      window.update && window.update();
+    }
+  };
+}
+window.__buildChips = buildChips;
+setTimeout(buildChips, 3000);
+
+
+/* ------------------------------------------------------------
+   CHUNK 5 — DEEP-LINKING & SHARE
+   ------------------------------------------------------------ */
+(function(){
+  const qs = () => new URLSearchParams(location.search);
+
+  // Remember what was in the URL when the page first loaded.
+  // The reader only acts on that original value — writes we make later
+  // (as the user browses) do NOT cause a re-select on next render.
+  const incomingPlace = qs().get("place");
+  const incomingYear  = qs().get("year");
+  const incomingCat   = qs().get("cat");
+  const hadIncomingSpot = qs().has("spot");
+  const hadIncomingSite = qs().has("site");
+
+  try {
+    if (incomingYear){
+      const yr = $id("yr");
+      if (yr){ yr.value = incomingYear; yr.dispatchEvent(new Event("input")); }
+    }
+    if (incomingCat){
+      const on = new Set(incomingCat.split(",").map(s => s.trim().toUpperCase()));
+      if (on.size && window.SITE && SITE.catNames){
+        Object.keys(SITE.catNames).forEach(code => { if (!on.has(code)) hiddenCats.add(code); });
+        try { localStorage.setItem(HIDDEN_CATS_KEY, JSON.stringify([...hiddenCats])); } catch {}
+        setTimeout(buildChips, 500);
+      }
+    }
+  } catch(e){}
+
+  // Only auto-select an incoming place if the welcome overlay is NOT up
+  // (so we don't fight the intro) and there isn't already a spot/site link.
+  if (incomingPlace && !hadIncomingSite && !hadIncomingSpot) {
+    const trySelect = () => {
+      const welcomeUp = document.getElementById("welcomeOverlay");
+      if (welcomeUp) { setTimeout(trySelect, 500); return; }
+      const it = (window.places || []).concat(window.kids || [])
+        .find(p => String(p.id).trim().toLowerCase() === incomingPlace.trim().toLowerCase());
+      if (it && window.select) window.select(it);
+    };
+    setTimeout(trySelect, 800);
+  }
+
+  // Share button on the panel
+  const panel = $id("panel");
+  if (panel){
+    new MutationObserver(() => {
+      if (panel.hidden) return;
+      if (panel.querySelector(".share-btn")) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "share-btn";
+      btn.innerHTML = "🔗 Share this place";
+      btn.onclick = async () => {
+        const id = (window.sel && window.sel.id) || "";
+        if (!id) return;
+        const url = location.origin + location.pathname + "?place=" + encodeURIComponent(id);
+        try {
+          if (navigator.share) await navigator.share({ title: document.title, url });
+          else { await navigator.clipboard.writeText(url); toast("Link copied"); }
+        } catch(e){ prompt("Copy this link:", url); }
+      };
+      const kids = panel.querySelector("h3");
+      if (kids) panel.insertBefore(btn, kids);
+      else panel.appendChild(btn);
+    }).observe(panel, { childList:true, subtree:true });
+  }
+
+  // Update the URL as the user browses — but only AFTER the welcome is gone,
+  // and never touch the URL while the welcome is still up.
+  const origSelect = window.select;
+  if (typeof origSelect === "function" && !window.__selectPatched){
+    window.__selectPatched = true;
+    window.select = function(it){
+      window.__sel = it;
+      origSelect.apply(this, arguments);
+      if (!it) return;
+      if (document.getElementById("welcomeOverlay")) return;   // don't write during intro
+      try {
+        const q = qs();
+        q.set("place", it.id);
+        q.delete("spot"); q.delete("site");
+        history.replaceState(null, "", location.pathname + "?" + q.toString());
+      } catch(e){}
+    };
+  }
+})();
+
+/* ------------------------------------------------------------
+   CHUNK 6 — OFFLINE CACHE
+   ------------------------------------------------------------ */
+(function(){
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("sw.js").then(reg => {
+    console.info("Offline worker registered", reg.scope);
+  }).catch(err => { console.warn("Service worker registration failed", err); });
+
+  const body = document.querySelector(".passport-body");
+  if (!body) return;
+  const btn = document.createElement("button");
+  btn.id = "offlineBtn";
+  btn.type = "button";
+  btn.textContent = "📥 Save this map for offline use";
+  body.insertBefore(btn, body.firstChild);
+
+  btn.onclick = async () => {
+    if (!navigator.serviceWorker.controller){
+      toast("Reload the page once, then try again.");
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Saving… 0%";
+    const files = [location.pathname].concat(
+      window.ETS_CONFIG ? ETS_CONFIG.DATA.concat(ETS_CONFIG.GLOBAL) : ["site.csv", "locations.csv", "childmarkers.csv", "categories.csv", "shapes.csv", "photos.csv", "stamps.csv", "tasks.csv", "prizes.csv", "overlays.json", "spots.csv", "tours.csv", "tourstops.csv", "lines.geojson", "border.geojson"],
+      ["events/index.json", window.EVENT_DIR ? window.EVENT_DIR + "event.json" : null]
+    ).filter(Boolean);
+    navigator.serviceWorker.controller.postMessage({
+      type: "PRECACHE", files,
+      bounds: window.SITE && SITE.maxBounds,
+      zoom: 15
+    });
+    toast("Saving in the background — you can keep browsing.");
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = "✅ Saved for offline use";
+      btn.classList.add("saved");
+    }, 4000);
+  };
+})();
+
+/* ------------------------------------------------------------
+   CHUNK 7 — PRIZES (reads prizes.csv, respects PRIZES in site.csv)
+   A prize is earned when the visitor reaches the required star in
+   every listed stamp. REQUIREMENTS is "STAMP_ID:stars" joined by |
+   where stars is "any" | 1 | 2 | 3.
+   ------------------------------------------------------------ */
+(function(){
+  if (!window.SITE) return;
+
+  const PRIZES_READY = (async () => {
+    await (window.SETTINGS_READY || Promise.resolve());
+    if (SITE.prizes === false) return [];
+    try {
+      const r = await dataFetch("prizes.csv", { cache:"no-store" });
+      if (!r.ok) return [];
+      const txt = await r.text();
+      if (!txt.trim()) return [];
+      return Papa.parse(txt, { header:true, skipEmptyLines:"greedy" }).data
+        .filter(r => String(r.PRIZE_ID || "").trim())
+        .map(r => ({
+          id: String(r.PRIZE_ID).trim(),
+          label: String(r.LABEL || r.PRIZE_ID).trim(),
+          reward: String(r.REWARD || "").trim(),
+          code: String(r.CODE || "").trim(),
+          order: parseInt(r.ORDER, 10) || 9999,
+          reqs: parseRequirements(r.REQUIREMENTS)
+        }))
+        .sort((a, b) => a.order - b.order);
+    } catch (e) { return []; }
+  })();
+
+  function parseRequirements(s){
+    return String(s || "").split("|").map(x => x.trim()).filter(Boolean).map(x => {
+      const parts = x.split(":");
+      const stamp = String(parts[0] || "").trim();
+      let stars = String(parts[1] || "any").trim().toLowerCase();
+      if (stars === "") stars = "any";
+      if (stars !== "any" && !["1","2","3"].includes(stars)) stars = "any";
+      return { stamp, stars };
+    }).filter(r => r.stamp);
+  }
+
+  function starsInStamp(stampId){
+    try {
+      const list = window.__stampsData || [];
+      const stamp = list.find(s => String(s.row.STAMP_ID).trim().toLowerCase() === stampId.toLowerCase());
+      if (!stamp) return 0;
+      const KEY = "ets_stamps_v2" + (window.KEY_SUFFIX || "");
+      const progress = JSON.parse(localStorage.getItem(KEY)) || {};
+      const done = progress._done || {};
+      const bucket = progress[String(stamp.row.STAMP_ID).trim()] || {};
+      const count = stamp.tasks.filter(id => done[id] || bucket[id]).length;
+      const t1 = +stamp.row.STAR1 || Infinity;
+      const t2 = +stamp.row.STAR2 || Infinity;
+      const t3 = +stamp.row.STAR3 || Infinity;
+      if (count >= t3) return 3;
+      if (count >= t2) return 2;
+      if (count >= t1) return 1;
+      return 0;
+    } catch (e) { return 0; }
+  }
+
+  function reqMet(req){
+    const have = starsInStamp(req.stamp);
+    if (req.stars === "any") return have >= 1;
+    return have >= (+req.stars || 1);
+  }
+
+  function prizeProgress(prize){
+    const total = prize.reqs.length;
+    const met = prize.reqs.filter(reqMet).length;
+    return { total, met, done: total > 0 && met >= total };
+  }
+
+  function renderPrizes(prizes){
+    const body = document.querySelector(".passport-body");
+    if (!body || !prizes.length) return;
+    let box = document.getElementById("pPrizes");
+    if (!box){
+      box = document.createElement("section");
+      box.id = "pPrizes";
+      const grid = document.getElementById("stampGrid");
+      if (grid) grid.parentNode.insertBefore(box, grid);
+      else body.appendChild(box);
+    }
+    box.innerHTML = `<h3 class="p-h">Prizes</h3>` + prizes.map(p => {
+      const { total, met, done } = prizeProgress(p);
+      const pct = total ? Math.round(met / total * 100) : 0;
+      return `<div class="p-prize ${done ? "done" : ""}" data-prize="${esc(p.id)}">
+        <h4>${esc(p.label)}</h4>
+        <div class="bar"><i style="width:${pct}%"></i></div>
+        <div class="meta">${done ? "🎉 " + esc(p.reward || "You did it!") : met + " of " + total + " — " + esc(p.reward || "keep going!")}</div>
+        ${done ? `<button type="button" class="p-claim" data-claim="${esc(p.id)}">Show this to claim</button>` : ""}
+      </div>`;
+    }).join("");
+
+    box.querySelectorAll(".p-claim").forEach(btn => {
+      btn.onclick = () => {
+        const p = prizes.find(x => x.id === btn.dataset.claim);
+        if (p) showClaimSlip(p);
+      };
+    });
+  }
+
+  function showClaimSlip(prize){
+    let slip = document.getElementById("claimSlip");
+    if (!slip){
+      slip = document.createElement("div");
+      slip.id = "claimSlip";
+      slip.innerHTML = `<div class="slip">
+        <button class="x" type="button" aria-label="Close">&times;</button>
+        <h2 id="slipTitle"></h2>
+        <p id="slipReward"></p>
+        <div id="slipCode" hidden><span>Claim code</span><b id="slipCodeVal"></b></div>
+        <p class="small">Show this screen to the vendor.</p>
+      </div>`;
+      document.body.appendChild(slip);
+      slip.querySelector(".x").onclick = () => slip.classList.remove("on");
+      slip.addEventListener("click", e => { if (e.target === slip) slip.classList.remove("on"); });
+      document.addEventListener("keydown", e => { if (e.key === "Escape") slip.classList.remove("on"); });
+    }
+    slip.querySelector("#slipTitle").textContent = prize.label;
+    slip.querySelector("#slipReward").textContent = prize.reward || "You've earned this prize!";
+    const cbox = slip.querySelector("#slipCode");
+    if (prize.code){ slip.querySelector("#slipCodeVal").textContent = prize.code; cbox.hidden = false; }
+    else cbox.hidden = true;
+    slip.classList.add("on");
+  }
+
+  PRIZES_READY.then(prizes => {
+    if (!prizes.length) return;
+    window.__prizes = prizes;
+    renderPrizes(prizes);
+
+    const drawer = document.getElementById("passportDrawer");
+    if (drawer){
+      new MutationObserver(() => {
+        if (drawer.classList.contains("open")) renderPrizes(prizes);
+      }).observe(drawer, { attributes: true, attributeFilter: ["class"] });
+    }
+  });
+})();
+
+})();
+
+</script>
+</body>
+</html>

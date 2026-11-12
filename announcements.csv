@@ -1,0 +1,3 @@
+ANN_ID,NAME,TAG,COLOR,BLURB,VENUE_IDS,LINK,LINK_TEXT,ENABLED,REPEAT,TZ,START,END,START_DAY,END_DAY,DAYS,START_TIME,END_TIME,SOON_DAYS
+ANN-001,Mary's Quilt Show,Quilt Show,#C2185B,Sample announcement: replace this with a sentence or two about the show. Edit it in the Announcements tab.,CV-006,,,yes,once,America/Indiana/Indianapolis,2026-11-07T10:00,2026-11-14T17:00,,,,,,14
+ANN-002,Fried Chicken Tour,Fried Chicken Tour,#E47303,Sample announcement: replace this with what visitors can do and where to start.,CV-001,,,yes,once,America/Indiana/Indianapolis,2026-11-21T11:00,2026-11-21T16:00,,,,,,14

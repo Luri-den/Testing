@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Announcements Editor</title>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script src="editor-common.js"></script>
+<script>Workspace.block('Announcements are shared by the whole site, not by one event. Go back to the live site to edit them.');</script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:Arial,sans-serif;color:#222}
+body{display:flex;flex-direction:column}
+header{background:#333;color:#fff;padding:8px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+header h1{font-size:17px;margin:0 8px 0 0}
+button{font:inherit;font-size:13px;padding:7px 11px;border:0;border-radius:4px;background:#fff;color:#222;cursor:pointer}
+button:hover{background:#eee}
+button.go{background:#28a745;color:#fff;font-weight:bold}
+button.go:hover{background:#218838}
+button.danger{color:#b3261e}
+button:disabled{opacity:.4;cursor:not-allowed}
+#status{background:#fff3cd;color:#664d03;padding:6px 12px;font-size:13px;border-bottom:1px solid #e6d9a2}
+#status:empty{display:none}
+main{flex:1;display:flex;min-height:0}
+#list{width:300px;flex:none;overflow:auto;border-right:1px solid #ddd;background:#fafafa}
+#form{flex:1;overflow:auto;padding:14px 18px 40px;max-width:760px}
+.item{display:block;width:100%;text-align:left;background:#fff;border:0;border-bottom:1px solid #e5e5e5;border-left:8px solid var(--c,#999);border-radius:0;padding:10px 12px}
+.item.sel{background:#eef5ff}
+.item b{display:block;font-size:14px}
+.item small{display:block;color:#666;margin-top:2px;font-size:12px}
+.item.off{opacity:.55}
+.empty{padding:16px;color:#666;font-size:14px;line-height:1.5}
+h2{font-size:15px;margin:22px 0 6px;padding-bottom:4px;border-bottom:1px solid #ddd}
+h2:first-child{margin-top:0}
+label{display:block;font-size:12px;font-weight:bold;margin:12px 0 3px;color:#555}
+label.chk,label.day{font-weight:normal;font-size:13px;color:#222;display:inline-flex;gap:5px;align-items:center;margin:3px 12px 3px 0}
+input[type=text],input[type=url],input[type=number],input[type=time],input[type=datetime-local],select,textarea{width:100%;padding:7px;font:inherit;font-size:14px;border:1px solid #bbb;border-radius:4px;background:#fff}
+input[type=color]{width:56px;height:34px;padding:2px;border:1px solid #bbb;border-radius:4px;background:#fff}
+textarea{min-height:76px;resize:vertical}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>div{flex:1;min-width:150px}
+.hint{font-size:12px;color:#666;margin:3px 0 0;line-height:1.4}
+#venues{max-height:190px;overflow:auto;border:1px solid #ccc;border-radius:4px;padding:6px 8px;background:#fff;margin-top:6px}
+#venues label{display:flex;font-weight:normal;font-size:13px;color:#222;margin:2px 0;gap:6px;align-items:center}
+#venues .gone{color:#b3261e}
+.probs{margin:12px 0;padding:8px 10px;border-radius:4px;background:#f8d7da;color:#842029;font-size:13px;line-height:1.5}
+.probs:empty{display:none}
+.when{margin-top:10px;padding:8px 10px;background:#eef5ff;border-radius:4px;font-size:13px;line-height:1.5}
+/* the preview matches the welcome screen */
+.pv{margin-top:8px;max-width:360px;background:#fff;border:6px solid var(--c,#D55E00);border-radius:18px;padding:12px 14px;box-shadow:0 0 0 3px #fff,0 4px 14px #0004}
+.pv .tag{display:inline-block;margin:0 0 6px;padding:3px 10px;border-radius:999px;font:700 12px/1.4 system-ui,Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase}
+.pv h3{margin:0 0 6px;font-size:21px}
+.pv p{margin:0;font-size:16px;line-height:1.35}
+.pv small{display:block;margin-top:6px;color:#555}
+.pv .gobtn{margin-top:8px;display:inline-block;background:#E47303;color:#fff;border-radius:4px;padding:8px 12px;font-size:14px}
+@media(max-width:700px){main{flex-direction:column}#list{width:auto;max-height:34vh;border-right:0;border-bottom:1px solid #ddd}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Announcements</h1>
+  <button id="newBtn" type="button">+ New announcement</button>
+  <button id="dupBtn" type="button" disabled>Duplicate</button>
+  <button id="delBtn" type="button" class="danger" disabled>Delete</button>
+  <span style="flex:1"></span>
+  <button id="dlBtn" type="button" class="go" disabled>Download Updated announcements.csv</button>
+</header>
+<div id="status"></div>
+<main>
+  <div id="list"></div>
+  <div id="form"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/dist/papaparse.min.js"></script>
+<script src="schedule.js"></script>
+<script src="announcements.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const PALETTE = ["#C2185B", "#E47303", "#0072B2", "#009E73", "#7B5EA7", "#B3261E", "#8B6F47", "#4A7C8C"];
+
+let ITEMS = [], SEL = -1, PLACES = [], loaded = false;
+
+function setStatus(t) { $("status").textContent = t || ""; }
+
+/* ---------- loading ---------- */
+async function getCsv(name) {
+  try { const r = await fetch(name, { cache: "no-store" }); if (!r.ok) return []; return Papa.parse((await r.text()).replace(/^\uFEFF/, ""), { header: true, skipEmptyLines: true }).data; }
+  catch (e) { return []; }
+}
+async function init() {
+  if (!window.Papa) { setStatus("The page could not load its spreadsheet reader. Check your internet connection and reload."); return; }
+  const [ann, locs, kids] = await Promise.all([getCsv(ETS_CONFIG.ANNOUNCEMENTS_FILE), getCsv("locations.csv"), getCsv("childmarkers.csv")]);
+  ITEMS = ann.map(Announcements.fromRow).filter(a => a.name || a.id);
+  PLACES = locs.map(r => ({ id: String(r.ID || "").trim(), name: String(r.NAME || "").trim(), sub: "" }))
+    .concat(kids.map(r => ({ id: String(r.CHILD_ID || "").trim(), name: String(r.NAME || "").trim(), sub: "part of " + String(r.PARENT_ID || "").trim() })))
+    .filter(p => p.id);
+  loaded = true;
+  if (!ann.length) setStatus("No announcements yet (announcements.csv was not found or is empty). Click \"+ New announcement\" to make the first one.");
+  $("dlBtn").disabled = false;
+  select(ITEMS.length ? 0 : -1);
+}
+
+/* ---------- helpers ---------- */
+function nextId() {
+  const n = ITEMS.map(a => +(/(\d+)$/.exec(a.id) || [0, 0])[1]).reduce((m, v) => Math.max(m, v), 0) + 1;
+  return "ANN-" + String(n).padStart(3, "0");
+}
+const pad = n => String(n).padStart(2, "0");
+function localStamp(d, h, m) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(h) + ":" + pad(m); }
+function blank() {
+  const d = new Date(); d.setDate(d.getDate() + 7);
+  return { id: nextId(), name: "New announcement", tag: "", color: PALETTE[ITEMS.length % PALETTE.length], blurb: "", venues: [], link: "", linkText: "", enabled: true, kind: "announcement",
+    schedule: { repeat: "once", tz: Announcements.DEFAULT_TZ, start: localStamp(d, 10, 0), end: localStamp(d, 16, 0), soonDays: 14 } };
+}
+function statusOf(a) { return a.schedule ? EventSchedule.status(a.schedule) : { state: "none" }; }
+function statusLabel(a) { const t = EventSchedule.statusText(statusOf(a)); return a.enabled ? (t || "No dates set") : "Hidden (turned off)"; }
+
+/* ---------- list ---------- */
+function renderList() {
+  if (!ITEMS.length) { $("list").innerHTML = '<div class="empty">Nothing here yet.<br>Click <b>+ New announcement</b>.</div>'; return; }
+  $("list").innerHTML = ITEMS.map((a, i) =>
+    '<button type="button" class="item' + (i === SEL ? " sel" : "") + (a.enabled ? "" : " off") + '" data-i="' + i + '" style="--c:' + esc(a.color) + '">' +
+    "<b>" + esc(a.name || "(no name)") + "</b><small>" + esc(statusLabel(a)) + "</small></button>").join("");
+  $("list").querySelectorAll(".item").forEach(b => b.onclick = () => select(+b.dataset.i));
+}
+
+/* ---------- form ---------- */
+function select(i) {
+  SEL = i;
+  $("dupBtn").disabled = $("delBtn").disabled = i < 0;
+  renderList();
+  if (i < 0) { $("form").innerHTML = '<div class="empty">Select an announcement on the left, or make a new one.</div>'; return; }
+  buildForm(ITEMS[i]);
+}
+function buildForm(a) {
+  const s = a.schedule || {};
+  const days = (s.days || []).map(Number);
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const venueIds = new Set(a.venues);
+  const known = new Set(PLACES.map(p => p.id));
+  const gone = a.venues.filter(v => !known.has(v));
+  $("form").innerHTML =
+    "<h2>What is it?</h2>" +
+    '<label for="f_name">Name</label><input type="text" id="f_name" value="' + esc(a.name) + '" placeholder="Mary\'s Quilt Show">' +
+    '<div class="row"><div><label for="f_tag">Tag (short label shown on the welcome screen)</label><input type="text" id="f_tag" value="' + esc(a.tag === a.name ? "" : a.tag) + '" placeholder="Leave blank to use the name"></div>' +
+    '<div style="flex:none;min-width:0"><label for="f_color">Color</label><input type="color" id="f_color" value="' + esc(a.color) + '"></div></div>' +
+    '<label for="f_blurb">A sentence or two for visitors</label><textarea id="f_blurb" placeholder="Who it is for, what happens, and why it is worth the trip.">' + esc(a.blurb) + "</textarea>" +
+    '<div class="hint"><span id="blurbN"></span> The welcome screen shows about 170 characters.</div>' +
+    '<label class="chk" style="margin-top:12px"><input type="checkbox" id="f_enabled"' + (a.enabled ? " checked" : "") + "> Show this announcement (untick to hide it without deleting it)</label>" +
+
+    "<h2>Where is it?</h2>" +
+    '<div class="hint">Tick the places where it happens. The welcome screen points at the first one, and the Events panel has a "See it on the map" button. You can leave all unticked.</div>' +
+    '<input type="text" id="vSearch" placeholder="Search places..." style="margin-top:8px">' +
+    '<div id="venues">' +
+      gone.map(v => '<label class="gone"><input type="checkbox" class="vn" value="' + esc(v) + '" checked> ' + esc(v) + " (not found in your places)</label>").join("") +
+      PLACES.map(p => '<label data-t="' + esc((p.id + " " + p.name + " " + p.sub).toLowerCase()) + '"><input type="checkbox" class="vn" value="' + esc(p.id) + '"' + (venueIds.has(p.id) ? " checked" : "") + "> " + esc(p.name || p.id) + ' <small style="color:#777">' + esc(p.id) + (p.sub ? ", " + esc(p.sub) : "") + "</small></label>").join("") +
+    "</div>" +
+    '<div class="row"><div><label for="f_link">Web page (optional)</label><input type="url" id="f_link" value="' + esc(a.link) + '" placeholder="https://..."></div>' +
+    '<div><label for="f_linktext">Button words</label><input type="text" id="f_linktext" value="' + esc(a.linkText) + '" placeholder="Learn more"></div></div>' +
+
+    "<h2>When is it?</h2>" +
+    '<div class="row"><div><label for="f_repeat">How often</label><select id="f_repeat">' +
+      [["once", "One time"], ["yearly", "Every year"], ["monthly", "Every month"], ["weekly", "Every week"]].map(o => '<option value="' + o[0] + '"' + (s.repeat === o[0] ? " selected" : "") + ">" + o[1] + "</option>").join("") + "</select></div>" +
+    '<div><label for="f_tz">Time zone</label><select id="f_tz">' + EventSchedule.ZONES.map(z => '<option' + ((s.tz || Announcements.DEFAULT_TZ) === z ? " selected" : "") + ">" + z + "</option>").join("") + "</select></div></div>" +
+    '<div id="g_dates" class="row"><div><label for="f_start">Starts</label><input type="datetime-local" id="f_start" value="' + esc(s.start || "") + '"></div>' +
+      '<div><label for="f_end">Ends</label><input type="datetime-local" id="f_end" value="' + esc(s.end || "") + '"></div></div>' +
+    '<div class="hint" id="yearHint" hidden>For "every year" only the month, day and time count. The year you pick is ignored.</div>' +
+    '<div id="g_month" class="row"><div><label for="f_sday">Starts on day of month</label><input type="number" id="f_sday" min="1" max="31" value="' + esc(s.startDay || "") + '"></div>' +
+      '<div><label for="f_eday">Ends on day of month</label><input type="number" id="f_eday" min="1" max="31" value="' + esc(s.endDay || "") + '"></div></div>' +
+    '<div id="g_week"><label>On these days</label>' + dayNames.map((n, i) => '<label class="day"><input type="checkbox" class="wd" value="' + i + '"' + (days.includes(i) ? " checked" : "") + "> " + n + "</label>").join("") + "</div>" +
+    '<div id="g_times" class="row"><div><label for="f_stime">From</label><input type="time" id="f_stime" value="' + esc(s.startTime || "") + '"></div>' +
+      '<div><label for="f_etime">Until</label><input type="time" id="f_etime" value="' + esc(s.endTime || "") + '"></div></div>' +
+    '<div id="g_soon"><label for="f_soon">Show as "coming soon" this many days ahead</label><input type="number" id="f_soon" min="0" max="365" value="' + esc(s.soonDays != null ? s.soonDays : 14) + '" style="max-width:120px"></div>' +
+    '<div class="when" id="when"></div>' +
+    '<div class="probs" id="probs"></div>' +
+
+    "<h2>How it will look on the welcome screen</h2>" +
+    '<div class="pv" id="pv"></div>';
+
+  $("form").querySelectorAll("input,select,textarea").forEach(el => { if (el.id !== "vSearch") { el.addEventListener("input", onEdit); el.addEventListener("change", onEdit); } });
+  $("vSearch").addEventListener("input", () => { const q = $("vSearch").value.trim().toLowerCase(); $("venues").querySelectorAll("label[data-t]").forEach(l => l.hidden = !!q && !l.dataset.t.includes(q)); });
+  syncVisibility(); preview();
+}
+function syncVisibility() {
+  const rep = $("f_repeat").value;
+  $("g_dates").hidden = !(rep === "once" || rep === "yearly");
+  $("yearHint").hidden = rep !== "yearly";
+  $("g_month").hidden = rep !== "monthly";
+  $("g_week").hidden = rep !== "weekly";
+  $("g_times").hidden = !(rep === "monthly" || rep === "weekly");
+  $("g_soon").hidden = rep === "weekly";
+}
+function readForm(a) {
+  a.name = $("f_name").value.trim();
+  a.tag = $("f_tag").value.trim() || a.name;
+  a.color = $("f_color").value;
+  a.blurb = $("f_blurb").value.trim();
+  a.enabled = $("f_enabled").checked;
+  a.venues = [...$("form").querySelectorAll(".vn:checked")].map(x => x.value);
+  a.link = $("f_link").value.trim();
+  a.linkText = $("f_linktext").value.trim();
+  const rep = $("f_repeat").value, s = { repeat: rep, tz: $("f_tz").value };
+  if (rep === "once" || rep === "yearly") { s.start = $("f_start").value; s.end = $("f_end").value; }
+  else {
+    s.startTime = $("f_stime").value; s.endTime = $("f_etime").value;
+    if (rep === "monthly") { s.startDay = +$("f_sday").value; s.endDay = +$("f_eday").value; }
+    if (rep === "weekly") s.days = [...$("form").querySelectorAll(".wd:checked")].map(x => +x.value);
+  }
+  if (rep !== "weekly" && $("f_soon").value !== "") s.soonDays = +$("f_soon").value;
+  a.schedule = s;
+}
+function problems(a) {
+  const p = [];
+  if (!a.name) p.push("Give it a name.");
+  p.push.apply(p, EventSchedule.validate(a.schedule));
+  const known = new Set(PLACES.map(x => x.id));
+  a.venues.filter(v => !known.has(v)).forEach(v => p.push('The place "' + v + '" is not in your places list. Untick it.'));
+  if (a.link && !/^https?:\/\//i.test(a.link)) p.push("The web page should start with http:// or https://");
+  if (ITEMS.filter(x => x.id === a.id).length > 1) p.push("Another announcement has the same ID (" + a.id + ").");
+  return p;
+}
+function preview() {
+  const a = ITEMS[SEL]; if (!a) return;
+  $("blurbN").textContent = a.blurb.length + " characters.";
+  const st = statusOf(a), when = a.schedule ? EventSchedule.describe(a.schedule) : "No dates set";
+  const soon = a.schedule && a.schedule.repeat !== "weekly" ? (a.schedule.soonDays != null ? a.schedule.soonDays : 14) : 0;
+  $("when").innerHTML = "<b>" + esc(when) + "</b><br>" + esc(EventSchedule.statusText(st) || "") +
+    (a.schedule && a.schedule.repeat !== "weekly" ? "<br>Visitors see it on the welcome screen while it is on, and for " + soon + " day" + (soon === 1 ? "" : "s") + " before it starts." : "<br>Visitors see it on the welcome screen while it is on.");
+  const names = a.venues.map(id => (PLACES.find(p => p.id === id) || {}).name || id);
+  const tagBg = a.color, tagFg = Announcements.readable(a.color);
+  const live = st.state === "now";
+  const line = [EventSchedule.statusText(st), names[0] ? "at " + names[0] : ""].filter(Boolean).join(" \u00b7 ");
+  const go = names.length ? "See it on the map" : (a.link ? (a.linkText || "Learn more") : "");
+  $("pv").style.setProperty("--c", a.color);
+  $("pv").innerHTML = '<span class="tag" style="background:' + esc(tagBg) + ";color:" + esc(tagFg) + '">' + (live ? "\u25CF " : "") + esc(a.tag || a.name || "Tag") + "</span>" +
+    "<h3>" + esc(a.name || "Name") + "</h3><p>" + esc(a.blurb.length > 170 ? a.blurb.slice(0, 167) + "..." : a.blurb) + "</p><small>" + esc(line) + "</small>" + (go ? '<span class="gobtn">' + esc(go) + "</span>" : "");
+  $("probs").innerHTML = problems(a).map(esc).join("<br>");
+}
+function onEdit() { const a = ITEMS[SEL]; if (!a) return; readForm(a); syncVisibility(); renderList(); preview(); }
+
+/* ---------- buttons ---------- */
+$("newBtn").onclick = () => { if (!loaded) return; ITEMS.push(blank()); select(ITEMS.length - 1); onEditMarker(); $("f_name").focus(); $("f_name").select(); };
+$("dupBtn").onclick = () => { const a = ITEMS[SEL]; if (!a) return; const c = JSON.parse(JSON.stringify(a)); c.id = nextId(); c.name = a.name + " (copy)"; c.tag = c.name; ITEMS.push(c); select(ITEMS.length - 1); onEditMarker(); };
+$("delBtn").onclick = () => { const a = ITEMS[SEL]; if (!a || !confirm('Delete "' + (a.name || a.id) + '"? This only takes effect when you download or publish.')) return; ITEMS.splice(SEL, 1); select(Math.min(SEL, ITEMS.length - 1)); onEditMarker(); };
+function onEditMarker() { /* new, duplicate and delete are edits too: tell the hub there is something to publish */ const f = document.createEvent("Event"); f.initEvent("input", true, true); document.body.dispatchEvent(f); }
+
+$("dlBtn").onclick = () => {
+  if (!loaded) return;
+  const bad = ITEMS.map(a => ({ a, p: problems(a) })).filter(x => x.p.length);
+  if (bad.length && !confirm(bad.length + " announcement" + (bad.length === 1 ? " has" : "s have") + " a problem (" + bad.map(x => x.a.name || x.a.id).join(", ") + "). Download anyway?")) return;
+  const csv = Papa.unparse(ITEMS.map(Announcements.toRow), { columns: Announcements.COLUMNS });
+  const el = document.createElement("a");
+  el.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  el.download = "announcements.csv";
+  document.body.appendChild(el); el.click(); el.remove();
+  setStatus("Downloaded announcements.csv. Upload it to your site next to the map page, replacing the old one. (Or use Publish.)");
+};
+
+init();
+</script>
+<script src="publish.js"></script>
+<script>GHPublish.attach({ buttons: ["dlBtn"] });</script>
+</body>
+</html>

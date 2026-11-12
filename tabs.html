@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Page Source Editing Hub</title>
+  <script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script src="publish.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+
+    /* Which site am I editing? */
+    .ws-bar { padding: 8px 12px; margin-bottom: 10px; border-radius: 6px; background: #eef6ee; border: 1px solid #cfe5cf; font-size: 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .ws-bar.event { background: #d4351c; border-color: #d4351c; color: #fff; }
+    .ws-bar #wsText { flex: 1 1 320px; }
+    .ws-bar code { background: #ffffff33; padding: 1px 4px; border-radius: 3px; }
+    .ws-bar:not(.event) code { background: #0001; }
+    .ws-bar a { color: inherit; margin-right: 10px; }
+    .ws-bar button { font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 5px; border: 1px solid #fff; background: #fff; color: #d4351c; cursor: pointer; font-weight: bold; }
+
+
+    /* Task groups */
+    .group-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 10px; }
+    .group-btn { padding: 10px 18px; border: 2px solid #01796F; border-radius: 22px; background: #fff; color: #01796F; font-size: 15px; font-weight: bold; cursor: pointer; }
+    .group-btn.active { background: #01796F; color: #fff; }
+    .group-btn.extras { border-color: #888; color: #555; }
+    .group-btn.extras.active { background: #666; color: #fff; }
+    .top-tab[hidden], #subBar.single { display: none; }
+    .top-tab[data-dot]::after, .group-btn[data-dot]::after { content: " \25CF"; color: #d4351c; }
+    .group-btn.active[data-dot]::after { color: #ffd0c8; }
+    .pubwrap { max-width: 760px; padding: 6px 4px; overflow: auto; height: 100%; }
+    .pubbtn { padding: 9px 16px; font-size: 14px; border-radius: 6px; border: 1px solid #888; background: #fff; cursor: pointer; }
+    .pubbtn.go { background: #238636; border-color: #238636; color: #fff; font-weight: bold; }
+    .pubbtn:disabled { opacity: .45; cursor: default; }
+    #pubSummary { margin: 12px 0; } #pubSummary li { margin: 3px 0; } #pubSummary details { margin-top: 8px; font-size: 13px; color: #555; }
+    #restoreSel { padding: 8px; min-width: 320px; max-width: 100%; }
+
+    /* Top Tabs Styling */
+    .top-tabs {
+      overflow-x: auto;
+      align-items: flex-end;
+      display: flex;
+      gap: 5px;
+      border-bottom: 2px solid #ccc;
+    }
+    .top-tab {
+      padding: 10px 20px;
+      border: 1px solid #ccc;
+      border-bottom: none;
+      background: #f0f0f0;
+      cursor: pointer;
+      font-size: 14px;
+      border-top-left-radius: 4px;
+      border-top-right-radius: 4px;
+    }
+    .top-tab { white-space: nowrap; flex: 0 0 auto; }
+    .tab-group { align-self: center; flex: 0 0 auto; font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: .04em; padding: 0 4px 0 12px; }
+    .tab-dot { color: #d4351c; margin-left: 5px; }
+    .top-tab.active {
+      background: #fff;
+      font-weight: bold;
+      border-bottom: 2px solid #fff;
+      margin-bottom: -2px;
+    }
+
+    /* Blurb Section Styling */
+    .blurb-container {
+      background-color: #f9f9f9;
+      border: 1px solid #e0e0e0;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 4px;
+    }
+
+    /* Content Area Styling */
+    .content-area {
+      position: relative;
+      height: 75vh;
+      min-height: 420px;
+    }
+
+    /* Iframe Containers */
+    .page-container {
+      display: none;
+      width: 100%;
+      height: 100%;
+    }
+    .page-container.active {
+      display: block;
+    }
+
+    /* Full-size Iframe */
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="wsBar" class="ws-bar"><span id="wsText"></span><span id="wsActions"></span><span id="wsRepo" style="margin-left:auto;font-size:12px"></span></div>
+
+  <!-- 1. Navigation: what do you want to do? -->
+  <div class="group-bar" id="groupBar" role="tablist" aria-label="What do you want to do?"></div>
+  <div class="top-tabs" id="subBar" role="tablist">
+    <button class="top-tab active" data-target="p2" data-group="items" data-blurb="Places and the parts that belong to them. Drag pins, edit fields, create new places, set how a stamp is earned, and upload photos. This edits locations.csv and childmarkers.csv.">Places</button>
+    <button class="top-tab" data-target="p3" data-group="items" data-blurb="Stories and Spots. Create photo spots for before / after shots and add story pins for historical events. This edits spots.csv.">Spots &amp; Stories</button>
+    <button class="top-tab" data-target="p10" data-group="items" data-blurb="QR codes. Make a printable label for a spot, story, place, event or the whole map: a QR code with a caption, a source line (like County Library), your colors, and an optional picture in the middle. Print or save it to put on a sign.">QR Signs</button>
+    <button class="top-tab" data-target="p4" data-group="tours" data-blurb="Tours and Trails. Design tours, trails and plain map lines on one screen: draw the route, click markers to add stops, choose how people travel it (walk, hike, bike, drive or virtual), and style the line.">Tours and Trails</button>
+    <button class="top-tab" data-target="p1" data-group="look" data-blurb="Change the color and text of the header, the movable map bounds, and the default camera location.">Site Settings</button>
+    <button class="top-tab" data-target="p5" data-group="look" data-blurb="Boundary Line. Edit the visible city, county, or area boundary line by clicking and dragging, adding, or subtracting points on a map. Edits border.geojson.">Boundary</button>
+    <button class="top-tab" data-target="p6" data-group="look" data-blurb="Overlay Maps. Align old maps to the current map by resizing, skewing, and rotating them. Edits overlays.json.">Old Maps (Overlays)</button>
+    <button class="top-tab" data-target="p7" data-group="visitors" data-blurb="Edit and preview stars, stamps, and tasks in the Passport system. Edits stamps.csv and tasks.csv.">Passport &amp; Prizes</button>
+    <button class="top-tab" data-target="p9" data-group="visitors" data-blurb="Events. Save data as an event (a named folder of markers, spots, passport, settings and photos), or apply a saved event to switch what the live page shows.">Events</button>
+    <button class="top-tab" data-target="p14" data-group="visitors" data-blurb="Announcements. Put a quilt show, a food tour or any happening on the welcome screen, with a colored tag and dates. It shows while it is on and for a few days before. This edits announcements.csv.">Announcements</button>
+    <button class="top-tab" data-target="pub" data-group="publish" data-blurb="Publish. Gather every change from all the tabs into one publish, with a plain-language summary of what changed. You can also bring your data files back to an earlier version.">Publish &amp; Restore</button>
+    <button class="top-tab" data-target="p13" data-group="publish" data-blurb="Open the live map to view changes once they are completed and uploaded.">Preview Live Site</button>
+    <button class="top-tab" data-target="p8" data-group="extras" data-blurb="Edit photos using masks to create short pseudo-3D videos to place in the /anims folder.">2.5D Generator</button>
+    <button class="top-tab" data-target="p12" data-group="extras" data-blurb="Design and upload images of a building interior.">Building Interior</button>
+    <button class="top-tab" data-target="p11" data-group="extras" data-blurb="Check my data. Scans your files for mistakes that would quietly break the map: missing photos, children with no parent, tours that stop at places that are gone, typos in IDs. It only reads; nothing is changed.">Check My Data</button>
+  </div>
+
+  <!-- 2. Dynamic Blurb Area -->
+  <div class="blurb-container">
+    <p id="dynamic-blurb">Welcome to the Editing Hub! Select any of the tabs above to edit basic information and settings for that function. Each tab auto-loads its assigned CSV or JSON files from the main folder. This
+      allows you to edit visually by dragging pins, ticking checkboxes, setting thresholds, and aligning images. Using the Download Updated button on the tab will download the updated file to your computer. Upload that file back into 
+      your hosting site in the same place from which it came. The live site view will update itself once the updates are published and loaded.</p>
+  </div>
+
+  <!-- 3. Embedded Pages (The Progress-Saving Engine) -->
+  <div class="content-area">
+    
+    <div id="p1" class="page-container">
+      <iframe src="site.html"></iframe>
+    </div>
+
+    <div id="p2" class="page-container active">
+      <iframe src="editor.html"></iframe>
+    </div>
+
+    <div id="p3" class="page-container">
+      <iframe src="spots.html"></iframe>
+    </div>
+
+    <div id="p4" class="page-container">
+      <iframe src="tours.html"></iframe>
+    </div>
+
+    <div id="p5" class="page-container">
+      <iframe src="boundary.html"></iframe>
+    </div>
+
+    <div id="p6" class="page-container">
+      <iframe src="overlays.html"></iframe>
+    </div>
+
+    <div id="p7" class="page-container">
+      <iframe src="passport.html"></iframe>
+    </div>
+
+    <div id="p8" class="page-container">
+      <iframe src="25dgenerator.html"></iframe>
+    </div>
+
+    <div id="p9" class="page-container">
+      <iframe src="events.html"></iframe>
+    </div>
+
+    <div id="p14" class="page-container">
+      <iframe src="announce.html"></iframe>
+    </div>
+
+        <div id="p10" class="page-container">
+      <iframe src="qr.html"></iframe>
+    </div>
+
+    <div id="p11" class="page-container">
+      <iframe src="check.html"></iframe>
+    </div>
+    
+    <div id="p12" class="page-container">
+      <iframe src="BLDG/index.html"></iframe>
+    </div>
+
+      
+    <div id="pub" class="page-container">
+      <div class="pubwrap">
+        <h2>Publish</h2>
+        <p>Every editor keeps its own changes until you publish. Press the button to gather them all, read what changed, and publish them together.</p>
+        <button id="pubScan" class="pubbtn">Look for Changes</button> <span id="pubMsg"></span>
+        <div id="pubSummary"></div>
+        <p><button id="pubGo" class="pubbtn go" hidden>Publish These Changes</button></p>
+        <hr>
+        <h2>Restore a Previous Version</h2>
+        <p>Made a mistake? This brings your data files (places, spots, tours, settings and so on) back to how they were at an earlier publish. Photos are left alone. It adds a new version on top, so nothing is lost and you can undo it the same way.</p>
+        <select id="restoreSel"><option>Loading versions…</option></select>
+        <button id="restoreBtn" class="pubbtn" disabled>Restore This Version</button> <span id="restoreMsg"></span>
+      </div>
+    </div>
+
+          <div id="p13" class="page-container">
+      <iframe src="Demo2a.html"></iframe>
+    </div>
+    <!-- Add containers for p4 through p7 identically here -->
+
+  </div>
+
+  <script>
+document.addEventListener("DOMContentLoaded", () => {
+  const tabs = document.querySelectorAll(".top-tab");
+  const containers = document.querySelectorAll(".page-container");
+  const blurbText = document.getElementById("dynamic-blurb");
+
+  // Keep track of which pages have already been opened/loaded correctly
+  const loadedPages = { p2: true }; 
+
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      // 1. Remove active state from current tab and container
+      document.querySelector(".top-tab.active").classList.remove("active");
+      document.querySelector(".page-container.active").classList.remove("active");
+
+      // 2. Add active state to clicked tab and corresponding container
+      tab.classList.add("active");
+      const targetId = tab.getAttribute("data-target");
+      const targetContainer = document.getElementById(targetId);
+      targetContainer.classList.add("active");
+
+      // 3. Dynamically update the instructions blurb
+      blurbText.innerHTML = tab.getAttribute("data-blurb");
+
+      
+      if (!loadedPages[targetId]) {
+        const iframe = targetContainer.querySelector("iframe");
+        if (iframe) {
+          iframe.src = iframe.src; // This cleanly forces the iframe map to recalculate its width/height
+        }
+        loadedPages[targetId] = true; // Mark as loaded so it saves user progress moving forward
+      }
+    });
+  });
+});
+
+  </script>
+
+  <script>
+(function () {
+  const LIVE = (window.ETS_CONFIG && window.ETS_CONFIG.LIVE_PAGE) || "Demo2a.html";
+  const bar = document.getElementById("wsBar"), text = document.getElementById("wsText"), acts = document.getElementById("wsActions");
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  async function eventName(slug) {
+    try { const r = await fetch("events/" + slug + "/event.json", { cache: "no-store" }); if (r.ok) { const j = await r.json(); return j.name || slug; } } catch (e) {}
+    return slug;
+  }
+  async function applyWorkspace(reload, from) {
+    const slug = Workspace.current();
+    if (slug) {
+      const name = await eventName(slug);
+      bar.className = "ws-bar event";
+      text.innerHTML = "<b>Designing event: " + esc(name) + "</b>. Everything you publish from these tabs goes into <code>events/" + esc(slug) + "/</code>. The live map is not changed.";
+      acts.innerHTML = '<a href="' + LIVE + '?event=' + encodeURIComponent(slug) + '" target="_blank" rel="noopener">Preview</a><button id="wsLeave" type="button">Back to the live site</button>';
+      document.getElementById("wsLeave").onclick = () => { Workspace.set("", true); applyWorkspace(true); };
+    } else {
+      bar.className = "ws-bar";
+      text.innerHTML = "Working on: <b>the live site</b>. Whatever you publish changes the live map. To build an event without that, use <b>Design an event</b> on the Events tab.";
+      acts.innerHTML = "";
+    }
+    const live = document.querySelector("#p13 iframe");
+    if (live) live.src = slug ? LIVE + "?event=" + encodeURIComponent(slug) + "&t=" + Date.now() : LIVE;
+    if (reload) document.querySelectorAll(".page-container iframe").forEach(f => {
+      if (f.closest("#p13") || (from && f.contentWindow === from)) return;
+      try { f.contentWindow.location.reload(); } catch (e) { f.src = f.getAttribute("src"); }
+    });
+  }
+  window.addEventListener("message", e => { if (e.origin === location.origin && e.data && e.data.type === "ets-workspace") applyWorkspace(true, e.source); });
+  applyWorkspace(false);
+})();
+  </script>
+
+  <script>
+(function () {
+  const el = document.getElementById("wsRepo");
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  function show() {
+    try { const s = GHPublish.settings(); el.innerHTML = (s.owner && s.repo) ? "Publishing to: <b>" + esc(s.owner) + "/" + esc(s.repo) + "</b>" : "<b>Publishing is not set up.</b> Use GitHub settings on the Events tab."; } catch (e) {}
+  }
+  show(); window.addEventListener("focus", show); setInterval(show, 3000);
+})();
+  </script>
+
+  <script>
+(function () {
+  const dirtyTabs = new Set();
+  window.ETSHub = { anyDirty: () => dirtyTabs.size > 0 };
+  window.addEventListener("beforeunload", e => { if (dirtyTabs.size) { e.preventDefault(); e.returnValue = ""; } });
+  window.addEventListener("message", e => {
+    if (e.origin !== location.origin || !e.data || e.data.type !== "ets-dirty") return;
+    const fr = [...document.querySelectorAll(".page-container iframe")].find(f => f.contentWindow === e.source);
+    if (!fr) return;
+    const id = fr.closest(".page-container").id;
+    const tab = document.querySelector('.top-tab[data-target="' + id + '"]');
+    if (!tab) return;
+    dirtyTabs[e.data.dirty ? "add" : "delete"](id);
+    let dot = tab.querySelector(".tab-dot");
+    if (e.data.dirty && !dot) { dot = document.createElement("span"); dot.className = "tab-dot"; dot.textContent = "\u25CF"; dot.title = "Unsaved changes"; tab.appendChild(dot); }
+    if (!e.data.dirty && dot) dot.remove();
+  });
+})();
+  </script>
+
+  <script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const GROUPS = [
+    { id: "items", label: "Map Items" }, { id: "tours", label: "Tours and Trails" }, { id: "look", label: "Map Look" },
+    { id: "visitors", label: "Visitors" }, { id: "publish", label: "Publish" }, { id: "extras", label: "Extras" }
+  ];
+  const tabs = [...document.querySelectorAll(".top-tab")], bar = $("groupBar"), last = {};
+  GROUPS.forEach(g => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "group-btn" + (g.id === "extras" ? " extras" : ""); b.dataset.g = g.id; b.textContent = g.label;
+    b.onclick = () => { const mine = tabs.filter(t => t.dataset.group === g.id); (last[g.id] || mine[0]).click(); };
+    bar.append(b);
+  });
+  function showGroup(id) {
+    bar.querySelectorAll(".group-btn").forEach(b => b.classList.toggle("active", b.dataset.g === id));
+    let n = 0; tabs.forEach(t => { const on = t.dataset.group === id; t.hidden = !on; if (on) n++; });
+    $("subBar").classList.toggle("single", n < 2);
+  }
+  tabs.forEach(t => t.addEventListener("click", () => { last[t.dataset.group] = t; showGroup(t.dataset.group); }));
+  showGroup("items");
+
+  // a red dot on a group whenever one of its tabs holds changes you have not published (the tabs show their own dot already)
+  setInterval(() => {
+    const gs = {}; tabs.forEach(t => { if (t.querySelector(".tab-dot")) gs[t.dataset.group] = 1; });
+    bar.querySelectorAll(".group-btn").forEach(b => { if (gs[b.dataset.g]) b.dataset.dot = "1"; else delete b.dataset.dot; });
+  }, 2000);
+
+  /* ---------- Publish All ---------- */
+  const NOUN = { "locations.csv": "Places", "childmarkers.csv": "Parts of places", "spots.csv": "Spots and stories", "tours.csv": "Tours and trails", "tourstops.csv": "Tour stops",
+    "stamps.csv": "Stamps", "tasks.csv": "Tasks", "prizes.csv": "Prizes", "categories.csv": "Categories", "site.csv": "Site settings" };
+  const NICE = { "announcements.csv": "Announcements", "lines.geojson": "Drawn lines", "border.geojson": "Boundary line", "overlays.json": "Old maps (overlays)", "settings.json": "Settings" };
+  const isMedia = p => /\.(jpe?g|png|webp|gif|mp4|webm)$/i.test(p);
+  let found = [];
+  async function describe(f) {
+    const name = f.path.split("/").pop();
+    if (isMedia(name)) return null;
+    if (!NOUN[name] || !/\.csv$/i.test(name)) return (NICE[name] || name) + " updated";
+    try {
+      const now = Papa.parse(await f.blob.text(), { header: true, skipEmptyLines: "greedy" });
+      const r = await fetch(f.path, { cache: "no-store" });
+      const old = r.ok ? Papa.parse(await r.text(), { header: true, skipEmptyLines: "greedy" }) : { data: [], meta: { fields: [] } };
+      const key = now.meta.fields[0], common = now.meta.fields.filter(x => old.meta.fields.includes(x));
+      const sig = x => JSON.stringify(common.map(c => String(x[c] || "").trim()));
+      const om = new Map(old.data.map(x => [x[key], sig(x)])), seen = new Set(); let add = 0, edit = 0;
+      now.data.forEach(x => { seen.add(x[key]); if (!om.has(x[key])) add++; else if (om.get(x[key]) !== sig(x)) edit++; });
+      const del = [...om.keys()].filter(k => !seen.has(k)).length;
+      const parts = [add && add + " added", edit && edit + " edited", del && del + " removed"].filter(Boolean);
+      return NOUN[name] + ": " + (parts.length ? parts.join(", ") : "reordered or reformatted");
+    } catch (e) { return NOUN[name] + " updated"; }
+  }
+  $("pubScan").onclick = async () => {
+    $("pubMsg").textContent = "Gathering changes from every tab\u2026"; $("pubSummary").textContent = ""; $("pubGo").hidden = true;
+    const files = {};
+    for (const f of document.querySelectorAll(".page-container iframe")) {
+      try { const w = f.contentWindow; if (w.GHPublish && w.GHPublish.collect) (await w.GHPublish.collect()).forEach(x => { files[x.path] = x; }); } catch (e) {}
+    }
+    found = Object.values(files);
+    if (!found.length) { $("pubMsg").textContent = "Nothing to publish. Make a change in one of the tabs first."; return; }
+    const lines = (await Promise.all(found.map(describe))).filter(Boolean), media = found.filter(f => isMedia(f.path)).length;
+    if (media) lines.push(media + " photo or media file" + (media === 1 ? "" : "s") + " added or replaced");
+    $("pubSummary").innerHTML = "<b>These changes are ready:</b><ul>" + lines.map(l => "<li>" + esc(l) + "</li>").join("") + "</ul><details><summary>Files (" + found.length + ")</summary>" + found.map(f => esc(f.path)).join("<br>") + "</details>";
+    $("pubMsg").textContent = ""; $("pubGo").hidden = false;
+  };
+  $("pubGo").onclick = async () => {
+    if (!GHPublish.hasToken()) { GHPublish.settingsDialog(); $("pubMsg").textContent = "Fill in your GitHub connection, then press Publish again."; return; }
+    $("pubGo").disabled = true;
+    try {
+      const names = found.slice(0, 3).map(f => f.path.split("/").pop()).join(", ");
+      const c = await GHPublish.publish(found.map(f => ({ path: f.path, blob: f.blob })), "Update " + names + (found.length > 3 ? " and " + (found.length - 3) + " more" : "") + " from the editor", t => { $("pubMsg").textContent = t; });
+      for (const f of document.querySelectorAll(".page-container iframe")) { try { f.contentWindow.GHPublish.finish(found); } catch (e) {} }
+      const s = GHPublish.settings();
+      $("pubMsg").innerHTML = "\u2714 Published " + found.length + " file" + (found.length === 1 ? "" : "s") + '. <a target="_blank" rel="noopener" href="https://github.com/' + esc(s.owner) + "/" + esc(s.repo) + "/commit/" + esc((c && c.sha) || "") + '">View on GitHub</a>';
+      $("pubGo").hidden = true; found = []; $("pubSummary").textContent = ""; loadHistory();
+    } catch (e) { $("pubMsg").textContent = "Couldn't publish: " + e.message; }
+    $("pubGo").disabled = false;
+  };
+
+  /* ---------- Restore a previous version ---------- */
+  const isData = p => p.indexOf("/") < 0 && /\.(csv|json|geojson)$/i.test(p) && p !== "manifest.json";
+  async function loadHistory() {
+    const sel = $("restoreSel"); $("restoreBtn").disabled = true;
+    if (!GHPublish.hasToken()) { sel.innerHTML = "<option>Set up your GitHub connection first (the gear next to any Publish button)</option>"; return; }
+    try {
+      const list = await GHPublish.api("/commits?sha=" + encodeURIComponent(await GHPublish.branchName()) + "&per_page=30");
+      const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+      const before = list.find(c => new Date(c.commit.author.date) < midnight);
+      sel.innerHTML = "";
+      if (before) sel.append(new Option("Yesterday's version: " + new Date(before.commit.author.date).toLocaleString() + " (the last one before today)", before.sha));
+      list.forEach(c => sel.append(new Option(new Date(c.commit.author.date).toLocaleString() + "  " + c.commit.message.split("\n")[0].slice(0, 70), c.sha)));
+      $("restoreBtn").disabled = !list.length;
+    } catch (e) { sel.innerHTML = "<option>Couldn't read the history: " + esc(e.message) + "</option>"; }
+  }
+  $("restoreBtn").onclick = async () => {
+    if (window.Workspace && Workspace.current && Workspace.current()) { $("restoreMsg").textContent = "Restore works on the live site. Leave event mode first."; return; }
+    const sha = $("restoreSel").value, label = $("restoreSel").selectedOptions[0].textContent;
+    if (!confirm("Bring your data files back to this version?\n\n" + label + "\n\nThis adds a new version on top. Photos and the page code are not touched.")) return;
+    $("restoreBtn").disabled = true; $("restoreMsg").textContent = "Restoring\u2026";
+    try {
+      const api = GHPublish.api, branch = await GHPublish.branchName();
+      const head = (await api("/git/ref/heads/" + branch)).object.sha, headTree = (await api("/git/commits/" + head)).tree.sha, tgtTree = (await api("/git/commits/" + sha)).tree.sha;
+      const ls = async t => (await api("/git/trees/" + t + "?recursive=1")).tree.filter(x => x.type === "blob" && isData(x.path));
+      const [cur, tgt] = await Promise.all([ls(headTree), ls(tgtTree)]);
+      const cm = new Map(cur.map(x => [x.path, x.sha])), tm = new Map(tgt.map(x => [x.path, x.sha])), tree = [];
+      tm.forEach((s, p) => { if (cm.get(p) !== s) tree.push({ path: p, mode: "100644", type: "blob", sha: s }); });
+      cm.forEach((s, p) => { if (!tm.has(p)) tree.push({ path: p, mode: "100644", type: "blob", sha: null }); });
+      if (!tree.length) { $("restoreMsg").textContent = "Your data files already match that version."; $("restoreBtn").disabled = false; return; }
+      const nt = await api("/git/trees", "POST", { base_tree: headTree, tree });
+      const c = await api("/git/commits", "POST", { message: "Restore data files to the version from " + label.split("  ")[0].replace(/^Yesterday's version: /, ""), tree: nt.sha, parents: [head] });
+      await api("/git/refs/heads/" + branch, "PATCH", { sha: c.sha });
+      $("restoreMsg").textContent = "\u2714 Restored " + tree.length + " file" + (tree.length === 1 ? "" : "s") + ". Reload the editor tabs to see them.";
+      loadHistory();
+    } catch (e) { $("restoreMsg").textContent = "Couldn't restore: " + e.message; $("restoreBtn").disabled = false; }
+  };
+  tabs.find(t => t.dataset.target === "pub").addEventListener("click", loadHistory);
+})();
+  </script>
+</body>
+</html>
