@@ -28,8 +28,17 @@
     if (window.fetch) {
       var of = window.fetch;
       window.fetch = function (u) {
-        return of.apply(this, arguments).then(function (r) { if (!r.ok) window.__dbg("HTTP " + r.status + " for " + (typeof u === "string" ? u : u.url)); return r; },
-          function (err) { window.__dbg("NETWORK FAILED for " + (typeof u === "string" ? u : u.url) + ": " + err.message); throw err; });
+        var url = typeof u === "string" ? u : u.url;
+        return of.apply(this, arguments).then(function (r) {
+          if (!r.ok) {   // say what the answer actually was: the words in it show who sent it (a worker's "Offline", a server's "File not found", ...)
+            r.clone().text().then(function (t) { window.__dbg("HTTP " + r.status + (r.statusText ? " " + r.statusText : "") + " for " + url + "   [" + String(t || "").replace(/\s+/g, " ").slice(0, 70) + "]"); }, function () { window.__dbg("HTTP " + r.status + " for " + url); });
+          }
+          return r;
+        }, function (err) {
+          if (err && err.name === "AbortError") throw err;   // the map cancelling a tile it no longer needs is normal, not a failure
+          window.__dbg("NETWORK FAILED for " + url + ": " + (err && err.message));
+          throw err;
+        });
       };
     }
   }
@@ -3832,6 +3841,7 @@ const AERIAL = {
 };
 const inIndiana = c => c.lng > -88.1 && c.lng < -84.78 && c.lat > 37.77 && c.lat < 41.77;
 function setAerial(on){
+  if (!window.__mapLoaded) { map.once("load", () => setAerial(on)); return; }          // the map must have finished loading before layers are added
   try {
     if (on && !map.getSource("usgs-tiles")) {
       const order = map.getStyle().layers.map(l => l.id);
