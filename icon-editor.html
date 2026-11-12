@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Icon Editor — Mockup</title>
+<style>
+  :root{
+    --ink:#1a202c; --muted:#6b7280; --line:#d7dde5;
+    --bg:#eef1f5; --panel:#fff; --accent:#2b6cb0;
+    --danger:#b42318; --warn:#7a5c00; --ok:#2f855a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font:14px system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  body{display:flex;flex-direction:column}
+
+  header{
+    background:#fff;border-bottom:1px solid var(--line);
+    padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  header h1{font-size:15px;margin:0}
+  header .grow{flex:1}
+  button{font:inherit;padding:6px 12px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;color:var(--ink)}
+  button:hover{background:#f6f8fb}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.primary:hover{background:#245a94}
+  button.danger{background:#fff5f5;border-color:#f3c2c2;color:var(--danger)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+
+  main{
+    flex:1;display:grid;
+    grid-template-columns:220px 1fr;
+    min-height:0;
+  }
+
+  /* ---------- left list ---------- */
+  #library{
+    background:#fff;border-right:1px solid var(--line);
+    overflow:auto;padding:10px 8px;
+  }
+  #library h2{
+    font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);margin:8px 6px 6px;font-weight:700;
+  }
+  .icn-row{
+    display:flex;align-items:center;gap:10px;
+    padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;
+  }
+  .icn-row:hover{background:#f4f7fb}
+  .icn-row.sel{background:#e6effa;font-weight:600}
+  .icn-row .swatch{
+    width:32px;height:32px;flex:none;
+    border:1px solid var(--line);border-radius:6px;background:#fbfcfe;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .icn-row .swatch svg{width:24px;height:24px}
+  .icn-row .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .icn-row .badge{
+    font-size:10px;padding:1px 6px;border-radius:999px;
+    background:#eef3fb;color:var(--accent);font-weight:600;
+    text-transform:uppercase;letter-spacing:.04em;
+  }
+  .icn-row .badge.builtin{background:#f0f0f0;color:#666}
+
+  /* ---------- right pane ---------- */
+  #pane{display:flex;flex-direction:column;min-width:0;overflow:hidden}
+  #pane-header{
+    background:#fff;border-bottom:1px solid var(--line);
+    padding:10px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  }
+  #pane-header label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;display:block;margin-bottom:3px}
+  #pane-header input{
+    font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;
+  }
+  #pane-header .field{display:flex;flex-direction:column}
+  #pane-header .field input{min-width:180px}
+  #pane-header .grow{flex:1}
+
+  #tabs{
+    display:flex;gap:0;border-bottom:1px solid var(--line);background:#fff;
+  }
+  #tabs button{
+    border:0;border-bottom:3px solid transparent;border-radius:0;
+    padding:10px 18px;font-weight:600;color:var(--muted);background:transparent;
+  }
+  #tabs button.on{color:var(--accent);border-bottom-color:var(--accent)}
+
+  #body{flex:1;overflow:auto;display:grid;grid-template-columns:1fr 260px;min-height:0}
+  #editor{position:relative;background:#fbfcfe;overflow:hidden}
+  #editor-inner{position:absolute;inset:0;display:flex;flex-direction:column}
+
+  /* ---------- draw canvas ---------- */
+  #toolbar{
+    background:#fff;border-bottom:1px solid var(--line);
+    padding:8px 12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+  }
+  #toolbar .group{display:flex;gap:2px;align-items:center;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff}
+  #toolbar .group button{border:0;border-radius:0;padding:6px 10px;font-size:13px}
+  #toolbar .group button.on{background:var(--accent);color:#fff}
+  #toolbar .group button:hover:not(.on){background:#f4f7fb}
+  #toolbar label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  #toolbar input[type=color]{width:30px;height:26px;padding:0;border:1px solid var(--line);border-radius:4px;background:#fff;cursor:pointer}
+  #toolbar input[type=range]{width:80px}
+  #toolbar .grow{flex:1}
+
+  #canvas-wrap{
+    flex:1;display:flex;align-items:center;justify-content:center;
+    background:
+      linear-gradient(45deg,#eef1f5 25%,transparent 25%),
+      linear-gradient(-45deg,#eef1f5 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#eef1f5 75%),
+      linear-gradient(-45deg,transparent 75%,#eef1f5 75%);
+    background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;
+    padding:20px;overflow:auto;
+  }
+  #svg-canvas{
+    width:min(80%,520px);aspect-ratio:1;background:#fff;border:1px solid var(--line);
+    border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.06);
+    touch-action:none;
+  }
+  #svg-canvas.readonly{cursor:not-allowed;opacity:.7}
+  #svg-canvas .handle{fill:#fff;stroke:var(--accent);stroke-width:1.5;cursor:grab}
+  #svg-canvas .handle.sel{fill:var(--accent)}
+  #svg-canvas .shape{cursor:pointer}
+  #svg-canvas .shape.sel{filter:drop-shadow(0 0 0 var(--accent))}
+  #svg-canvas .shape-outline{fill:none;stroke:var(--accent);stroke-width:.5;stroke-dasharray:1,1;pointer-events:none}
+
+  /* ---------- code tab ---------- */
+  #code-wrap{flex:1;display:flex;flex-direction:column;padding:14px;gap:8px;min-height:0}
+  #code-input{
+    flex:1;width:100%;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;
+    border:1px solid var(--line);border-radius:6px;padding:12px;background:#fff;
+    resize:none;min-height:200px;tab-size:2;
+  }
+  #code-msg{font-size:12px;min-height:18px}
+  #code-msg.err{color:var(--danger)}
+  #code-msg.ok{color:var(--ok)}
+
+  /* ---------- right side ---------- */
+  #side{
+    background:#fff;border-left:1px solid var(--line);
+    padding:14px;overflow:auto;
+  }
+  #side h3{
+    font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);margin:0 0 8px;font-weight:700;
+  }
+  .preview-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;
+  }
+  .preview-box{
+    border:1px solid var(--line);border-radius:6px;background:#fbfcfe;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:6px;aspect-ratio:1;
+  }
+  .preview-box svg{width:100%;height:100%}
+  .preview-box .size{font-size:10px;color:var(--muted);margin-top:2px}
+
+  .hint{
+    font-size:12px;color:var(--muted);line-height:1.5;
+    background:#fafbfc;border:1px solid var(--line);border-radius:6px;padding:8px 10px;
+  }
+  .hint b{color:var(--ink);font-weight:600}
+  .hint ul{margin:4px 0 0 16px;padding:0}
+  .hint li{margin:2px 0}
+
+  #banner{
+    padding:8px 12px;font-size:12px;border-bottom:1px solid var(--line);
+    background:#fff8e0;color:var(--warn);display:none;
+  }
+  #banner.on{display:block}
+
+  #toast{
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
+    background:#111827;color:#fff;padding:10px 16px;border-radius:8px;
+    font-size:13px;opacity:0;transition:opacity .18s, transform .18s;
+    pointer-events:none;max-width:80vw;text-align:center;
+  }
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  @media(max-width:900px){
+    main{grid-template-columns:1fr}
+    #library{max-height:180px;border-right:0;border-bottom:1px solid var(--line)}
+    #body{grid-template-columns:1fr}
+    #side{border-left:0;border-top:1px solid var(--line)}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Icon Editor</h1>
+  <span class="grow"></span>
+  <button id="newBtn">+ New Icon</button>
+  <button id="dupeBtn" disabled>Duplicate</button>
+  <button id="exportBtn">Export JSON</button>
+  <button id="resetBtn" class="danger">Reset Library</button>
+</header>
+
+<main>
+  <aside id="library">
+    <h2>Custom</h2>
+    <div id="customList"></div>
+    <h2>Built-in</h2>
+    <div id="builtinList"></div>
+  </aside>
+
+  <section id="pane">
+    <div id="pane-header">
+      <div class="field">
+        <label>Label</label>
+        <input id="labelInput" placeholder="e.g. Chicken">
+      </div>
+      <div class="field">
+        <label>Code</label>
+        <input id="codeInput" placeholder="e.g. chicken">
+      </div>
+      <div class="field">
+        <label>ViewBox</label>
+        <input id="viewBoxInput" placeholder="0 0 24 24" style="min-width:120px">
+      </div>
+      <span class="grow"></span>
+      <button id="saveBtn" class="primary" disabled>Save</button>
+    </div>
+
+    <div id="tabs">
+      <button data-tab="draw" class="on">Draw</button>
+      <button data-tab="code">Code</button>
+    </div>
+
+    <div id="banner"></div>
+
+    <div id="body">
+      <div id="editor">
+        <div id="editor-inner">
+          <div id="toolbar">
+            <div class="group">
+              <button data-tool="select" class="on" title="Select (V)">Select</button>
+              <button data-tool="pen" title="Pen (P)">Pen</button>
+              <button data-tool="rect" title="Rectangle (R)">Rect</button>
+              <button data-tool="circle" title="Circle (C)">Circle</button>
+            </div>
+            <label>Fill <input type="color" id="fillColor" value="#000000"></label>
+            <label>Stroke <input type="color" id="strokeColor" value="#000000"></label>
+            <label>Width <input type="range" id="strokeWidth" min="0" max="4" step="0.25" value="0"></label>
+            <span class="grow"></span>
+            <button id="undoBtn" disabled>Undo</button>
+            <button id="delBtn" disabled>Delete</button>
+          </div>
+          <div id="canvas-wrap">
+            <svg id="svg-canvas" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"></svg>
+          </div>
+        </div>
+        <div id="code-wrap" hidden>
+          <textarea id="code-input" spellcheck="false" placeholder="Paste SVG inner markup here, or switch to Draw."></textarea>
+          <div id="code-msg"></div>
+        </div>
+      </div>
+
+      <aside id="side">
+        <h3>Preview</h3>
+        <div class="preview-grid">
+          <div class="preview-box"><div class="preview-svg" data-size="16"></div><div class="size">16 px</div></div>
+          <div class="preview-box"><div class="preview-svg" data-size="32"></div><div class="size">32 px</div></div>
+          <div class="preview-box"><div class="preview-svg" data-size="64"></div><div class="size">64 px</div></div>
+        </div>
+        <h3>How it works</h3>
+        <div class="hint">
+          <b>Draw</b> supports straight paths, rectangles, circles, and ellipses. Curves, gradients, transforms, filters, and text are shown in the preview but not editable by the drawing tools.
+          <ul>
+            <li>Pen: click to place points. Click the first point to close the path.</li>
+            <li>Rect / Circle: click and drag.</li>
+            <li>Select: click a shape to select it, drag its handles to resize.</li>
+          </ul>
+          <b>Code</b> accepts any valid inline SVG. No scripts, no external links, no <code>foreignObject</code>.
+        </div>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<div id="toast"></div>
+
+<script>
+/* ============================================================
+   Icon Editor — mockup
+   The store is a plain array of Icon objects. Every icon is
+   data; nothing about a specific icon is hard-coded anywhere.
+   ============================================================ */
+
+const STORAGE_KEY = "icon-editor-v1";
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ---------- seeded built-ins ---------- */
+const BUILTIN = [
+  { code:"courthouse", label:"Courthouse", viewBox:"0 0 24 24",
+    art:'<path d="M2 21h20v-2H2zM4 17h16v-2H4zM12 3L3 9h18zM6 10h2v6H6zM11 10h2v6h-2zM16 10h2v6h-2z" fill="#333"/>' },
+  { code:"store", label:"Store", viewBox:"0 0 24 24",
+    art:'<path d="M3 8l2-4h14l2 4v2h-1v11h-5v-6H9v6H4V10H3z" fill="#333"/>' },
+  { code:"house", label:"House", viewBox:"0 0 24 24",
+    art:'<path d="M12 3L2 12h3v9h6v-6h2v6h6v-9h3z" fill="#333"/>' },
+  { code:"factory", label:"Factory", viewBox:"0 0 24 24",
+    art:'<path d="M2 20h20V9l-6 4V9l-6 4V9L2 13z M6 4h2v4H6z" fill="#333"/>' },
+  { code:"train", label:"Train", viewBox:"0 0 24 24",
+    art:'<rect x="4" y="4" width="16" height="14" rx="3" fill="#333"/><circle cx="8" cy="20" r="1.5" fill="#333"/><circle cx="16" cy="20" r="1.5" fill="#333"/><rect x="7" y="7" width="4" height="4" fill="#fff"/><rect x="13" y="7" width="4" height="4" fill="#fff"/>' },
+  { code:"boat", label:"Boat", viewBox:"0 0 24 24",
+    art:'<path d="M3 16l2-4h14l2 4v2H3zM7 11V6h2v5zM11 11V4h2v7z" fill="#333"/>' },
+  { code:"chicken", label:"Chicken", viewBox:"0 0 24 24",
+    art:'<path d="M13 3c-2 0-3 1-4 2C7 6 6 8 6 10c-2 1-3 3-3 5 0 3 3 5 7 5 4 0 8-2 8-6 0-2-1-4-3-5 0-3-1-6-2-6zm2 4h1v1h-1z" fill="#333"/>' },
+];
+
+/* ---------- the store ---------- */
+let library = loadLibrary();
+let selected = library[0] || null;
+let draft = null;         // working copy of the selected icon
+let tab = "draw";
+let tool = "select";
+let drag = null;
+let history = [];         // undo stack for draw tab
+
+function loadLibrary(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length) return arr;
+    }
+  } catch(e) {}
+  return JSON.parse(JSON.stringify(BUILTIN.map(b => ({...b, builtin:true, editedIn:"code"}))));
+}
+function saveLibrary(){
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(library)); } catch(e) {}
+}
+
+/* ============================================================
+   Parsing and serializing SVG
+   ============================================================ */
+function parseSvg(art, viewBox){
+  // Wrap in a root so we can use DOMParser
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${esc(viewBox||"0 0 24 24")}">${art||""}</svg>`;
+  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+  const err = doc.querySelector("parsererror");
+  if (err) return { error: "Invalid SVG: " + err.textContent.replace(/\s+/g," ").slice(0,140) };
+  const root = doc.documentElement;
+  return { root, viewBox: root.getAttribute("viewBox") || "0 0 24 24" };
+}
+
+function validateArt(art){
+  const parsed = parseSvg(art, "0 0 24 24");
+  if (parsed.error) return parsed;
+  // content security
+  const banned = parsed.root.querySelectorAll("script,foreignObject,use[href^='http'],image,iframe,object,embed");
+  if (banned.length) return { error: "Contains elements the editor does not allow: " + Array.from(banned).map(e => e.tagName.toLowerCase()).join(", ") };
+  // event handlers and external links
+  let bad = false;
+  parsed.root.querySelectorAll("*").forEach(el => {
+    Array.from(el.attributes).forEach(a => {
+      if (/^on/i.test(a.name)) bad = true;
+      if ((a.name === "href" || a.name === "xlink:href") && !/^#/.test(a.value)) bad = true;
+    });
+  });
+  if (bad) return { error: "Contains event handlers or external links, which the editor does not allow." };
+  return { ok: true, root: parsed.root };
+}
+
+function serializeArt(root){
+  // inner markup of the <svg> root
+  return Array.from(root.childNodes).map(n => {
+    if (n.nodeType === 3) return n.textContent.trim();
+    if (n.nodeType === 1) return new XMLSerializer().serializeToString(n);
+    return "";
+  }).filter(Boolean).join("");
+}
+
+/* ============================================================
+   Shape model for the Draw tab
+   ============================================================ */
+function artToShapes(art){
+  const v = validateArt(art);
+  if (v.error) return { shapes:[], error: v.error };
+  const shapes = [];
+  let hasUnsupported = false;
+  v.root.querySelectorAll("*").forEach(el => {
+    const tag = el.tagName.toLowerCase();
+    const fill = el.getAttribute("fill") || "#000";
+    const stroke = el.getAttribute("stroke") || "none";
+    const sw = parseFloat(el.getAttribute("stroke-width") || "0");
+    if (tag === "rect"){
+      shapes.push({kind:"rect",
+        x:parseFloat(el.getAttribute("x")||"0"),
+        y:parseFloat(el.getAttribute("y")||"0"),
+        w:parseFloat(el.getAttribute("width")||"10"),
+        h:parseFloat(el.getAttribute("height")||"10"),
+        rx:parseFloat(el.getAttribute("rx")||"0"),
+        fill, stroke, sw});
+    } else if (tag === "circle"){
+      const r = parseFloat(el.getAttribute("r")||"5");
+      const cx = parseFloat(el.getAttribute("cx")||"12");
+      const cy = parseFloat(el.getAttribute("cy")||"12");
+      shapes.push({kind:"circle", cx, cy, r, fill, stroke, sw});
+    } else if (tag === "ellipse"){
+      const rx = parseFloat(el.getAttribute("rx")||"5");
+      const ry = parseFloat(el.getAttribute("ry")||"5");
+      const cx = parseFloat(el.getAttribute("cx")||"12");
+      const cy = parseFloat(el.getAttribute("cy")||"12");
+      shapes.push({kind:"ellipse", cx, cy, rx, ry, fill, stroke, sw});
+    } else if (tag === "path"){
+      const d = el.getAttribute("d")||"";
+      // straight-line paths only: M, L, Z (case-insensitive)
+      if (/[csqta]/i.test(d)) { hasUnsupported = true; return; }
+      const points = parseStraightPath(d);
+      if (points && points.length >= 2){
+        shapes.push({kind:"path", points, closed: /z/i.test(d), fill, stroke, sw});
+      }
+    } else if (tag === "polygon"){
+      const pts = (el.getAttribute("points")||"").trim().split(/\s+/).map(p => p.split(",").map(parseFloat)).filter(a => a.length===2 && !a.some(isNaN));
+      if (pts.length >= 3) shapes.push({kind:"path", points:pts, closed:true, fill, stroke, sw});
+    } else if (tag === "polyline"){
+      const pts = (el.getAttribute("points")||"").trim().split(/\s+/).map(p => p.split(",").map(parseFloat)).filter(a => a.length===2 && !a.some(isNaN));
+      if (pts.length >= 2) shapes.push({kind:"path", points:pts, closed:false, fill, stroke, sw});
+    } else if (tag === "g"){
+      // groups with no transform are transparent; groups with transform mark the icon as unsupported
+      if (el.getAttribute("transform")) hasUnsupported = true;
+    } else if (tag !== "svg"){
+      hasUnsupported = true;
+    }
+  });
+  return { shapes, hasUnsupported };
+}
+
+function parseStraightPath(d){
+  const tokens = d.match(/[MLZmlz]|-?\d*\.?\d+/g) || [];
+  const pts = [];
+  let i = 0, cmd = null, x = 0, y = 0;
+  while (i < tokens.length){
+    const t = tokens[i++];
+    if (/^[MLZmlz]$/.test(t)) { cmd = t.toUpperCase(); continue; }
+    if (!cmd) continue;
+    const a = parseFloat(t);
+    const b = parseFloat(tokens[i++] || "0");
+    if (isNaN(a) || isNaN(b)) break;
+    if (cmd === "M" || cmd === "L") { x = a; y = b; pts.push([x,y]); }
+  }
+  return pts;
+}
+
+function shapesToArt(shapes){
+  return shapes.map(s => {
+    const attrs = [];
+    if (s.fill) attrs.push(`fill="${s.fill}"`);
+    if (s.stroke && s.stroke !== "none"){ attrs.push(`stroke="${s.stroke}"`); attrs.push(`stroke-width="${s.sw}"`); attrs.push(`stroke-linejoin="round"`); }
+    if (s.kind === "rect") return `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}"${s.rx ? ` rx="${s.rx}"` : ""} ${attrs.join(" ")}/>`;
+    if (s.kind === "circle") return `<circle cx="${s.cx}" cy="${s.cy}" r="${s.r}" ${attrs.join(" ")}/>`;
+    if (s.kind === "ellipse") return `<ellipse cx="${s.cx}" cy="${s.cy}" rx="${s.rx}" ry="${s.ry}" ${attrs.join(" ")}/>`;
+    if (s.kind === "path"){
+      const d = s.points.map((p,i) => (i===0?"M":"L") + p[0] + " " + p[1]).join(" ") + (s.closed ? " Z" : "");
+      return `<path d="${d}" ${attrs.join(" ")}/>`;
+    }
+    return "";
+  }).join("");
+}
+
+/* ============================================================
+   Rendering the SVG for previews
+   ============================================================ */
+function renderPreviewSVG(art, viewBox, size){
+  const v = validateArt(art);
+  if (v.error) return `<svg viewBox="${esc(viewBox)}"><text x="12" y="12" font-size="4" fill="#c33">err</text></svg>`;
+  return `<svg viewBox="${esc(viewBox || "0 0 24 24")}" xmlns="http://www.w3.org/2000/svg">${art}</svg>`;
+}
+
+function updatePreviews(){
+  document.querySelectorAll(".preview-svg").forEach(el => {
+    el.innerHTML = renderPreviewSVG(draft.art, draft.viewBox);
+    el.querySelector("svg").style.width = el.dataset.size + "px";
+    el.querySelector("svg").style.height = el.dataset.size + "px";
+  });
+}
+
+/* ============================================================
+   List rendering
+   ============================================================ */
+function renderList(){
+  const custom = library.filter(x => !x.builtin);
+  const built = library.filter(x => x.builtin);
+
+  $("customList").innerHTML = custom.length ? custom.map(rowHtml).join("") :
+    '<div style="padding:6px 10px;font-size:12px;color:#9aa3ad">No custom icons yet. Click "+ New Icon".</div>';
+  $("builtinList").innerHTML = built.map(rowHtml).join("");
+
+  document.querySelectorAll(".icn-row").forEach(el => {
+    el.onclick = () => selectByCode(el.dataset.code);
+  });
+}
+function rowHtml(x){
+  return `<div class="icn-row ${draft && draft.code===x.code ? 'sel':''}" data-code="${esc(x.code)}">
+    <div class="swatch">${renderPreviewSVG(x.art, x.viewBox)}</div>
+    <div class="name">${esc(x.label || x.code)}</div>
+    ${x.builtin ? '<span class="badge builtin">built-in</span>' : ''}
+  </div>`;
+}
+
+function selectByCode(code){
+  const it = library.find(x => x.code === code);
+  if (!it) return;
+  selected = it;
+  draft = JSON.parse(JSON.stringify(it));
+  history = [];
+  $("labelInput").value = draft.label || "";
+  $("codeInput").value = draft.code || "";
+  $("viewBoxInput").value = draft.viewBox || "0 0 24 24";
+  $("saveBtn").disabled = true;
+  render();
+}
+
+/* ============================================================
+   Main render
+   ============================================================ */
+function render(){
+  renderList();
+  if (!draft) return;
+  if (tab === "draw"){ $("editor-inner").hidden = false; $("code-wrap").hidden = true; }
+  else { $("editor-inner").hidden = true; $("code-wrap").hidden = false; }
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  document.querySelectorAll("#toolbar [data-tool]").forEach(b => b.classList.toggle("on", b.dataset.tool === tool));
+
+  if (tab === "draw"){
+    const parsed = artToShapes(draft.art);
+    const canvas = $("svg-canvas");
+    if (parsed.error){
+      $("banner").classList.add("on");
+      $("banner").textContent = parsed.error + " Switch to Code to fix.";
+      canvas.innerHTML = `<text x="50" y="50" text-anchor="middle" font-size="4" fill="#b42318">Invalid SVG</text>`;
+      canvas.classList.add("readonly");
+    } else if (parsed.hasUnsupported){
+      $("banner").classList.add("on");
+      $("banner").textContent = "This icon uses elements the drawing tools don't support (curves, transforms, or other elements). The preview shows it; switch to Code to edit it.";
+      canvas.classList.remove("readonly");
+      canvas.innerHTML = `<g opacity=".85">${draft.art}</g>`;
+      canvas.classList.add("readonly");
+    } else {
+      $("banner").classList.remove("on");
+      canvas.classList.remove("readonly");
+      canvas.innerHTML = `<g opacity=".9">${draft.art}</g>`;
+      bindCanvasHandlers();
+    }
+  } else {
+    $("code-input").value = draft.art || "";
+    const v = validateArt(draft.art);
+    const msg = $("code-msg");
+    if (v.error) { msg.className = "err"; msg.textContent = v.error; }
+    else { msg.className = "ok"; msg.textContent = "Valid."; }
+  }
+  updatePreviews();
+}
+
+/* ============================================================
+   Canvas pointer handling (simplified)
+   The drawing tools work on a 100x100 coordinate system and
+   produce straight-line paths, rectangles, circles, ellipses.
+   ============================================================ */
+function bindCanvasHandlers(){
+  const canvas = $("svg-canvas");
+  canvas.onpointerdown = ev => {
+    if (canvas.classList.contains("readonly")) return;
+    const pt = pointerToSvg(ev, canvas);
+    if (tool === "pen"){
+      // Simple pen: click to add a point to a new path
+      pushHistory();
+      const parsed = artToShapes(draft.art);
+      if (parsed.error || parsed.hasUnsupported) return;
+      const shapes = parsed.shapes;
+      // Add a new tiny path with one point; subsequent clicks extend it
+      shapes.push({ kind:"path", points:[[pt.x, pt.y],[pt.x+0.01, pt.y+0.01]], closed:false, fill:"none", stroke:$("strokeColor").value || "#000", sw:parseFloat($("strokeWidth").value)||1 });
+      draft.art = shapesToArt(shapes);
+      markDirty(); render();
+    } else if (tool === "rect" || tool === "circle"){
+      drag = { kind:tool, start:pt };
+      canvas.setPointerCapture(ev.pointerId);
+    }
+  };
+  canvas.onpointermove = ev => {
+    if (!drag) return;
+    const pt = pointerToSvg(ev, canvas);
+    if (drag.kind === "rect"){
+      const x = Math.min(drag.start.x, pt.x), y = Math.min(drag.start.y, pt.y);
+      const w = Math.abs(pt.x - drag.start.x), h = Math.abs(pt.y - drag.start.y);
+      const parsed = artToShapes(draft.art);
+      if (parsed.error || parsed.hasUnsupported) return;
+      const shapes = parsed.shapes.slice(0, -1);
+      shapes.push({ kind:"rect", x, y, w, h, rx:0, fill:$("fillColor").value||"#000", stroke:$("strokeColor").value||"none", sw:parseFloat($("strokeWidth").value)||0 });
+      draft.art = shapesToArt(shapes);
+      markDirty(); render();
+    } else if (drag.kind === "circle"){
+      const cx = (drag.start.x + pt.x) / 2, cy = (drag.start.y + pt.y) / 2;
+      const r = Math.max(0.5, Math.min(Math.abs(pt.x - drag.start.x)/2, Math.abs(pt.y - drag.start.y)/2));
+      const parsed = artToShapes(draft.art);
+      if (parsed.error || parsed.hasUnsupported) return;
+      const shapes = parsed.shapes.slice(0, -1);
+      shapes.push({ kind:"circle", cx, cy, r, fill:$("fillColor").value||"#000", stroke:$("strokeColor").value||"none", sw:parseFloat($("strokeWidth").value)||0 });
+      draft.art = shapesToArt(shapes);
+      markDirty(); render();
+    }
+  };
+  canvas.onpointerup = () => { drag = null; };
+}
+function pointerToSvg(ev, svg){
+  const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  return { x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 };
+}
+
+/* ============================================================
+   Draft dirtiness and save
+   ============================================================ */
+function markDirty(){
+  $("saveBtn").disabled = false;
+  $("dupeBtn").disabled = !draft;
+}
+function pushHistory(){
+  history.push(draft.art);
+  $("undoBtn").disabled = false;
+}
+
+/* ============================================================
+   Inputs
+   ============================================================ */
+$("labelInput").oninput = e => { draft.label = e.target.value; markDirty(); };
+$("codeInput").oninput  = e => { draft.code = e.target.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,"-"); markDirty(); };
+$("viewBoxInput").oninput = e => { draft.viewBox = e.target.value; markDirty(); render(); };
+
+document.querySelectorAll("#tabs button").forEach(b => {
+  b.onclick = () => { tab = b.dataset.tab; render(); };
+});
+document.querySelectorAll("#toolbar [data-tool]").forEach(b => {
+  b.onclick = () => { tool = b.dataset.tool; document.querySelectorAll("#toolbar [data-tool]").forEach(x => x.classList.toggle("on", x===b)); };
+});
+
+$("code-input").oninput = () => {
+  const val = $("code-input").value;
+  draft.art = val;
+  const v = validateArt(val);
+  const msg = $("code-msg");
+  if (v.error) { msg.className = "err"; msg.textContent = v.error; $("saveBtn").disabled = true; }
+  else { msg.className = "ok"; msg.textContent = "Valid."; $("saveBtn").disabled = false; }
+  updatePreviews();
+};
+
+$("undoBtn").onclick = () => {
+  if (!history.length) return;
+  draft.art = history.pop();
+  $("undoBtn").disabled = !history.length;
+  markDirty(); render();
+};
+
+$("saveBtn").onclick = () => {
+  const v = validateArt(draft.art);
+  if (v.error) { toast(v.error); return; }
+  if (!draft.code) { toast("Give the icon a code."); return; }
+  if (!draft.label) draft.label = draft.code;
+  // duplicates: refuse
+  const dupe = library.find(x => x.code === draft.code && x !== selected);
+  if (dupe) { toast("An icon with that code already exists."); return; }
+  selected = JSON.parse(JSON.stringify(draft));
+  selected.builtin = false;
+  const idx = library.findIndex(x => x.code === selected.code);
+  if (idx >= 0) library[idx] = selected; else library.push(selected);
+  saveLibrary();
+  $("saveBtn").disabled = true;
+  $("dupeBtn").disabled = false;
+  renderList();
+  toast("Saved " + selected.code);
+};
+
+$("newBtn").onclick = () => {
+  let n = 1, code;
+  do { code = "icon-" + String(n).padStart(3,"0"); n++; } while (library.find(x => x.code === code));
+  const it = { code, label:"New Icon", viewBox:"0 0 24 24", art:'<rect x="6" y="6" width="12" height="12" fill="#000"/>', builtin:false, editedIn:"draw" };
+  library.push(it);
+  saveLibrary();
+  selectByCode(code);
+  $("labelInput").focus();
+};
+
+$("dupeBtn").onclick = () => {
+  if (!selected) return;
+  let n = 1, code;
+  do { code = (selected.code || "icon") + "-copy" + (n>1?n:""); n++; } while (library.find(x => x.code === code));
+  const it = { code, label: (selected.label||"") + " copy", viewBox: selected.viewBox, art: selected.art, builtin:false, editedIn:"code" };
+  library.push(it);
+  saveLibrary();
+  selectByCode(code);
+  toast("Duplicated");
+};
+
+$("exportBtn").onclick = () => {
+  const json = JSON.stringify(library.filter(x => !x.builtin), null, 2);
+  const blob = new Blob([json], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "icons.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast("Exported icons.json");
+};
+
+$("resetBtn").onclick = () => {
+  if (!confirm("Reset the library to the built-ins? Custom icons will be lost.")) return;
+  localStorage.removeItem(STORAGE_KEY);
+  library = loadLibrary();
+  selected = library[0]; draft = JSON.parse(JSON.stringify(library[0]));
+  history = [];
+  $("labelInput").value = draft.label;
+  $("codeInput").value = draft.code;
+  $("viewBoxInput").value = draft.viewBox;
+  render();
+  toast("Reset");
+};
+
+/* ============================================================
+   Boot
+   ============================================================ */
+function boot(){
+  renderList();
+  selectByCode(library[0].code);
+}
+let toastTimer = 0;
+function toast(msg){
+  const t = $("toast");
+  t.textContent = msg; t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2200);
+}
+boot();
+</script>
+</body>
+</html>
