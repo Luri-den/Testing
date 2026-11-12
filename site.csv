@@ -20,7 +20,7 @@ YEAR_SLIDER,yes
 OVERLAY_SLIDER,yes
 AERIAL_BUTTON,yes
 MAPS_LINK,yes
-LAYOUT_STYLE,band
+LAYOUT_STYLE,
 EVENT_BUTTON,About
 EVENT_TITLE,What's Going On?
 EVENT_TEXT,"Tap a place. A card slides up from the bottom. Drag the little bar at the top of the card up for a bigger view, or down to dismiss.
