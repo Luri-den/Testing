@@ -148,15 +148,16 @@ const ICONS = {
     <rect x="8" y="52" width="44" height="3" fill="#6b5a45"/>` },
 
   factory: { label: "Factory", vb: "2 -4 52 32", art: `
-    <path d="M4 24 L4 14 L14 18 L14 12 L24 16 L24 10 L34 14 L34 24 Z" fill="#4a4a4a"/>
-    <rect x="4" y="22" width="30" height="4" fill="#2a2a2a"/>
-    <rect x="42" y="6" width="8" height="20" fill="#3a3a3a"/>
-    <rect x="41" y="4" width="10" height="3" fill="#2a2a2a"/>
-    <rect x="8" y="19" width="4" height="3" fill="#f5e6c8"/>
-    <rect x="16" y="19" width="4" height="3" fill="#f5e6c8"/>
+    <path d="M11 24 L11 14 L21 18 L21 12 L31 16 L31 10 L41 14 L41 24 Z" fill="#4a4a4a"/>
+    <rect x="11" y="22" width="30" height="4" fill="#2a2a2a"/>
+    <rect x="41" y="6" width="8" height="20" fill="#3a3a3a"/>
+    <rect x="40" y="4" width="10" height="3" fill="#2a2a2a"/>
+    <rect x="14" y="19" width="4" height="3" fill="#f5e6c8"/>
     <rect x="24" y="19" width="4" height="3" fill="#f5e6c8"/>
-    <g opacity="0.75"><circle cx="46" cy="2" r="2.2" fill="#cfd6df"/><circle cx="50" cy="-1" r="1.6" fill="#cfd6df"/><circle cx="43" cy="-1" r="1.4" fill="#cfd6df"/></g>
-    <rect x="4" y="16" width="30" height="1.5" fill="#E47303"/>` },
+    <rect x="34" y="19" width="4" height="3" fill="#f5e6c8"/>
+    <g opacity="0.75" transform="translate(-1 0)"><circle cx="46" cy="2" r="2.2" fill="#cfd6df"/><circle cx="50" cy="-1" r="1.6" fill="#cfd6df"/><circle cx="43" cy="-1" r="1.4" fill="#cfd6df"/></g>
+    <rect x="11" y="17" width="30" height="1.5" fill="#e47303"/>
+  ` },
 
   trainmodern: { label: "Modern train", vb: "2 4 56 26", scene: "rail", art: `
     <path d="M4 22V12a4 4 0 0 1 4-4h36q12 0 12 10v4z" fill="#dfe3e8"/>
