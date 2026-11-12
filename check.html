@@ -54,6 +54,7 @@ code{background:#eee;padding:1px 4px;border-radius:3px}
 <script src="schedule.js"></script>
 <script src="announcements.js"></script>
 <script src="tour-info.js"></script>
+<script src="media.js"></script>
 <script src="labels.js"></script>
 <script src="marker-fill.js"></script>
 <script src="ets-config.js"></script>
@@ -519,6 +520,34 @@ async function runOnce(){
       if (!Array.isArray(c) || c.length !== 4 || c.some(p => !Array.isArray(p) || p.length !== 2 || p.some(n => !isFinite(n)))) add("problem", "Old maps", ref, "Needs four corners, each a [longitude, latitude] pair.", "Re-place the map in the Overlays editor.");
     });
   }
+  /* audio and video (media.csv) */
+  if (got["media.csv"] && got["media.csv"].text != null) {
+    const WM = "the Audio & Video tab", SEC = "Audio & video", AUDIO = /\.(mp3|m4a|aac|ogg|oga|opus|wav|weba)$/i;
+    const M = parseCsv(SEC, "media.csv", got["media.csv"].text, ["ITEM_ID", "SOURCE"], WM);
+    const known = new Set();
+    [["locations.csv", "ID"], ["childmarkers.csv", "CHILD_ID"], ["spots.csv", "SPOT_ID"]].forEach(([f, col]) => {
+      if (got[f] && got[f].text != null) Papa.parse(got[f].text, { header: true, skipEmptyLines: "greedy" }).data.forEach(r => { if (v(r, col)) known.add(lc(v(r, col))); });
+    });
+    const orders = new Map();
+    M.rows.forEach((r, i) => {
+      const id = v(r, "ITEM_ID"), src = v(r, "SOURCE"), kind = lc(v(r, "KIND")), ref = (id || "row " + (i + 2)) + (v(r, "ORDER") ? " #" + v(r, "ORDER") : "") + (v(r, "TITLE") ? " (" + v(r, "TITLE") + ")" : "");
+      if (!id || !src) { add("problem", SEC, ref, "Has no " + (!id ? "ITEM_ID" : "SOURCE") + ", so it is never shown.", "Fix it or remove it in " + WM + "."); return; }
+      if (known.size && !known.has(lc(id))) add("warn", SEC, ref, "The ID " + id + " is not a place, part of a place, spot or story, so visitors never see this.", "Fix the ID or remove the entry in " + WM + ".");
+      if (kind && kind !== "audio" && kind !== "video") add("warn", SEC, ref, 'KIND "' + v(r, "KIND") + '" should be audio or video.', "Choose it again in " + WM + ".");
+      const isVideo = kind === "video" || (!kind && window.Media && Media.youtubeId(src) && !AUDIO.test(src));
+      if (isVideo) {
+        if (!(window.Media && Media.youtubeId(src))) add("warn", SEC, ref, "The video \"" + src + "\" is not a YouTube link or video code, so visitors will see \"This video could not be found.\"", "Paste the video's YouTube address in " + WM + ".");
+      } else {
+        if (!AUDIO.test(src)) add("warn", SEC, ref, "The audio file \"" + src + "\" does not end in a common audio type (mp3, m4a, aac, ogg, wav).", "MP3 or M4A plays on every phone.");
+        else if (/^(https?:)?\/\//i.test(src)) add("note", SEC, ref, "The audio comes from another website, so it cannot be saved for offline use and depends on that site staying up.", "");
+        else fileJobs.push({ section: SEC, ref, path: src, what: "audio", sev: "problem", fix: "Upload the audio file in " + WM + " and publish, or remove the entry: visitors would see a Listen button that cannot play." });
+        if (/\.wav$/i.test(src)) add("note", SEC, ref, "WAV files are very large. MP3 or M4A is much smaller.", "");
+        if (parseFloat(v(r, "SECONDS")) > 120) add("note", SEC, ref, "This clip is over two minutes. Most visitors stop listening much sooner.", "");
+      }
+      if (!String(r.TRANSCRIPT == null ? "" : r.TRANSCRIPT).trim()) add("note", SEC, ref, "Has no transcript, so visitors who cannot listen or watch have nothing to read.", "Add one in " + WM + ".");
+      const k = lc(id) + "|" + v(r, "ORDER"); if (v(r, "ORDER") && orders.has(k)) add("note", SEC, ref, "Another entry for the same item has the same ORDER number.", ""); orders.set(k, true);
+    });
+  }
   if (!S.WELCOME_THEME) fileJobs.push({ section: "Setup", ref: "welcome1.gif", path: "welcome1.gif", what: "welcome picture", sev: "warn", fix: "Upload welcome1.gif, or pick an animated theme in the Settings editor." });
   fileJobs.push({ section: "Setup", ref: "border.geojson", path: "border.geojson", what: "boundary outline", sev: "warn", fix: "Upload it, or the outline is not drawn." });
   [((window.ETS_CONFIG&&window.ETS_CONFIG.LIVE_PAGE)||"Demo2a.html"),"icons.js","marker-shapes.js","welcome-themes.js"].forEach(f => fileJobs.push({ section: "Setup", ref: f, path: f, what: "page file", sev: "problem", fix: "Upload " + f + " to the top folder of the site." }));
@@ -577,7 +606,7 @@ async function runOnce(){
     if (missing.length) add("warn", "Photos", "small copies", missing.length + " photo" + (missing.length === 1 ? " has" : "s have") + " no small copy (thumbnail), so the map downloads the full photo for each marker: " + missing.slice(0, 3).join(", ") + (missing.length > 3 ? ", ..." : "") + ".", 'In the Places editor, and the Stories & Spots editor, press "Make missing thumbnails", then publish.');
   }
   await pool(fileJobs, 6, async job => {
-    const r = await head(job.section === "Old maps" ? assetUrl(job.path) : job.path);
+    const r = await head(job.section === "Old maps" || job.section === "Audio & video" ? assetUrl(job.path) : job.path);
     if (!r.ok && !r.failed) add(job.sev || "warn", job.section, job.ref, "The " + job.what + ' file "' + job.path + '" was not found.', job.fix || "Upload it, or fix the name.");
     done++; progress();
   });

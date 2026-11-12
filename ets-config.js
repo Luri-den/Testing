@@ -10,7 +10,7 @@ window.ETS_CONFIG = {
     "site.csv", "locations.csv", "childmarkers.csv", "categories.csv",
     "spots.csv", "tours.csv", "tourstops.csv", "lines.geojson",
     "stamps.csv", "tasks.csv", "prizes.csv",
-    "photos.csv", "shapes.csv",
+    "photos.csv", "shapes.csv", "media.csv",
     "overlays.json", "border.geojson"
   ],
 

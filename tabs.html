@@ -113,6 +113,7 @@
     <button class="top-tab active" data-target="p2" data-group="items" data-blurb="Places and the parts that belong to them. Drag pins, edit fields, create new places, set how a stamp is earned, and upload photos. This edits locations.csv and childmarkers.csv.">Places</button>
     <button class="top-tab" data-target="p3" data-group="items" data-blurb="Stories and Spots. Create photo spots for before / after shots and add story pins for historical events. This edits spots.csv.">Spots &amp; Stories</button>
     <button class="top-tab" data-target="p10" data-group="items" data-blurb="QR codes. Make a printable label for a spot, story, place, event or the whole map: a QR code with a caption, a source line (like County Library), your colors, and an optional picture in the middle. Print or save it to put on a sign.">QR Signs</button>
+    <button class="top-tab" data-target="p18" data-group="items" data-blurb="Audio and Video. Attach an audio clip or a YouTube video to any place, spot or story, with a transcript. Visitors see a button only where something is attached, and nothing plays or loads until they press it. Edits media.csv.">Audio &amp; Video</button>
     <button class="top-tab" data-target="p4" data-group="tours" data-blurb="Tours and Trails. Design tours, trails and plain map lines on one screen: draw the route, click markers to add stops, choose how people travel it (walk, hike, bike, drive or virtual), and style the line.">Tours and Trails</button>
     <button class="top-tab" data-target="p1" data-group="look" data-blurb="Change the color and text of the header, the movable map bounds, and the default camera location.">Site Settings</button>
     <button class="top-tab" data-target="p17" data-group="look" data-blurb="Wording. Change any phrase visitors read that the site makes up itself: button names, headings, the time buttons and their order, and how dates are written. Edits labels.csv.">Wording</button>
@@ -150,6 +151,10 @@
 
     <div id="p3" class="page-container">
       <iframe data-src="spots.html"></iframe>
+    </div>
+
+    <div id="p18" class="page-container">
+      <iframe data-src="media.html"></iframe>
     </div>
 
     <div id="p4" class="page-container">
@@ -374,8 +379,8 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------- Publish All ---------- */
   const NOUN = { "locations.csv": "Places", "childmarkers.csv": "Parts of places", "spots.csv": "Spots and stories", "tours.csv": "Tours and trails", "tourstops.csv": "Tour stops",
     "stamps.csv": "Stamps", "tasks.csv": "Tasks", "prizes.csv": "Prizes", "categories.csv": "Categories", "site.csv": "Site settings" };
-  const NICE = { "labels.csv": "Wording", "icons.js": "Icons", "announcements.csv": "Announcements", "lines.geojson": "Drawn lines", "border.geojson": "Boundary line", "overlays.json": "Old maps (overlays)", "settings.json": "Settings" };
-  const isMedia = p => /\.(jpe?g|png|webp|gif|mp4|webm)$/i.test(p);
+  const NICE = { "labels.csv": "Wording", "icons.js": "Icons", "announcements.csv": "Announcements", "lines.geojson": "Drawn lines", "border.geojson": "Boundary line", "overlays.json": "Old maps (overlays)", "settings.json": "Settings", "media.csv": "Audio and video" };
+  const isMedia = p => /\.(jpe?g|png|webp|gif|mp4|webm|mp3|m4a|aac|ogg|oga|opus|wav|weba)$/i.test(p);
   let found = [];
   async function describe(f) {
     const name = f.path.split("/").pop();
@@ -397,11 +402,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // Is this file really different from what is live? Editors hand over their file whether or not you touched it, and
   // they tidy it (line endings, blank new columns, default settings), so compare what matters: the rows, their order, and any filled-in value.
   const norm = t => String(t).replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").trim();
+  const liveText = async path => { try { const r = await fetch(path, { cache: "no-store" }); return r.ok ? await r.text() : null; } catch (e) { return null; } };
   async function isChanged(f) {
     const name = f.path.split("/").pop();
     if (isMedia(name)) return true;
-    let live = null;
-    try { const r = await fetch(f.path, { cache: "no-store" }); if (r.ok) live = await r.text(); } catch (e) {}
+    const live = await liveText(f.path);
     if (live == null) return true;                                   // not on the live site yet
     const nowText = await f.blob.text();
     if (norm(nowText) === norm(live)) return false;
@@ -418,19 +423,68 @@ document.addEventListener("DOMContentLoaded", () => {
     if (nowRows.some(x => !om.has(val(x, key)) || om.get(val(x, key)) !== sig(x))) return true;
     return nowRows.some((x, i) => val(x, key) !== val(oldRows[i], key));   // same rows, different order
   }
-  $("pubScan").onclick = async () => {
+
+  /* Two tabs can hand over the same file (the Places and the Spots & Stories tabs both write photos.csv; the Places and the Passport
+     tabs both write categories.csv). Each holds its own copy of the whole file. Taking the last copy would silently throw away the other
+     tab's edits, so: a tab that did not change the file never wins; and when two tabs both changed it, their changes are combined row by
+     row against the live file (rows are grouped by the first column, such as ITEM_ID). */
+  function mergeCsv(baseText, texts) {
+    const parse = t => Papa.parse(norm(t), { header: true, skipEmptyLines: "greedy" });
+    const B = parse(baseText), C = texts.map(parse), fields = [];
+    C.concat([B]).forEach(p => (p.meta.fields || []).forEach(f => { if (!fields.includes(f)) fields.push(f); }));
+    if (!fields.length) return null;
+    const key = fields[0], val = (x, c) => String(x[c] == null ? "" : x[c]).trim();
+    const blank = x => fields.slice(1).every(c => !val(x, c));
+    const group = p => { const m = new Map(); (p.data || []).forEach(x => { if (blank(x)) return; const k = val(x, key); if (!m.has(k)) m.set(k, []); m.get(k).push(x); }); return m; };
+    const sig = g => g ? JSON.stringify(g.map(x => fields.map(c => val(x, c)))) : null;
+    const bg = group(B), cg = C.map(group), order = [...bg.keys()];
+    cg.forEach(m => m.forEach((_, k) => { if (!order.includes(k)) order.push(k); }));
+    const rows = [], conflicts = [];
+    order.forEach(k => {
+      const bs = sig(bg.get(k)), cs = cg.map(m => sig(m.get(k))), diff = cs.map((_, i) => i).filter(i => cs[i] !== bs);
+      let pick = bg.get(k);
+      if (diff.length) { pick = cg[diff[0]].get(k); if (diff.some(i => cs[i] !== cs[diff[0]])) conflicts.push(k); }
+      (pick || []).forEach(x => rows.push(x));
+    });
+    return { text: Papa.unparse({ fields, data: rows.map(x => Object.fromEntries(fields.map(c => [c, x[c] == null ? "" : x[c]]))) }), conflicts };
+  }
+  async function resolveFile(path, arr, notes) {
+    if (arr.length === 1) return arr[0].x;
+    const flags = await Promise.all(arr.map(c => isChanged(c.x))), changed = arr.filter((c, i) => flags[i]);
+    if (!changed.length) return arr[0].x;                                   // nobody really changed it
+    if (changed.length === 1) return changed[0].x;                          // one tab changed it; the others just carried the old copy
+    const texts = await Promise.all(changed.map(c => c.x.blob.text()));
+    if (texts.every(t => norm(t) === norm(texts[0]))) return changed[0].x;
+    const name = path.split("/").pop(), who = changed.map(c => c.tab).join(" and "), live = await liveText(path);
+    if (/\.csv$/i.test(name) && live != null) {
+      const m = mergeCsv(live, texts);
+      if (m) {
+        notes.push(name + ": " + who + " both changed it, so their changes were combined." + (m.conflicts.length ? " \u26A0 Both changed " + m.conflicts.slice(0, 4).join(", ") + (m.conflicts.length > 4 ? ", ..." : "") + " differently: the " + changed[0].tab + " version of those was used. Please check them." : ""));
+        return { name: changed[0].x.name, path, blob: new Blob([m.text], { type: "text/csv" }) };
+      }
+    }
+    notes.push("\u26A0 " + name + ": " + who + " both changed it and the changes could not be combined. The " + changed[0].tab + " version will be published. Publish one tab's edits first, then the other's.");
+    return changed[0].x;
+  }
+  let scanRun = null;
+  $("pubScan").onclick = () => scanRun || (scanRun = scanAll().finally(() => { scanRun = null; }));   // pressing it again while it works just waits for the same scan
+  const scanAll = async () => {
     $("pubMsg").textContent = "Gathering changes from every tab\u2026"; $("pubSummary").textContent = ""; $("pubGo").disabled = true;
-    const files = {};
-    const lists = await Promise.all([...document.querySelectorAll(".page-container iframe")].map(async f => {
+    const frames = [...document.querySelectorAll(".page-container iframe")];
+    const lists = await Promise.all(frames.map(async f => {
       try { const w = f.contentWindow; return (w.GHPublish && w.GHPublish.collect) ? await w.GHPublish.collect() : []; } catch (e) { return []; }
     }));
-    lists.forEach(l => l.forEach(x => { files[x.path] = x; }));
-    found = Object.values(files);
+    const tabOf = f => { const c = f.closest(".page-container"), b = c && document.querySelector('.top-tab[data-target="' + c.id + '"]'); return b ? b.textContent.trim() : "another tab"; };
+    const cand = {}, notes = [];
+    lists.forEach((l, i) => l.forEach(x => (cand[x.path] = cand[x.path] || []).push({ x, tab: tabOf(frames[i]) })));
+    found = [];
+    for (const path of Object.keys(cand)) found.push(await resolveFile(path, cand[path], notes));
     const real = await Promise.all(found.map(isChanged));
     found = found.filter((f, i) => real[i]);
     if (!found.length) { $("pubMsg").textContent = "Nothing to publish. Everything in the editors already matches the live site."; $("pubSummary").textContent = ""; return; }
     const lines = (await Promise.all(found.map(describe))).filter(Boolean), media = found.filter(f => isMedia(f.path)).length;
     if (media) lines.push(media + " photo or media file" + (media === 1 ? "" : "s") + " added or replaced");
+    notes.forEach(n => lines.push(n));
     $("pubSummary").innerHTML = "<b>These changes are ready:</b><ul>" + lines.map(l => "<li>" + esc(l) + "</li>").join("") + "</ul><details><summary>Files (" + found.length + ")</summary>" + found.map(f => esc(f.path)).join("<br>") + "</details>";
     $("pubMsg").textContent = ""; $("pubGo").disabled = false;
   };

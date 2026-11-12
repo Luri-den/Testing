@@ -7,10 +7,11 @@
      photos, icons, videos ............... shown from the saved copy at once, and refreshed in the background
      map background tiles ................ saved copy first; only the most recent 500 are kept
      very large files (over 4 MB) ........ never saved here (the old-map pictures), so they cannot fill a phone
-     audio and video seeking ............. left to the browser (these are "range" requests and cannot be saved in pieces)
+     audio clips ......................... kept like photos, and played from the saved copy in pieces (so they start, skip and play offline)
+     video seeking ....................... left to the browser (range requests are not saved)
 */
 
-const VERSION = "v8-2026-11";
+const VERSION = "v9-2026-11";
 const SHELL_CACHE = "shell-" + VERSION;
 const IMG_CACHE   = "img-" + VERSION;
 const TILE_CACHE  = "tiles-" + VERSION;
@@ -25,12 +26,13 @@ const SHELL = [
   "./",
   "Demo2a.html",
   "welcome-themes.js", "marker-shapes.js", "marker-fill.js",
-  "schedule.js", "announcements.js", "labels.js", "tour-camera.js", "tour-info.js", "here.js", "ets-config.js", "icons.js", "lines-style.js", "spot-markers.js",
+  "schedule.js", "announcements.js", "labels.js", "tour-camera.js", "tour-info.js", "here.js", "media.js", "ets-config.js", "icons.js", "lines-style.js", "spot-markers.js",
   "manifest.json"
 ];
 
 const isTile  = url => /tile\.openstreetmap\.org|basemap\.nationalmap\.gov|arcgis\.com\/.*Imagery/.test(url);
-const isImage = path => /\.(jpe?g|png|webp|gif|svg|ico|mp4|webm|mp3|m4a|ogg)$/i.test(path);
+const isAudio = path => /\.(mp3|m4a|aac|ogg|oga|opus|wav|weba)$/i.test(path);
+const isImage = path => /\.(jpe?g|png|webp|gif|svg|ico|mp4|webm)$/i.test(path) || isAudio(path);
 
 /* ---------- helpers (kept simple so they can be tested on their own) ---------- */
 
@@ -60,6 +62,23 @@ function fetchWithin(request, ms) {
   });
 }
 
+// A saved audio clip, cut to the piece the player asked for. If the clip is not saved, the network answers the request itself.
+async function rangeFromSaved(req) {
+  const cache = await caches.open(IMG_CACHE);
+  const hit = await cache.match(req.url);
+  if (!hit) return fetch(req);
+  const blob = await hit.blob(), size = blob.size, m = /bytes=(\d*)-(\d*)/.exec(req.headers.get("range") || "");
+  let start = 0, end = size - 1;
+  if (m) {
+    if (m[1] !== "") { start = +m[1]; if (m[2] !== "") end = Math.min(+m[2], size - 1); }
+    else if (m[2] !== "") start = Math.max(0, size - +m[2]);                // "the last N bytes"
+  }
+  if (start >= size || start > end) return new Response(null, { status: 416, headers: { "Content-Range": "bytes */" + size } });
+  return new Response(blob.slice(start, end + 1), { status: 206, statusText: "Partial Content", headers: {
+    "Content-Type": hit.headers.get("Content-Type") || blob.type || "audio/mpeg", "Content-Range": "bytes " + start + "-" + end + "/" + size,
+    "Content-Length": String(end - start + 1), "Accept-Ranges": "bytes" } });
+}
+
 /* ---------- install / activate ---------- */
 
 self.addEventListener("install", e => {
@@ -84,8 +103,11 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET") return;
-  if (req.headers.has("range")) return;                                       // audio and video seeking: the browser handles it
   const url = new URL(req.url);
+  if (req.headers.has("range")) {                                             // audio and video ask for pieces so they can start and skip around
+    if (url.origin === location.origin && isAudio(url.pathname)) e.respondWith(rangeFromSaved(req));   // a saved clip is served in pieces, so it plays offline
+    return;                                                                   // anything else: the browser handles it
+  }
 
   // Map background tiles: saved copy first, then the network; keep the newest 500
   if (isTile(req.url)) {

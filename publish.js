@@ -135,7 +135,15 @@
     }
     return origClick.apply(this, arguments);
   };
-  async function capture(ids) {
+  /* Handing files over uses one shared slot (armed), so two requests at the same moment (the hub's automatic scan and a press of "check again",
+     or two Publish buttons) would steal each other's files and one would find nothing. They now wait their turn. */
+  let captureChain = Promise.resolve();
+  function capture(ids) {
+    const run = captureChain.then(() => captureNow(ids));
+    captureChain = run.catch(() => {});
+    return run;
+  }
+  async function captureNow(ids) {
     let list;
     armed = [];
     try {
@@ -154,7 +162,7 @@
   /* ---------- Design Event mode: everything goes into events/<name>/ ---------- */
   const WS = () => (window.Workspace && Workspace.current && Workspace.current()) ? { slug: Workspace.current(), dir: "events/" + Workspace.current() + "/" } : null;
   const prefixPath = pth => { const w = WS(); if (!w) return pth; pth = String(pth || "").replace(/^\/+/, ""); return pth.startsWith(w.dir) ? pth : w.dir + pth; };
-  const FALLBACK_DATA = ["site.csv","locations.csv","childmarkers.csv","categories.csv","spots.csv","tours.csv","tourstops.csv","lines.geojson","stamps.csv","tasks.csv","prizes.csv","photos.csv","shapes.csv","overlays.json","border.geojson"];
+  const FALLBACK_DATA = ["site.csv","locations.csv","childmarkers.csv","categories.csv","spots.csv","tours.csv","tourstops.csv","lines.geojson","stamps.csv","tasks.csv","prizes.csv","photos.csv","shapes.csv","overlays.json","border.geojson","media.csv"];
   const dataFiles = () => (window.ETS_CONFIG && window.ETS_CONFIG.DATA) || FALLBACK_DATA;   // the list lives in ets-config.js
   // keep the event's event.json in step: which data files and photo folders it really holds (the map reads only what is listed)
   async function eventInfoUpdate(baseTree, chosen) {
@@ -166,7 +174,7 @@
     const old = entries.find(x => x.path === path);
     if (old) { try { const b = await api("/git/blobs/" + old.sha); info = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b.content.replace(/\s/g, "")), c => c.charCodeAt(0)))); } catch (e) { info = {}; } }
     info.data = dataFiles().filter(f => have.has(w.dir + f));
-    info.folders = ["photos", "spots", "stories", "anims"].filter(f => [...have].some(q => q.startsWith(w.dir + f + "/")));
+    info.folders = ["photos", "spots", "stories", "anims", "audio"].filter(f => [...have].some(q => q.startsWith(w.dir + f + "/")));
     info.files = [...have].filter(q => q.startsWith(w.dir) && q !== path).length;
     info.updated = new Date().toISOString();
     if (!info.name) info.name = w.slug;
@@ -177,6 +185,7 @@
   function defaultRoute(name) {
     const ext = (name.split(".").pop() || "").toLowerCase();
     if (["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) return "photos/" + name;
+    if (["mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "weba"].includes(ext)) return "audio/" + name;
     if (["mp4", "webm", "mov"].includes(ext)) return "anims/" + name;
     return name;                                // csv, json, geojson: top folder
   }
@@ -371,5 +380,5 @@
   function pending() { return registry.some(r => r.ids.some(id => { const b = document.getElementById(id); return !!b && !b.disabled; })); }
   const hasToken = () => !!getToken() && !!settings().owner && !!settings().repo;
 
-  window.GHPublish = { attach, publish, settingsDialog, listFiles, settings, collect, finish, pending, hasToken, api, branchName };
+  window.GHPublish = { attach, publish, settingsDialog, listFiles, settings, collect, finish, pending, hasToken, api, branchName, KEYS: { settings: SKEY, token: TKEY } };
 })();

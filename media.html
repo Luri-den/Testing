@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audio and Video Editor</title>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script src="editor-common.js"></script>
+<script>Workspace.install();</script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:Arial,sans-serif;color:#222}
+body{display:flex;flex-direction:column}
+header{background:#333;color:#fff;padding:8px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+header h1{font-size:17px;margin:0 8px 0 0}
+button{font:inherit;font-size:13px;padding:7px 11px;border:0;border-radius:4px;background:#fff;color:#222;cursor:pointer}
+button:hover{background:#eee}
+button.go{background:#28a745;color:#fff;font-weight:bold}
+button.go:hover{background:#218838}
+button.danger{color:#b3261e}
+button.small{padding:4px 8px;font-size:12px;border:1px solid #bbb}
+button:disabled{opacity:.4;cursor:not-allowed}
+#status{background:#fff3cd;color:#664d03;padding:6px 12px;font-size:13px;border-bottom:1px solid #e6d9a2}
+#status:empty{display:none}
+main{flex:1;display:flex;min-height:0}
+#side{width:310px;flex:none;display:flex;flex-direction:column;border-right:1px solid #ddd;background:#fafafa;min-height:0}
+#tools{padding:8px 10px;border-bottom:1px solid #e5e5e5}
+#tools input[type=search]{width:100%;padding:7px;font:inherit;font-size:14px;border:1px solid #bbb;border-radius:4px}
+#tools label{display:flex;gap:6px;align-items:center;font-size:13px;margin-top:6px;font-weight:normal}
+#list{flex:1;overflow:auto}
+#form{flex:1;overflow:auto;padding:14px 18px 40px;max-width:780px}
+.item{display:block;width:100%;text-align:left;background:#fff;border:0;border-bottom:1px solid #e5e5e5;border-left:6px solid #ccc;border-radius:0;padding:9px 12px}
+.item.sel{background:#eef5ff;border-left-color:#0072B2}
+.item.has{border-left-color:#28a745}
+.item.gone{border-left-color:#b3261e;background:#fdf1f1}
+.item b{display:block;font-size:14px}
+.item small{display:block;color:#666;margin-top:2px;font-size:12px}
+.item .badge{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#e3f6e8;color:#0e5a24;font-size:12px;font-weight:bold}
+.empty{padding:16px;color:#555;font-size:14px;line-height:1.55}
+h2{font-size:16px;margin:0 0 4px}
+.sub{color:#666;font-size:13px;margin:0 0 12px}
+label.f{display:block;font-size:12px;font-weight:bold;margin:10px 0 3px;color:#555}
+input[type=text],input[type=url],textarea{width:100%;padding:7px;font:inherit;font-size:14px;border:1px solid #bbb;border-radius:4px;background:#fff}
+textarea{min-height:84px;resize:vertical}
+.hint{font-size:12px;color:#666;margin:3px 0 0;line-height:1.4}
+.card{margin:14px 0;padding:12px 14px;border:1px solid #cfd8e3;border-radius:8px;background:#f6f9fc}
+.card .head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.card .head b{flex:1}
+.kind{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:bold;background:#e7eef8;color:#0b3a5c}
+.meta{font-size:12px;color:#555;margin:2px 0 6px}
+.note{margin:6px 0 0;padding:6px 9px;border-radius:4px;background:#fff3cd;color:#664d03;font-size:12.5px;line-height:1.4}
+.note.bad{background:#f8d7da;color:#842029}
+.note.ok{background:#e3f6e8;color:#0e5a24}
+.adds{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;margin:12px 0}
+.adds>div{flex:1;min-width:250px;padding:10px 12px;border:1px dashed #9db3cc;border-radius:8px;background:#fff}
+.adds .row{display:flex;gap:6px}
+.adds .row input{flex:1}
+audio{display:block;width:100%;margin:6px 0}
+.help{background:#eef5ff;border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.55}
+.help ul{margin:6px 0 0;padding-left:20px}
+@media(max-width:700px){main{flex-direction:column}#side{width:auto;max-height:38vh;border-right:0;border-bottom:1px solid #ddd}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Audio &amp; Video</h1>
+  <span style="flex:1"></span>
+  <button id="dlAudio" type="button" disabled>Download audio files</button>
+  <button id="dlBtn" type="button" class="go" disabled>Download Updated media.csv</button>
+</header>
+<div id="status"></div>
+<main>
+  <div id="side">
+    <div id="tools">
+      <input type="search" id="q" placeholder="Search places, spots and stories" aria-label="Search places, spots and stories">
+      <label><input type="checkbox" id="only"> Only items that have audio or video</label>
+    </div>
+    <div id="list"></div>
+  </div>
+  <div id="form"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="media.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const str = v => String(v == null ? "" : v).trim();
+const AUDIO_EXT = ["mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "weba"];
+const COLS = ["ITEM_ID", "ORDER", "KIND", "SOURCE", "TITLE", "TRANSCRIPT", "CREDIT", "SECONDS"];
+
+let ITEMS = [];            // everything a clip can be attached to: { id, name, sub }
+let ROWS = [];             // the clips and videos being edited: { item, kind, source, title, transcript, credit, seconds, extra }
+let EXTRA = [];            // any other columns the file had, kept as they were
+let STAGED = {};           // audio files chosen here and not published yet: file name -> File
+let SEL = "";
+
+function setStatus(t) { $("status").textContent = t || ""; }
+const dirHere = () => (window.Workspace && Workspace.dir) || "";
+const previewUrl = r => STAGED[r.source.replace(/^audio\//, "")] ? URL.createObjectURL(STAGED[r.source.replace(/^audio\//, "")]) : dirHere() + r.source;
+
+/* ---------- loading ---------- */
+async function getCsv(name) {
+  try { const r = await fetch(name, { cache: "no-store" }); if (!r.ok) return { rows: [], fields: [] }; const p = Papa.parse((await r.text()).replace(/^\uFEFF/, ""), { header: true, skipEmptyLines: "greedy" }); return { rows: p.data, fields: p.meta.fields || [] }; }
+  catch (e) { return { rows: [], fields: [] }; }
+}
+async function init() {
+  if (!window.Papa) { setStatus("The page could not load its spreadsheet reader. Check your internet connection and reload."); return; }
+  const [locs, kids, spots, media] = await Promise.all([getCsv("locations.csv"), getCsv("childmarkers.csv"), getCsv("spots.csv"), getCsv("media.csv")]);
+  ITEMS = locs.rows.map(r => ({ id: str(r.ID), name: str(r.NAME), sub: "place" }))
+    .concat(kids.rows.map(r => ({ id: str(r.CHILD_ID), name: str(r.NAME), sub: "part of " + str(r.PARENT_ID) })))
+    .concat(spots.rows.map(r => ({ id: str(r.SPOT_ID), name: str(r.TITLE), sub: str(r.KIND).toLowerCase() === "story" ? "story" : "photo spot" })))
+    .filter(x => x.id);
+  EXTRA = (media.fields || []).filter(f => !COLS.includes(f));
+  ROWS = media.rows.map(r => ({
+    item: str(r.ITEM_ID), kind: Media.kindOf(r),
+    source: str(r.SOURCE), title: str(r.TITLE), transcript: String(r.TRANSCRIPT == null ? "" : r.TRANSCRIPT).trim(), credit: str(r.CREDIT), seconds: parseFloat(r.SECONDS) || 0,
+    extra: Object.fromEntries(EXTRA.map(f => [f, r[f] == null ? "" : r[f]]))
+  })).filter(r => r.item && r.source);
+  const known = new Set(ITEMS.map(x => x.id.toLowerCase()));
+  [...new Set(ROWS.map(r => r.item))].filter(id => !known.has(id.toLowerCase())).forEach(id => ITEMS.push({ id, name: "(not found)", sub: "this ID is not in your places, spots or stories", gone: true }));
+  $("dlBtn").disabled = false;
+  if (!ITEMS.length) setStatus("No places, spots or stories were found next to this page, so there is nothing to attach audio or video to yet.");
+  renderList(); renderForm();
+}
+
+/* ---------- the list ---------- */
+const forItem = id => ROWS.filter(r => r.item.toLowerCase() === id.toLowerCase());
+function renderList() {
+  const q = $("q").value.trim().toLowerCase(), only = $("only").checked;
+  const list = ITEMS.filter(x => (!only || forItem(x.id).length) && (!q || (x.id + " " + x.name + " " + x.sub).toLowerCase().includes(q)));
+  $("list").innerHTML = list.length ? list.map(x => {
+    const n = forItem(x.id), a = n.filter(r => r.kind === "audio").length, v = n.length - a;
+    return '<button type="button" class="item' + (x.id === SEL ? " sel" : "") + (n.length ? " has" : "") + (x.gone ? " gone" : "") + '" data-id="' + esc(x.id) + '"><b>' + esc(x.name || x.id) +
+      (n.length ? '<span class="badge">' + (a ? a + " audio" : "") + (a && v ? ", " : "") + (v ? v + " video" : "") + "</span>" : "") + '</b><small>' + esc(x.id) + " \u00b7 " + esc(x.sub) + "</small></button>";
+  }).join("") : '<div class="empty">Nothing matches.</div>';
+  $("list").querySelectorAll(".item").forEach(b => b.onclick = () => { SEL = b.dataset.id; renderList(); renderForm(); });
+}
+$("q").oninput = renderList; $("only").onchange = renderList;
+
+/* ---------- the form for one item ---------- */
+function help() {
+  return '<div class="help"><b>How audio and video work for visitors</b><ul>' +
+    "<li>A visitor sees a Listen or Watch button <b>only</b> on a place, spot or story that has something attached here.</li>" +
+    "<li>Nothing plays by itself, and nothing downloads (no audio, and nothing from YouTube) until the visitor presses the button.</li>" +
+    "<li>Add a <b>transcript</b> for every clip, so visitors who cannot listen can read it.</li>" +
+    "<li>Recording: use your phone's voice recorder, speak close to the microphone, and keep a clip to about a minute. MP3 or M4A files are best.</li>" +
+    "<li>Choose an item on the left to begin.</li></ul></div>";
+}
+function sizeNote(r) {
+  const out = [];
+  const f = STAGED[r.source.replace(/^audio\//, "")];
+  if (f) {
+    if (f.size > 4 * 1024 * 1024) out.push(['bad', "This file is " + (f.size / 1048576).toFixed(1) + " MB. Over 4 MB it cannot be saved for offline use, and it is slow on a phone. Record shorter, or save it at a lower quality (64 kbps mono is plenty for speech)."]);
+    else if (f.size > 1.5 * 1048576) out.push(['', "This file is " + (f.size / 1048576).toFixed(1) + " MB, which is large for a short clip. A lower quality (64 kbps mono) would be much smaller."]);
+    if (/\.wav$/i.test(f.name)) out.push(['', "WAV files are very large. Most phones can save a recording as MP3 or M4A instead."]);
+  }
+  if (r.seconds > 120) out.push(['', "This clip is over two minutes. Most visitors stop listening much sooner; consider splitting it."]);
+  return out;
+}
+function entryCard(r, i, total) {
+  const isAudio = r.kind === "audio", id = isAudio ? "" : Media.youtubeId(r.source);
+  const f = isAudio ? STAGED[r.source.replace(/^audio\//, "")] : null;
+  let notes = isAudio ? sizeNote(r) : (id ? [['ok', "YouTube video found (" + id + ")."]] : [['bad', "This is not a YouTube link or video code, so visitors will see \u201cThis video could not be found.\u201d"]]);
+  if (!r.transcript) notes.push(['', "No transcript yet. A transcript lets visitors who cannot listen or watch read it."]);
+  return '<div class="card" data-i="' + i + '"><div class="head"><span class="kind">' + (isAudio ? "Audio" : "Video") + "</span><b>" + esc(r.title || (isAudio ? "Audio clip" : "Video")) + "</b>" +
+    '<button type="button" class="small" data-act="up"' + (i === 0 ? " disabled" : "") + ' aria-label="Move up">\u2191</button>' +
+    '<button type="button" class="small" data-act="down"' + (i === total - 1 ? " disabled" : "") + ' aria-label="Move down">\u2193</button>' +
+    '<button type="button" class="small danger" data-act="del">Remove</button></div>' +
+    (isAudio ? '<div class="meta">' + esc(r.source) + (r.seconds ? " \u00b7 " + Media.clock(r.seconds) : "") + (f ? " \u00b7 " + (f.size / 1024).toFixed(0) + " KB \u00b7 not published yet" : "") + "</div>" +
+      '<audio controls preload="none" src="' + esc(previewUrl(r)) + '" aria-label="Preview"></audio>' +
+      '<label class="f" for="rep' + i + '">Replace the file</label><input type="file" id="rep' + i + '" data-act="rep" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav">'
+      : '<label class="f" for="src' + i + '">YouTube link or video code</label><input type="text" id="src' + i + '" data-f="source" value="' + esc(r.source) + '" placeholder="https://youtu.be/...">' +
+        (id ? '<p class="hint"><a href="https://www.youtube.com/watch?v=' + esc(id) + '" target="_blank" rel="noopener">Open it on YouTube to check it</a></p>' : "")) +
+    '<label class="f" for="ttl' + i + '">Title (shown above the button)</label><input type="text" id="ttl' + i + '" data-f="title" value="' + esc(r.title) + '">' +
+    '<label class="f" for="trn' + i + '">Transcript (the words, shown under the player)</label><textarea id="trn' + i + '" data-f="transcript">' + esc(r.transcript) + "</textarea>" +
+    '<p class="hint">Leave a blank line between paragraphs.</p>' +
+    '<label class="f" for="crd' + i + '">Credit (who made it)</label><input type="text" id="crd' + i + '" data-f="credit" value="' + esc(r.credit) + '" placeholder="Narrated by ...">' +
+    '<div data-notes>' + notes.map(n => '<div class="note ' + n[0] + '">' + esc(n[1]) + "</div>").join("") + "</div></div>";
+}
+function renderForm() {
+  const box = $("form");
+  const it = ITEMS.find(x => x.id === SEL);
+  if (!it) { box.innerHTML = help(); syncButtons(); return; }
+  const mine = ROWS.filter(r => r.item.toLowerCase() === it.id.toLowerCase());
+  box.innerHTML = "<h2>" + esc(it.name || it.id) + '</h2><p class="sub">' + esc(it.id) + " \u00b7 " + esc(it.sub) + "</p>" +
+    (it.gone ? '<div class="note bad">No place, spot or story has this ID any more, so visitors never see these. Remove them, or fix the ID in the file.</div>' : "") +
+    (it.gone ? "" : '<div class="adds"><div><b>Add an audio clip</b><p class="hint">MP3 or M4A is best. Choose a file from this computer or phone.</p><input type="file" id="addAudio" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav" aria-label="Add an audio clip"></div>' +
+      '<div><b>Add a YouTube video</b><p class="hint">Paste the video\'s address. It loads only when a visitor presses the button.</p><div class="row"><input type="url" id="addVideo" placeholder="https://youtu.be/..." aria-label="YouTube address"><button type="button" id="addVideoBtn" class="small">Add</button></div><div id="vmsg"></div></div></div>') +
+    (mine.length ? mine.map((r, i) => entryCard(r, i, mine.length)).join("") : (it.gone ? "" : '<p class="sub">Nothing is attached yet, so visitors see no audio or video button here.</p>'));
+  wire(it, mine); syncButtons();
+}
+function wire(it, mine) {
+  const box = $("form");
+  if ($("addAudio")) $("addAudio").onchange = e => { const f = e.target.files[0]; if (f) addAudioFile(it, f, null); };
+  if ($("addVideoBtn")) $("addVideoBtn").onclick = () => {
+    const v = $("addVideo").value, id = Media.youtubeId(v);
+    if (!id) { $("vmsg").innerHTML = '<div class="note bad">That is not a YouTube link or video code.</div>'; return; }
+    ROWS.push({ item: it.id, kind: "video", source: "https://youtu.be/" + id, title: "", transcript: "", credit: "", seconds: 0, extra: {} }); touched(); renderList(); renderForm();
+  };
+  box.querySelectorAll(".card").forEach(card => {
+    const r = mine[+card.dataset.i];
+    card.querySelectorAll("[data-f]").forEach(inp => inp.oninput = () => {
+      r[inp.dataset.f] = inp.value; touched();
+      if (inp.dataset.f === "title") card.querySelector(".head b").textContent = inp.value || (r.kind === "audio" ? "Audio clip" : "Video");
+      if (inp.dataset.f === "source") { const ok = !!Media.youtubeId(inp.value); card.querySelector("[data-notes]").insertAdjacentHTML("afterbegin", ""); card.querySelector("[data-notes]").innerHTML = ok ? '<div class="note ok">YouTube video found (' + esc(Media.youtubeId(inp.value)) + ").</div>" : '<div class="note bad">This is not a YouTube link or video code.</div>'; }
+    });
+    card.querySelectorAll("[data-act]").forEach(b => {
+      const act = b.dataset.act;
+      if (act === "rep") b.onchange = e => { const f = e.target.files[0]; if (f) addAudioFile(it, f, r); };
+      else b.onclick = () => {
+        const at = ROWS.indexOf(r);
+        if (act === "del") { if (!confirm("Remove this " + (r.kind === "audio" ? "audio clip" : "video") + " from " + (it.name || it.id) + "?")) return; ROWS.splice(at, 1); }
+        else { const sib = mine[+card.dataset.i + (act === "up" ? -1 : 1)], to = ROWS.indexOf(sib); ROWS[at] = sib; ROWS[to] = r; }
+        touched(); renderList(); renderForm();
+      };
+    });
+  });
+}
+function touched() { $("dlBtn").disabled = false; document.dispatchEvent(new Event("input")); }   // tells the hub there is something to publish
+
+/* ---------- adding an audio file ---------- */
+function addAudioFile(it, file, replacing) {
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  if (!AUDIO_EXT.includes(ext)) { setStatus("That file type (." + ext + ") is not one of the audio types visitors' phones play: " + AUDIO_EXT.join(", ") + "."); return; }
+  setStatus("");
+  const safe = it.id.replace(/[^A-Za-z0-9_-]/g, "") || "clip", rand = Math.random().toString(36).slice(2, 6);
+  const name = safe + "-" + rand + "." + ext;                           // a new name each time, so a replaced clip is never mistaken for the old one
+  STAGED[name] = file;
+  const row = replacing || { item: it.id, kind: "audio", source: "", title: file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " "), transcript: "", credit: "", seconds: 0, extra: {} };
+  if (replacing) { const old = row.source.replace(/^audio\//, ""); if (STAGED[old] && !ROWS.some(x => x !== row && x.source === row.source)) delete STAGED[old]; }
+  row.source = "audio/" + name; row.seconds = 0;
+  if (!replacing) ROWS.push(row);
+  const a = new Audio(), u = URL.createObjectURL(file);
+  a.preload = "metadata";
+  a.onloadedmetadata = () => { row.seconds = isFinite(a.duration) ? Math.round(a.duration * 10) / 10 : 0; URL.revokeObjectURL(u); if (SEL === it.id) renderForm(); };
+  a.onerror = () => { URL.revokeObjectURL(u); setStatus("This browser could not read that audio file, so its length is unknown. It may still play for visitors."); };
+  a.src = u;
+  touched(); renderList(); renderForm();
+}
+
+/* ---------- saving ---------- */
+function csvText() {
+  const order = ITEMS.map(x => x.id.toLowerCase()), seen = new Map();
+  ROWS.forEach(r => { const k = r.item.toLowerCase(); (seen.get(k) || seen.set(k, []).get(k)).push(r); });
+  const keys = [...seen.keys()].sort((a, b) => { const x = order.indexOf(a), y = order.indexOf(b); return (x < 0 ? 1e9 : x) - (y < 0 ? 1e9 : y); });
+  const data = [];
+  keys.forEach(k => seen.get(k).forEach((r, i) => {
+    const o = { ITEM_ID: r.item, ORDER: String(i + 1), KIND: r.kind, SOURCE: r.source, TITLE: r.title, TRANSCRIPT: r.transcript, CREDIT: r.credit, SECONDS: r.seconds ? String(r.seconds) : "" };
+    EXTRA.forEach(f => { o[f] = r.extra && r.extra[f] != null ? r.extra[f] : ""; });
+    data.push(o);
+  }));
+  return Papa.unparse({ fields: COLS.concat(EXTRA), data });
+}
+const usedStaged = () => Object.keys(STAGED).filter(n => ROWS.some(r => r.source === "audio/" + n));
+function syncButtons() { const n = usedStaged().length; $("dlAudio").disabled = !n; $("dlAudio").textContent = n ? "Download " + n + " audio file" + (n === 1 ? "" : "s") : "Download audio files"; }
+function save(name, blob) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500); }
+$("dlBtn").onclick = () => save("media.csv", new Blob([csvText()], { type: "text/csv;charset=utf-8" }));
+$("dlAudio").onclick = () => usedStaged().forEach(n => save(n, STAGED[n]));
+
+/* the hub can open this tab on a particular item */
+window.addEventListener("message", e => { if (e.origin === location.origin && e.data && e.data.type === "ets-select" && e.data.id) { SEL = String(e.data.id); renderList(); renderForm(); } });
+init();
+</script>
+<script src="publish.js"></script>
+<script>GHPublish.attach({ buttons: ["dlBtn", "dlAudio"], onPublished: () => { STAGED = {}; syncButtons(); renderForm(); } });</script>
+</body>
+</html>

@@ -783,6 +783,21 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
 .hereLine .harrow{display:inline-block;font-size:20px;line-height:1;flex:none;transition:transform .3s}
 .hereLine.arrived{background:#e3f6e8;color:#0e5a24;font-weight:600}
 @media (prefers-reduced-motion:reduce){.heredot::after{animation:none;opacity:0}.hereLine .harrow{transition:none}}
+/* ---- audio and video ---- */
+.mediaBox{margin:10px 0}
+.mediaBox[hidden]{display:none}
+.mItem{margin:0 0 12px;padding:10px 12px;border:1px solid #cfd8e3;border-radius:10px;background:#f6f9fc}
+.mItem .mTitle{display:block;margin:0 0 6px;font-size:15px}
+.mGo{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:8px 16px;border:0;border-radius:999px;background:var(--ets-accent,#B45309);color:var(--ets-on-accent,#fff);font-size:15px;font-weight:600;cursor:pointer}
+.mGo .mIcon{font-size:13px}
+.mItem audio{display:block;width:100%;margin:2px 0 4px}
+.mItem .mFrame{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:8px;overflow:hidden}
+.mItem .mFrame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.mItem .mNote,.mItem .mCredit{display:block;margin-top:6px;font-size:12px;color:#555}
+.mItem .mError{margin:6px 0 0;color:#a33;font-size:14px}
+.mTranscript{margin-top:8px;font-size:14px}
+.mTranscript summary{cursor:pointer;min-height:32px;display:flex;align-items:center;font-weight:600}
+.mTranscript p{margin:6px 0;line-height:1.45}
 </style>
 </head>
 
@@ -811,6 +826,7 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
     <h2 id="sp-title"></h2>
     <p id="sp-when"><b></b></p>
     <p id="sp-text"></p>
+    <div id="sp-media" class="mediaBox" hidden></div>
     <small id="sp-credit"></small>
     <a id="sp-maps" class="maps-link" target="_blank" rel="noopener" hidden>Open in Maps</a>
     <button id="sp-go" type="button">Explore the Map</button>
@@ -908,25 +924,26 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
 /* Watch an element's size; where the browser cannot, fall back to window resizes. A missing feature must never stop the map loading. */
 function watchSize(el, fn) { try { new ResizeObserver(fn).observe(el); } catch (e) { addEventListener("resize", fn); } }
 </script>
-<script src="welcome-themes.js?v=20261112e"></script>
-<script src="marker-shapes.js?v=20261112e"></script>
-<script src="lines-style.js?v=20261112e"></script>
-<script src="ets-config.js?v=20261112e"></script>
-<script src="labels.js?v=20261112e"></script>
-<script src="schedule.js?v=20261112e"></script>
-<script src="announcements.js?v=20261112e"></script>
-<script src="tour-info.js?v=20261112e"></script>
-<script src="tour-camera.js?v=20261112e"></script>
-<script src="here.js?v=20261112e"></script>
-<script src="marker-fill.js?v=20261112e"></script>
-<script src="spot-markers.js?v=20261112e"></script>
+<script src="welcome-themes.js?v=20261113a"></script>
+<script src="marker-shapes.js?v=20261113a"></script>
+<script src="lines-style.js?v=20261113a"></script>
+<script src="ets-config.js?v=20261113a"></script>
+<script src="labels.js?v=20261113a"></script>
+<script src="schedule.js?v=20261113a"></script>
+<script src="announcements.js?v=20261113a"></script>
+<script src="tour-info.js?v=20261113a"></script>
+<script src="tour-camera.js?v=20261113a"></script>
+<script src="here.js?v=20261113a"></script>
+<script src="media.js?v=20261113a"></script>
+<script src="marker-fill.js?v=20261113a"></script>
+<script src="spot-markers.js?v=20261113a"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
   if (typeof Papa === "undefined") {
     document.write('<script src="https://unpkg.com/papaparse@5.4.1/dist/papaparse.min.js"><\/script>');
   }
 </script>
-<script src="icons.js?v=20261112e"></script>
+<script src="icons.js?v=20261113a"></script>
 <script>
 const $ = id => document.getElementById(id);
 
@@ -960,6 +977,9 @@ const EVENTS_INDEX_READY = fetch("events/index.json", { cache: "no-store" })
 /* WHAT'S ON: notices from announcements.csv, plus full events (events/index.json) that have dates.
    ANN_ALL is everything; ANN is what is on now or starting soon (the welcome screen and the Events button use it). */
 const LABELS_READY = window.Labels ? Labels.load() : Promise.resolve();   // the wording the curator chose (labels.csv)
+/* Audio clips and videos attached to places, spots and stories (media.csv). Cards show nothing for an item that has none. */
+const MEDIA_READY = window.Media ? Media.load((u, o) => dataFetch(u, o)) : Promise.resolve();
+MEDIA_READY.then(() => { if (window.Media) Media.hydrate(document, assetUrl); });          // a card opened before the file arrived
 let ANN_ALL = [], ANN = [];
 const findItem = id => places.concat(kids).find(i => key(i.id) === key(id)) || null;
 const ANN_READY = Promise.all([window.Announcements ? Announcements.load() : [], EVENTS_INDEX_READY]).then(([a]) => {
@@ -978,12 +998,12 @@ const AUTO_CHECK = EVENTS_INDEX_READY.then(() => {
   if (on) location.replace(location.pathname + "?event=" + encodeURIComponent(on.slug) + location.hash);
 });
 
-const EVENT_FOLDERS = () => (EVENT_INFO && Array.isArray(EVENT_INFO.folders)) ? EVENT_INFO.folders : ["photos", "spots", "stories", "anims"];
+const EVENT_FOLDERS = () => (EVENT_INFO && Array.isArray(EVENT_INFO.folders)) ? EVENT_INFO.folders : ["photos", "spots", "stories", "anims", "audio"];
 
 function assetUrl(path) {
   const p = String(path || "");
   if (!EVENT_SLUG || /^([a-z]+:)?\/\//i.test(p) || p.startsWith("data:")) return p;
-  const m = /^(photos|spots|stories|anims)\//.exec(p);
+  const m = /^(photos|spots|stories|anims|audio)\//.exec(p);
   return m && EVENT_FOLDERS().includes(m[1]) ? EVENT_DIR + p : p;
 }
 
@@ -2171,6 +2191,7 @@ function select(it){
     (SITE.mapsLink !== false && it.ll ? `<p><a class="maps-link" target="_blank" rel="noopener" href="${mapsUrl(it.ll.lng !== undefined ? it.ll.lng : it.ll[0], it.ll.lat !== undefined ? it.ll.lat : it.ll[1], it.name)}">${esc(Labels.t("maps.open"))}</a></p>` : "") +
     (it.ll ? `<div class="hereLine" hidden data-kind="place" data-mode="walk" data-ll="${it.ll[0]},${it.ll[1]}" data-key="${esc(it.id)}" data-name="${esc(it.name)}"></div>` : "") +
     `<p>${esc(d.DETAILS || "")}</p>` +
+    `<div class="mediaBox" data-item="${esc(it.id)}" hidden></div>` +
     (it.kids && it.kids.length
       ? "<h3>Places here</h3>" +
         it.kids.map(k => `<button class="kid" data-id="${esc(k.id)}">${esc(k.name)}</button>`).join("")
@@ -2181,6 +2202,7 @@ function select(it){
   if (coverNote(it.id)) { const s = document.createElement("small"); s.className = "covernote"; s.textContent = coverNote(it.id); cov.after(s); }
   const gal = buildGallery(it.id);
   if (gal) panel.appendChild(gal);
+  if (window.Media) Media.hydrate(panel, assetUrl);
   const e = yr4(d.EST);
   const c = yr4(d.CLSD);
   const when = [e ? "Established " + e : "", c ? "Closed " + c : (e ? "Still standing" : "")].filter(Boolean).join(" &middot; ");
@@ -2443,6 +2465,7 @@ $("res").onclick = e => {
     $("sp-text").textContent = r.DETAILS || "";
     $("sp-credit").textContent = coverNote(id, r.CREDIT) || (r.CREDIT ? "Photo: " + r.CREDIT : "");
     setMaps($("sp-maps"), ll, r.TITLE);
+    if (window.Media) Media.mount($("sp-media"), id, assetUrl);
     $("sp-img").dataset.caption = coverNote(id);
     const qGal = buildGallery(id);
     if (qGal) $("sp-credit").after(qGal);
@@ -2573,6 +2596,7 @@ $("res").onclick = e => {
     $("sp-when").textContent = r.YEAR || "";
     $("sp-text").textContent = r.DETAILS || "";
     setMaps($("sp-maps"), it.ll, r.TITLE);
+    if (window.Media) Media.mount($("sp-media"), it.id, assetUrl);
     $("sp-credit").textContent = [coverNote(it.id, r.CREDIT) || (r.CREDIT ? "Photo: " + r.CREDIT : ""), r.SOURCE ? "Source: " + r.SOURCE : ""].filter(Boolean).join(" · ");
     $("sp-img").dataset.caption = coverNote(it.id);
     const oldGal = $("spotCard").querySelector(".gal");
@@ -2674,10 +2698,12 @@ $("res").onclick = e => {
       $("tw").insertAdjacentElement("afterend", hl);
     }
     $("tt").textContent = text;
+    { const mb = document.createElement("div"); mb.className = "mediaBox"; mb.hidden = true; mb.dataset.item = String(st.ITEM_ID); $("tt").insertAdjacentElement("afterend", mb); }
     card.querySelector("#tn i").textContent = st.NOTE || "";
     $("tc").textContent = credit;
     if (img) card.insertBefore(img, card.firstChild);
     card.hidden = false;
+    if (window.Media) Media.hydrate(card, assetUrl);
     if (n === T.stops.length - 1 && window.passportEvent) {
       passportEvent("tour", { id: T.id, category: T.category || null, source: "tours" });
     }
@@ -4301,7 +4327,8 @@ setTimeout(buildChips, 3000);
     const files = [location.pathname].concat(
       window.ETS_CONFIG ? ETS_CONFIG.DATA.concat(ETS_CONFIG.GLOBAL) : ["site.csv", "locations.csv", "childmarkers.csv", "categories.csv", "shapes.csv", "photos.csv", "stamps.csv", "tasks.csv", "prizes.csv", "spots.csv", "tours.csv", "tourstops.csv", "lines.geojson", "border.geojson"],
       ["events/index.json", window.EVENT_DIR ? window.EVENT_DIR + "event.json" : null],
-      Array.from(photos)
+      Array.from(photos),
+      (window.Media ? Media.audioPaths().map(assetUrl) : [])
     ).filter(Boolean).filter(f => f !== "overlays.json" && !/franklin-19|1901-map|cropped-/.test(f));      // the big old-map pictures are never saved
     navigator.serviceWorker.controller.postMessage({ type: "PRECACHE", files, bounds: window.SITE && SITE.maxBounds, zoom: 15 });
     toast("Saving in the background — you can keep browsing.");
