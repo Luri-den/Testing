@@ -10,7 +10,7 @@
      audio and video seeking ............. left to the browser (these are "range" requests and cannot be saved in pieces)
 */
 
-const VERSION = "v7-2026-11";
+const VERSION = "v8-2026-11";
 const SHELL_CACHE = "shell-" + VERSION;
 const IMG_CACHE   = "img-" + VERSION;
 const TILE_CACHE  = "tiles-" + VERSION;
@@ -25,7 +25,7 @@ const SHELL = [
   "./",
   "Demo2a.html",
   "welcome-themes.js", "marker-shapes.js", "marker-fill.js",
-  "schedule.js", "announcements.js", "labels.js", "tour-camera.js", "tour-info.js", "ets-config.js", "icons.js", "lines-style.js", "spot-markers.js",
+  "schedule.js", "announcements.js", "labels.js", "tour-camera.js", "tour-info.js", "here.js", "ets-config.js", "icons.js", "lines-style.js", "spot-markers.js",
   "manifest.json"
 ];
 

@@ -146,6 +146,7 @@
   <span class="status" id="status">Loading…</span>
   <span class="grow"></span>
   <button id="reloadBtn" title="Re-fetch all five files">↻ Reload</button>
+  <button id="pretendBtn" type="button" title="Opens the map with a pretend visitor you can drag along your tours, to see what a visitor sees as they walk (the 'You are here' lines and 'You've arrived').">Try a pretend walk &#8599;</button>
   <button id="publishBtn" class="primary" disabled>Download updated CSVs</button>
 </div>
 
@@ -381,6 +382,11 @@ if (window.Announcements) Announcements.load().then(l => { ANNS = l; try { rende
   if (have === 0) setStatus("Click 'Pick tours.csv…' to begin");
   else setStatus("Loaded " + have + " of 5 files");
 })();
+
+$("pretendBtn").onclick = () => {
+  const live = (window.ETS_CONFIG && ETS_CONFIG.LIVE_PAGE) || "Demo2a.html", slug = window.Workspace && Workspace.current ? Workspace.current() : "";
+  window.open(live + "?pretend=1&skipWelcome=1" + (slug ? "&event=" + encodeURIComponent(slug) : ""), "_blank", "noopener");
+};
 
 $("reloadBtn").onclick = async () => {
   if (!confirm("Reload all five CSVs from the server? Unsaved changes will be lost.")) return;

@@ -737,6 +737,43 @@ html.fontset,html.fontset body{font-family:var(--font-body,Arial,sans-serif)}
 html.fontset button,html.fontset input,html.fontset select,html.fontset textarea{font-family:inherit}
 html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family:var(--font-head,var(--font-body,Arial,sans-serif))}
 @media (prefers-reduced-motion:reduce){.pring .pf{transition:none}}
+/* ---- You are here ---- */
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.maplibregl-ctrl-group button.here-btn{display:flex;align-items:center;justify-content:center}
+.here-btn svg{width:20px;height:20px;display:block}
+.here-btn[data-state="on"] svg,.here-btn[data-state="follow"] svg{color:#0072B2}
+.here-btn[data-state="follow"]{background:#d9ebf8}
+.heredot{width:20px;height:20px;position:relative}
+.heredot::before{content:"";position:absolute;inset:3px;border-radius:50%;background:#0072B2;border:3px solid #fff;box-shadow:0 0 0 2px #0072B2,0 1px 4px #0006}
+.heredot::after{content:"";position:absolute;inset:-7px;border-radius:50%;border:2px solid #0072B2;opacity:0;animation:herepulse 2.2s ease-out infinite}
+@keyframes herepulse{0%{transform:scale(.5);opacity:.7}100%{transform:scale(1.2);opacity:0}}
+.heredot .wedge{position:absolute;inset:-12px;transform:rotate(var(--h,0deg));display:none}
+.heredot .wedge::before{content:"";position:absolute;left:50%;top:0;margin-left:-6px;border:6px solid transparent;border-bottom:9px solid #0072B2;border-top:0}
+.heredot.hasheading .wedge{display:block}
+.heredot.pretend{cursor:grab;width:28px;height:28px}
+.heredot.pretend::before{inset:4px}
+#hereChip{position:fixed;left:8px;bottom:calc(var(--botH,0px) + 86px + env(safe-area-inset-bottom));z-index:5;display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:min(92vw,430px);box-sizing:border-box;background:#fff;border:2px solid #0072B2;border-radius:16px;padding:6px 10px;font-size:13px;box-shadow:0 2px 8px #0004}
+#hereChip.pretend{border-style:dashed}
+#hereChip .hdot{width:10px;height:10px;border-radius:50%;background:#0072B2;flex:none}
+#hereChip label{display:flex;align-items:center;gap:4px;white-space:nowrap}
+#hereChip [hidden]{display:none}
+#hereChip button{border:0;background:#0072B2;color:#fff;border-radius:999px;padding:5px 12px;font-size:13px;min-height:32px;cursor:pointer}
+#hereAsk{position:fixed;inset:0;z-index:9500;display:flex;align-items:flex-end;justify-content:center;background:#0006;padding:14px}
+#hereAsk[hidden]{display:none}
+@media (min-width:700px){#hereAsk{align-items:center}}
+#hereAsk .card{background:#fff;border-radius:14px;padding:16px 18px;max-width:380px;width:100%;box-shadow:0 6px 24px #0006}
+#hereAsk h2{margin:0 0 8px;font-size:19px}
+#hereAsk p{margin:0 0 14px;font-size:15px;line-height:1.4}
+#hereAsk .row{display:flex;gap:10px}
+#hereAsk button{flex:1;border:0;border-radius:8px;padding:11px;font-size:15px;cursor:pointer;background:#e9edf1;color:#222}
+#hereAsk #hereAskYes{background:#0072B2;color:#fff;font-weight:600}
+@media (max-width:899px){html.bot #tourCard{bottom:var(--botH,0px)}}      /* the tour card is a bottom sheet on phones: keep it above the bottom bar, so its Start and Next buttons can be pressed */
+@media (min-width:900px){html.bot #tourCard,html.bot #tourCard.list,html.bot #tourCard.overview{max-height:calc(100vh - var(--ets-top,76px) - var(--botH,0px) - 12px)}}
+.hereLine{margin:6px 0;padding:6px 10px;border-radius:8px;background:#e6f1fa;color:#0b3a5c;font-size:14px;display:flex;align-items:center;gap:8px}
+.hereLine[hidden]{display:none}
+.hereLine .harrow{display:inline-block;font-size:20px;line-height:1;flex:none;transition:transform .3s}
+.hereLine.arrived{background:#e3f6e8;color:#0e5a24;font-weight:600}
+@media (prefers-reduced-motion:reduce){.heredot::after{animation:none;opacity:0}.hereLine .harrow{transition:none}}
 </style>
 </head>
 
@@ -849,28 +886,38 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<div id="hereChip" hidden role="group" aria-label="Your location">
+  <span class="hdot" aria-hidden="true"></span><span id="hereMsg"></span>
+  <label id="hereAwakeWrap" hidden><input type="checkbox" id="hereAwake"> <span id="hereAwakeTxt"></span></label>
+  <button type="button" id="hereStop"></button>
+</div>
+<div id="hereAsk" hidden role="dialog" aria-modal="true" aria-labelledby="hereAskTitle">
+  <div class="card"><h2 id="hereAskTitle"></h2><p id="hereAskText"></p><div class="row"><button type="button" id="hereAskYes"></button><button type="button" id="hereAskNo"></button></div></div>
+</div>
+<div id="hereLive" class="sr" role="status" aria-live="polite"></div>
 <script>
 /* Watch an element's size; where the browser cannot, fall back to window resizes. A missing feature must never stop the map loading. */
 function watchSize(el, fn) { try { new ResizeObserver(fn).observe(el); } catch (e) { addEventListener("resize", fn); } }
 </script>
-<script src="welcome-themes.js?v=20261112d"></script>
-<script src="marker-shapes.js?v=20261112d"></script>
-<script src="lines-style.js?v=20261112d"></script>
-<script src="ets-config.js?v=20261112d"></script>
-<script src="labels.js?v=20261112d"></script>
-<script src="schedule.js?v=20261112d"></script>
-<script src="announcements.js?v=20261112d"></script>
-<script src="tour-info.js?v=20261112d"></script>
-<script src="tour-camera.js?v=20261112d"></script>
-<script src="marker-fill.js?v=20261112d"></script>
-<script src="spot-markers.js?v=20261112d"></script>
+<script src="welcome-themes.js?v=20261112e"></script>
+<script src="marker-shapes.js?v=20261112e"></script>
+<script src="lines-style.js?v=20261112e"></script>
+<script src="ets-config.js?v=20261112e"></script>
+<script src="labels.js?v=20261112e"></script>
+<script src="schedule.js?v=20261112e"></script>
+<script src="announcements.js?v=20261112e"></script>
+<script src="tour-info.js?v=20261112e"></script>
+<script src="tour-camera.js?v=20261112e"></script>
+<script src="here.js?v=20261112e"></script>
+<script src="marker-fill.js?v=20261112e"></script>
+<script src="spot-markers.js?v=20261112e"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
   if (typeof Papa === "undefined") {
     document.write('<script src="https://unpkg.com/papaparse@5.4.1/dist/papaparse.min.js"><\/script>');
   }
 </script>
-<script src="icons.js?v=20261112d"></script>
+<script src="icons.js?v=20261112e"></script>
 <script>
 const $ = id => document.getElementById(id);
 
@@ -1400,6 +1447,8 @@ SITE.passportRanks = true;
 SITE.passportStyle = "";
 SITE.ringColors = {};
 SITE.mapsLink = true;
+SITE.hereButton = true;
+SITE.hereArrive = 30;
 SITE.prizes = true;
 SITE.yearSlider = true;
 SITE.aerialButton = true;
@@ -1502,7 +1551,7 @@ const SETTINGS_READY = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("
       if (fh) document.documentElement.style.setProperty("--font-head", fh);
       if (fb || fh) document.documentElement.classList.add("fontset");
       safeApply("map style", () => applyTone((S.MAP_TONE || "").toLowerCase()));
-      safeApply("zoom buttons", () => { if ((S.ZOOM_POS || "").toLowerCase() === "top") { map.removeControl(navCtl); map.addControl(navCtl, "top-right"); } });
+      safeApply("zoom buttons", () => { if ((S.ZOOM_POS || "").toLowerCase() === "top") { map.removeControl(navCtl); map.addControl(navCtl, "top-right"); if (window.HereUI) HereUI.moveButton("top-right"); } });
       safeApply("band header", () => { if ((S.LAYOUT_STYLE || "").toLowerCase() === "band") { document.documentElement.classList.add("band"); startBand(); } });
     }
     safeApply("colors and intro", () => {   // buttons and highlights follow ACCENT_COLOR, or else the header color; their text is whichever of white or dark reads better
@@ -1535,6 +1584,8 @@ const SETTINGS_READY = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("
     SITE.passportStyle = (S.PASSPORT_STYLE || "").toLowerCase();
     SITE.ringColors = { fill: S.RING_COLOR, track: S.RING_TRACK, text: S.RING_TEXT };
     SITE.mapsLink = (S.MAPS_LINK || "yes").toLowerCase() !== "no";
+    SITE.hereButton = (S.HERE_BUTTON || "yes").toLowerCase() !== "no";                       // the "Show where I am" button
+    SITE.hereArrive = Math.max(10, Math.min(200, parseFloat(S.HERE_ARRIVE) || 30));         // how close, in metres, counts as having arrived at a stop
     SITE.prizes = (S.PRIZES || "yes").toLowerCase() !== "no";
     SITE.yearSlider = (S.YEAR_SLIDER || "yes").toLowerCase() !== "no";
     SITE.overlaySlider = (S.OVERLAY_SLIDER || "yes").toLowerCase() !== "no";
@@ -1604,6 +1655,7 @@ function safeApply(name, fn) {
 async function applySettingsToMap(){
   await SETTINGS_READY;
   if (!SITE.fromCsv) return;
+  if (window.HereUI) HereUI.showButton(SITE.hereButton !== false);
   if (!SITE.passport) $("passportBtn").style.display = "none";
   else if (SITE.passportStyle === "ring") safeApply("passport ring", buildRing);
   if (!SITE.yearSlider) $("yr").closest("label").style.display = "none";
@@ -2108,6 +2160,7 @@ function select(it){
     (d.HIST_NAMES ? `<p><b>Also known as:</b> ${esc(d.HIST_NAMES)}</p>` : "") +
     (d.ADDRESS ? `<p><b>Address:</b> ${esc(d.ADDRESS)}</p>` : "") +
     (SITE.mapsLink !== false && it.ll ? `<p><a class="maps-link" target="_blank" rel="noopener" href="${mapsUrl(it.ll.lng !== undefined ? it.ll.lng : it.ll[0], it.ll.lat !== undefined ? it.ll.lat : it.ll[1], it.name)}">${esc(Labels.t("maps.open"))}</a></p>` : "") +
+    (it.ll ? `<div class="hereLine" hidden data-kind="place" data-mode="walk" data-ll="${it.ll[0]},${it.ll[1]}" data-key="${esc(it.id)}" data-name="${esc(it.name)}"></div>` : "") +
     `<p>${esc(d.DETAILS || "")}</p>` +
     (it.kids && it.kids.length
       ? "<h3>Places here</h3>" +
@@ -2306,28 +2359,32 @@ async function initOverlays(){
 $("near").onclick = () => {
   const r = $("res");
   const say = t => { r.innerHTML = `<li style="padding:10px">${t}</li>`; r.hidden = false; };
-  if (!navigator.geolocation) { say("Location isn't available on this device."); return; }
-  say("Finding you...");
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      const ll = [pos.coords.longitude, pos.coords.latitude];
-      const b = SITE.maxBounds;
-      if (ll[0] < b[0][0] || ll[0] > b[1][0] || ll[1] < b[0][1] || ll[1] > b[1][1]) { say("You appear to be outside the map area."); return; }
+  const showNearest = (ll, drawDot) => {
+    const b = SITE.maxBounds;
+    if (ll[0] < b[0][0] || ll[0] > b[1][0] || ll[1] < b[0][1] || ll[1] > b[1][1]) { say("You appear to be outside the map area."); return; }
+    if (drawDot) {
       if (me) me.remove();
       const dot = document.createElement("div");
       dot.style.cssText = "width:16px;height:16px;border-radius:50%;background:#0072B2;border:3px solid #fff;box-shadow:0 0 0 2px #0072B2";
       me = new maplibregl.Marker({ element: dot }).setLngLat(ll).addTo(map);
-      const mi = c => {
-        const q = Math.PI / 180;
-        const a = Math.sin((c[1]-ll[1])*q/2)**2 + Math.cos(ll[1]*q)*Math.cos(c[1]*q)*Math.sin((c[0]-ll[0])*q/2)**2;
-        return 2 * 3958.8 * Math.asin(Math.sqrt(a));
-      };
-      const hits = places.concat(kids).filter(alive).map(h => ({ i:h, d:mi(h.ll) })).sort((a,b) => a.d - b.d).slice(0,5);
-      r._hits = hits.map(h => h.i);
-      r.innerHTML = "<li style='padding:8px 10px;font-size:12px'>Nearest to you (approximate; not for navigation)</li>" +
-        hits.map((h,n) => `<li><button data-i="${n}">${esc(h.i.name)} <small>${h.d < 0.1 ? Math.round(h.d*5280) + " ft" : h.d.toFixed(1) + " mi"}</small></button></li>`).join("");
-      map.easeTo({ center: ll, zoom: Math.max(map.getZoom(), 15) });
-    },
+    }
+    const mi = c => {
+      const q = Math.PI / 180;
+      const a = Math.sin((c[1]-ll[1])*q/2)**2 + Math.cos(ll[1]*q)*Math.cos(c[1]*q)*Math.sin((c[0]-ll[0])*q/2)**2;
+      return 2 * 3958.8 * Math.asin(Math.sqrt(a));
+    };
+    const hits = places.concat(kids).filter(alive).map(h => ({ i:h, d:mi(h.ll) })).sort((a,b) => a.d - b.d).slice(0,5);
+    r._hits = hits.map(h => h.i);
+    r.innerHTML = "<li style='padding:8px 10px;font-size:12px'>Nearest to you (approximate; not for navigation)</li>" +
+      hits.map((h,n) => `<li><button data-i="${n}">${esc(h.i.name)} <small>${h.d < 0.1 ? Math.round(h.d*5280) + " ft" : h.d.toFixed(1) + " mi"}</small></button></li>`).join("");
+    map.easeTo({ center: ll, zoom: Math.max(map.getZoom(), 15) });
+  };
+  const fix = window.HereUI && HereUI.lastFix();                  // "Show where I am" is already on: use that, no second question to the phone
+  if (fix) { showNearest([fix.lng, fix.lat], false); return; }
+  if (!navigator.geolocation) { say("Location isn't available on this device."); return; }
+  say("Finding you...");
+  navigator.geolocation.getCurrentPosition(
+    pos => showNearest([pos.coords.longitude, pos.coords.latitude], true),
     () => say("Couldn't get your location. Check your browser's location permission."),
     { enableHighAccuracy:true, timeout:10000 }
   );
@@ -2601,6 +2658,12 @@ $("res").onclick = e => {
       `<button class="kid" data-g="x">End tour</button>`;
     card.querySelector("h2").textContent = name;
     $("tw").textContent = when;
+    if (ll) {                                                    // how far this stop is from the visitor, if they have chosen to show where they are
+      const hl = document.createElement("div");
+      hl.className = "hereLine"; hl.hidden = true; hl.dataset.kind = "stop"; hl.dataset.ll = ll[0] + "," + ll[1];
+      hl.dataset.mode = TourInfo.primaryMode(T) || "walk"; hl.dataset.key = String(st.ITEM_ID); hl.dataset.name = name;
+      $("tw").insertAdjacentElement("afterend", hl);
+    }
     $("tt").textContent = text;
     card.querySelector("#tn i").textContent = st.NOTE || "";
     $("tc").textContent = credit;
@@ -2673,6 +2736,11 @@ $("res").onclick = e => {
     // show this tour's line and number its stops
     lineVisibility(String(t.route || "").split(/[|;,]/).map(x => x.trim()).filter(Boolean));
     const stopPts = t.stops.map(st => { const it = byId(st.ITEM_ID); return it && it.ll ? it.ll : null; }).filter(Boolean);
+    if (stopPts[0] && card.querySelector(".tcMeta")) {          // how far the first stop is from the visitor
+      const hl = document.createElement("div");
+      hl.className = "hereLine"; hl.hidden = true; hl.dataset.kind = "start"; hl.dataset.ll = stopPts[0][0] + "," + stopPts[0][1]; hl.dataset.mode = TourInfo.primaryMode(t) || "walk";
+      card.querySelector(".tcMeta").insertAdjacentElement("afterend", hl);
+    }
     if (routeLines(t.route).length) clearTourLine(); else setTourLine(stopPts);
     stopPts.forEach((ll, n) => {
       try { const d = document.createElement("div"); d.className = "tstopmk"; d.textContent = t.type === "trail" ? "" : String(n + 1); ovMarkers.push(new maplibregl.Marker({ element: d }).setLngLat(ll).addTo(map)); } catch (e) {}
@@ -2877,6 +2945,180 @@ $("res").onclick = e => {
     // tours promoted on the welcome screen ("welcome") or in the Events panel (anything else), leaving out any that an announcement already features
     // and any event tour that is not on right now
     featured: where => { const open = openTest(); return tours.filter(t => (where === "welcome" ? t.featWelcome : t.featEvents) && open(t) && !ANN.some(a => a.tourId && key(a.tourId) === key(t.id))).map(asEntry); }
+  };
+})();
+
+/* ============================================================
+   YOU ARE HERE
+   The visitor chooses to show their own dot: nothing is asked of their phone until they say yes. While it shows, a stop, a
+   tour's first stop or a place says how far away it is and which way. The map never moves unless they ask it to (the button's
+   second press keeps the map on them). Their location is only used on their own phone. ?pretend=1 on the address lets
+   you try all of it at a desk by dragging the dot.
+   ============================================================ */
+(function () {
+  if (!window.Here) return;
+  const L = (k, v) => Labels.t(k, v);
+  const PRETEND = /[?&]pretend=1/.test(location.search);
+  const trk = Here.tracker();
+  const chip = $("hereChip"), msg = $("hereMsg");
+  let state = "off", marker = null, dot = null, centered = false, inArea = true, dragging = false, errTimer = 0, lock = null, tick = 0;
+  let keepAwake = false; try { keepAwake = localStorage.getItem("ets.keepAwake") === "1"; } catch (e) {}
+  const arrived = new Set();
+  const inBounds = ll => { const b = SITE.maxBounds; return !b || (ll[0] >= b[0][0] && ll[0] <= b[1][0] && ll[1] >= b[0][1] && ll[1] <= b[1][1]); };
+  const say = t => { if (msg.textContent !== t) msg.textContent = t; };
+  const live = t => { const e = $("hereLive"); e.textContent = ""; setTimeout(() => { e.textContent = t; }, 60); };   // a screen reader says it once
+
+  /* ---- the button on the map ---- */
+  const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3.5" fill="currentColor"/><circle cx="12" cy="12" r="7.5"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/></svg>';
+  const ctl = {
+    onAdd() {
+      const c = document.createElement("div"); c.className = "maplibregl-ctrl maplibregl-ctrl-group";
+      const b = document.createElement("button"); b.type = "button"; b.className = "here-btn"; b.innerHTML = ICON; b.onclick = press;
+      c.appendChild(b); this.el = c; this.btn = b; this.paint(); return c;
+    },
+    onRemove() { if (this.el && this.el.parentNode) this.el.parentNode.removeChild(this.el); this.el = null; this.btn = null; },
+    paint() {
+      if (!this.btn) return;
+      const text = state === "off" ? L("here.button") : state === "on" ? L("here.follow") : L("here.stop");
+      this.btn.setAttribute("aria-label", text); this.btn.title = text; this.btn.setAttribute("aria-pressed", state === "off" ? "false" : "true"); this.btn.dataset.state = state;
+    }
+  };
+  let ctlPos = "bottom-right", ctlOn = true;
+  const addCtl = () => { try { map.addControl(ctl, ctlPos); } catch (e) {} };
+  const removeCtl = () => { try { map.removeControl(ctl); } catch (e) {} };
+  addCtl();
+
+  function setState(next) { state = next; ctl.paint(); if (next === "follow" && trk.last() && inArea) map.easeTo({ center: [trk.last().lng, trk.last().lat], duration: 500 }); }
+  function press() {                                            // off -> showing -> keeping the map on me -> off
+    if (state === "off") { let ok = PRETEND; try { ok = ok || localStorage.getItem("ets.here.ok") === "1"; } catch (e) {} if (ok) begin(); else ask(); }
+    else if (state === "on") setState("follow");
+    else trk.stop();
+  }
+
+  /* ---- ask first, once ---- */
+  function ask() {
+    $("hereAskTitle").textContent = L("here.askTitle"); $("hereAskText").textContent = L("here.askText");
+    $("hereAskYes").textContent = L("here.askYes"); $("hereAskNo").textContent = L("here.askNo");
+    $("hereAsk").hidden = false; $("hereAskYes").focus();
+  }
+  $("hereAskYes").onclick = () => { $("hereAsk").hidden = true; try { localStorage.setItem("ets.here.ok", "1"); } catch (e) {} begin(); };
+  $("hereAskNo").onclick = () => { $("hereAsk").hidden = true; };
+  $("hereAsk").addEventListener("click", e => { if (e.target === $("hereAsk")) $("hereAsk").hidden = true; });
+  $("hereAsk").addEventListener("keydown", e => { if (e.key === "Escape") $("hereAsk").hidden = true; });
+
+  /* ---- keeping the screen on while they walk (their choice) ---- */
+  const canAwake = () => !!(navigator.wakeLock && typeof navigator.wakeLock.request === "function");
+  async function awake(on) {
+    if (!canAwake()) return;
+    try {
+      if (on && !lock) { lock = await navigator.wakeLock.request("screen"); if (lock && lock.addEventListener) lock.addEventListener("release", () => { lock = null; }); }
+      else if (!on && lock) { const l = lock; lock = null; await l.release(); }
+    } catch (e) { lock = null; }
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && state !== "off" && keepAwake) awake(true); });   // the phone drops it when the page is hidden
+  $("hereAwake").onchange = e => { keepAwake = e.target.checked; try { localStorage.setItem("ets.keepAwake", keepAwake ? "1" : "0"); } catch (x) {} awake(keepAwake && state !== "off"); };
+
+  /* ---- start, stop ---- */
+  function begin() {
+    clearTimeout(errTimer); centered = false; arrived.clear(); setState("on");
+    chip.hidden = false; chip.classList.toggle("pretend", PRETEND);
+    $("hereStop").hidden = false; $("hereStop").textContent = L("here.stop");
+    $("hereAwakeTxt").textContent = L("here.keepAwake"); $("hereAwakeWrap").hidden = !canAwake(); $("hereAwake").checked = keepAwake;
+    say(PRETEND ? L("here.pretend") : L("here.looking"));
+    if (keepAwake) awake(true);
+    if (PRETEND) { const c = map.getCenter(), ll = c && inBounds([c.lng, c.lat]) ? [c.lng, c.lat] : SITE.center; trk.simulate(ll[0], ll[1]); } else trk.start();
+  }
+  $("hereStop").onclick = () => trk.stop();
+  function cleanup() {
+    state = "off"; ctl.paint(); chip.hidden = true;
+    if (marker) { marker.remove(); marker = null; dot = null; }
+    clearAcc(); awake(false); refresh();
+  }
+  function onError(code) {
+    if (code === "timeout") { say(L("here.looking")); return; }          // keep trying
+    if (code === "unavailable") { say(L("here.unavailable")); live(L("here.unavailable")); return; }   // a signal blip (a tunnel, indoors): the phone keeps trying, and the next fix replaces this
+    const text = code === "denied" ? L("here.denied") : L("here.unsupported");
+    trk.stop();
+    chip.hidden = false; chip.classList.remove("pretend"); $("hereStop").hidden = true; $("hereAwakeWrap").hidden = true; say(text); live(text);
+    clearTimeout(errTimer); errTimer = setTimeout(() => { chip.hidden = true; }, 9000);
+  }
+
+  /* ---- the dot and how exact it is ---- */
+  function ensureMarker(ll) {
+    if (marker) return;
+    dot = document.createElement("div"); dot.className = "heredot" + (PRETEND ? " pretend" : ""); dot.innerHTML = '<span class="wedge"></span>';
+    marker = new maplibregl.Marker({ element: dot, draggable: PRETEND });
+    marker.setLngLat(ll).addTo(map);
+    if (PRETEND) {
+      marker.on("dragstart", () => { dragging = true; });
+      marker.on("drag", () => { const p = marker.getLngLat(); trk.simulate(p.lng, p.lat); });
+      marker.on("dragend", () => { dragging = false; });
+    } else dot.addEventListener("click", e => { e.stopPropagation(); const f = trk.last(); if (f) map.easeTo({ center: [f.lng, f.lat], zoom: Math.max(map.getZoom(), 16) }); });
+  }
+  function drawAcc(fix) {
+    if (!window.__mapLoaded || fix.acc < 3) { clearAcc(); return; }
+    const data = { type: "Feature", geometry: { type: "Polygon", coordinates: [Here.circle(fix.lng, fix.lat, fix.acc)] } };
+    try {
+      if (!map.getSource("here-acc")) {
+        map.addSource("here-acc", { type: "geojson", data });
+        map.addLayer({ id: "here-acc", type: "fill", source: "here-acc", paint: { "fill-color": "#0072B2", "fill-opacity": 0.12 } });
+        map.addLayer({ id: "here-acc-line", type: "line", source: "here-acc", paint: { "line-color": "#0072B2", "line-width": 1, "line-opacity": 0.5 } });
+      } else map.getSource("here-acc").setData(data);
+    } catch (e) {}
+  }
+  function clearAcc() { try { const src = map.getSource("here-acc"); if (src) src.setData({ type: "FeatureCollection", features: [] }); } catch (e) {} }
+
+  function onFix(fix) {
+    const ll = [fix.lng, fix.lat];
+    inArea = inBounds(ll);
+    ensureMarker(ll);
+    if (!inArea) { dot.style.display = "none"; clearAcc(); say(L("here.outside")); refresh(); return; }
+    dot.style.display = "";
+    if (!dragging) marker.setLngLat(ll);
+    const moving = fix.heading != null && (fix.speed == null || fix.speed > 0.5);            // the little pointer shows only while they are actually moving
+    dot.classList.toggle("hasheading", !!moving);
+    if (moving) dot.style.setProperty("--h", Math.round(fix.heading - (map.getBearing ? map.getBearing() : 0)) + "deg");
+    drawAcc(fix);
+    if (!centered) { centered = true; if (!PRETEND) map.flyTo({ center: ll, zoom: Math.max(map.getZoom(), 16) }); }   // once, because they asked to see themselves
+    else if (state === "follow") map.easeTo({ center: ll, duration: 500 });
+    say(PRETEND ? L("here.pretend") : fix.acc <= 100 ? L("here.youAre") + " (" + L("here.accuracy", { d: TourInfo.distance(fix.acc) }) + ")" : L("here.poor"));
+    refresh();
+  }
+
+  /* ---- the distance lines on cards ---- */
+  function build(el) { el.innerHTML = '<span class="harrow" aria-hidden="true">&#8593;</span><span class="ht"></span><span class="sr"></span>'; el.dataset.built = "1"; }
+  function refresh() {
+    const fix = state === "off" ? null : trk.last();
+    document.querySelectorAll(".hereLine").forEach(el => {
+      if (!fix || !inArea || fix.acc > 150) { el.hidden = true; return; }
+      const to = el.dataset.ll.split(",").map(Number), from = [fix.lng, fix.lat], d = Here.distance(from, to);
+      const kind = el.dataset.kind, mode = TourInfo.PACE[el.dataset.mode] ? el.dataset.mode : "walk";
+      el.hidden = false;
+      if (kind === "stop" && d <= (SITE.hereArrive || 30)) {
+        el.className = "hereLine arrived"; el.textContent = "\u2714 " + L("here.arrived"); el.dataset.built = "";
+        const key = el.dataset.key; if (key && !arrived.has(key)) { arrived.add(key); live(L("here.arrivedAt", { name: el.dataset.name || "" })); }
+        return;
+      }
+      if (el.dataset.built !== "1") build(el);
+      el.className = "hereLine";
+      const brg = Here.bearing(from, to);
+      el.children[0].style.transform = "rotate(" + Math.round(brg - (map.getBearing ? map.getBearing() : 0)) + "deg)";
+      el.children[1].textContent = kind === "place" ? L("here.fromYou", { d: TourInfo.distance(d) }) : L(kind === "start" ? "here.toFirst" : "here.toStop", { trip: TourInfo.legText(d, mode, L) });
+      el.children[2].textContent = ". " + L("here.towards", { dir: L("here.dir." + Here.compassIndex(brg)) });
+    });
+  }
+  ["tourCard", "panel"].forEach(id => { const c = $(id); if (c && window.MutationObserver) new MutationObserver(() => setTimeout(refresh, 0)).observe(c, { childList: true }); });   // a card has just been drawn
+  map.on("rotate", () => { if (state !== "off" && !tick) tick = setTimeout(() => { tick = 0; refresh(); }, 250); });
+  map.on("dragstart", e => { if (state === "follow" && e && e.originalEvent) setState("on"); });     // they moved the map themselves: stop keeping it on them
+
+  trk.on(e => { if (e.type === "fix") onFix(e.fix); else if (e.type === "stop") cleanup(); else if (e.type === "error") onError(e.code); });
+
+  window.HereUI = {
+    state: () => state, lastFix: () => (state !== "off" ? trk.last() : null), refresh,
+    start: () => { if (state === "off") begin(); }, stop: () => trk.stop(),
+    pretendAt: (lng, lat) => { if (state === "off") begin(); trk.simulate(lng, lat); },
+    showButton: on => { if (on && !ctlOn) addCtl(); if (!on && ctlOn) removeCtl(); ctlOn = !!on; },
+    moveButton: pos => { ctlPos = pos; if (ctlOn) { removeCtl(); addCtl(); } }
   };
 })();
 

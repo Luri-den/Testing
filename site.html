@@ -118,6 +118,14 @@ input[type=range]{padding:0;border:0}
     <input type="number" data-k="TOUR_TILT" min="0" max="60" step="5" placeholder="0">
     <small>Turning stops the moment a visitor touches the map, and never happens for visitors whose device is set to reduce motion.</small>
 
+    <h3 style="margin:14px 0 4px;font-size:14px">You Are Here (the Visitor's Own Location)</h3>
+    <label>Show the "Show where I am" button</label>
+    <select data-k="HERE_BUTTON"><option value="">Yes (Default)</option><option value="no">No</option></select>
+    <small>Visitors choose to turn it on, and their phone asks permission first. Their location stays on their phone: it is never sent or saved. While it is on, tour stops and place cards say how far away they are and which way.</small>
+    <label>Counts as arrived within (meters)</label>
+    <input type="number" data-k="HERE_ARRIVE" min="10" max="200" step="5" placeholder="30">
+    <small>When a visitor is this close to a tour stop, its card says "You've arrived". Nothing moves by itself. To try it at your desk, add <b>?pretend=1</b> to the end of the map's address and drag the blue dot.</small>
+
     <h2>Bar Layout (Top, Bottom, Drawer, Etc)</h2>
     <small>Click / Press and drag a button into another box. Bars run left to right and will wrap large buttons to new rows. The Bottom Bar stays hidden until you put something in it. Yellow buttons can't leave the top bar. The Legend can float over the map (as now), sit in either Bar, or go in the Drawer.</small>
     <div id="board">
@@ -273,7 +281,7 @@ const DEFAULTS = {
   HEADER: "Discover {PLACE}'s Past",
   TAB_TITLE: "Explore {PLACE}'s Past",
   BAR_COLOR: "#E47303",
-  ACCENT_COLOR: "", TOUR_SPIN: "no", TOUR_SPIN_SPEED: "", TOUR_TILT: "",
+  ACCENT_COLOR: "", TOUR_SPIN: "no", TOUR_SPIN_SPEED: "", TOUR_TILT: "", HERE_BUTTON: "", HERE_ARRIVE: "",
   CENTER_LAT: "39.8283", CENTER_LNG: "-98.5795", ZOOM: "4",
   BOUNDS_WEST: "-125", BOUNDS_SOUTH: "24", BOUNDS_EAST: "-66", BOUNDS_NORTH: "50",
   MIN_ZOOM: "", MAX_ZOOM: "",
