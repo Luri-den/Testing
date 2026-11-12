@@ -180,6 +180,17 @@ input[type=range]{padding:0;border:0}
     <select data-k="INTRO_CARD"><option value="">Bottom, moving to the top only if it would cover the pin</option><option value="bottom">Always on the bottom</option><option value="top">Always on the top (below the Bar)</option></select>
     <small>The card never covers the top bar.</small>
     <small>Stories and Spots only appear in the two zoom options which include them, because they only show once the map is zoomed in. The point-at-places intro always uses places. A Spot with no photo is skipped.</small>
+    <h3 style="margin:14px 0 4px;font-size:14px">What the welcome screen mixes in</h3>
+    <label>What's on (announcements)</label>
+    <select data-k="INTRO_WHATSON"><option value="">Show them (Default)</option><option value="no">Do not show them</option></select>
+    <small>Announcements appear while they are on, or coming soon.</small>
+    <label>Featured tours and trails</label>
+    <select data-k="INTRO_TOURS"><option value="">Show them (Default)</option><option value="no">Do not show them</option></select>
+    <small>Only tours ticked "Show on the welcome screen" in the Tours and Trails tab.</small>
+    <label>How often one of these appears</label>
+    <select data-k="INTRO_EVERY"><option value="">Every other slide (Default)</option><option value="third">Every third slide</option><option value="fourth">Every fourth slide</option></select>
+    <small>In between, the welcome screen shows places. Event tours appear through their announcement.</small>
+    <div id="introLineup" style="margin:8px 0;padding:10px 12px;border:1px solid #d9dee5;border-radius:8px;background:#f7f9fb;font-size:12.5px;line-height:1.5"></div>
     <img id="wtPrev" alt="Welcome screen preview" style="width:100%;border-radius:10px;margin-top:8px;background:#ddd">
     <small id="wtNote"></small>
 
@@ -250,6 +261,9 @@ input[type=range]{padding:0;border:0}
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="welcome-themes.js"></script>
+<script src="schedule.js"></script>
+<script src="announcements.js"></script>
+<script src="tour-info.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const status = t => $('status').textContent = t;
@@ -278,7 +292,7 @@ const DEFAULTS = {
   WELCOME_THEME: "",
   WELCOME_TEXT: "Welcome to|{PLACE}",
   BAR_STYLE: "", SEARCH_WIDTH: "", SEARCH_WIDTH_PHONE: "", BOTTOM_ON: "", MAP_TONE: "",
-  PASSPORT_STYLE: "", RING_COLOR: "", RING_TRACK: "", RING_TEXT: "", INTRO_STYLE: "", INTRO_FEATURES: "", INTRO_CARD: "", FONT_BODY: "", FONT_HEAD: "",
+  PASSPORT_STYLE: "", RING_COLOR: "", RING_TRACK: "", RING_TEXT: "", INTRO_STYLE: "", INTRO_FEATURES: "", INTRO_CARD: "", INTRO_WHATSON: "", INTRO_TOURS: "", INTRO_EVERY: "", FONT_BODY: "", FONT_HEAD: "",
   LAYOUT_TOP: "", LAYOUT_MORE: "", LAYOUT_OFF: "", LAYOUT_BOTTOM: "", LAYOUT_FLOAT: "", ZOOM_POS: ""
 };
 
@@ -668,6 +682,29 @@ $('pvIntro').onclick = () => pvLoad(true);
 window.addEventListener('resize', pvFit);
 const _syncUI = syncUI;
 syncUI = function (except) { _syncUI(except); pvSoon(); };
+
+/* ---- what is in the welcome screen's rotation right now (read from the Announcements and Tours tabs' files) ---- */
+async function renderLineup() {
+  const box = $('introLineup'); if (!box || !window.Announcements || !window.TourInfo) return;
+  const val = k => { const el = document.querySelector('[data-k="' + k + '"]'); return el ? el.value : ''; };
+  const [anns, tText] = await Promise.all([Announcements.load(), fetch('tours.csv', { cache: 'no-store' }).then(r => r.ok ? r.text() : '').catch(() => '')]);
+  const status = Announcements.withStatus(anns), live = status.filter(a => a.st.state !== 'later');
+  const trows = tText ? Papa.parse(tText, { header: true, skipEmptyLines: 'greedy' }).data : [];
+  const tours = trows.filter(r => String(r.TOUR_ID || '').trim() && String(r.TYPE || 'tour').toLowerCase() !== 'line').map(r => Object.assign({ id: String(r.TOUR_ID).trim(), title: String(r.TITLE || r.TOUR_ID).trim() }, (f => ({ w: f.welcome, avail: f.avail }))(TourInfo.flags(r))));
+  const features = new Set(live.filter(a => a.tourId).map(a => a.tourId.toLowerCase()));
+  const promoted = tours.filter(t => t.w && t.avail !== 'event' && !features.has(t.id.toLowerCase()));
+  const esc2 = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const open = (tab, text) => '<button type="button" data-open="' + tab + '" style="background:none;border:0;padding:0;color:#0b5cad;text-decoration:underline;cursor:pointer;font-size:inherit">' + text + '</button>';
+  let h = '<b>In the rotation right now</b><br>';
+  h += val('INTRO_WHATSON') === 'no' ? 'Announcements: switched off above.<br>'
+    : 'Announcements (' + live.length + '): ' + (live.length ? live.map(a => esc2(a.name) + ' <span style="color:#6b7480">(' + esc2(EventSchedule.statusText(a.st)) + ')</span>').join('; ') : 'none on or coming soon') + ' &middot; ' + open('p14', 'Edit announcements') + '<br>';
+  h += val('INTRO_TOURS') === 'no' ? 'Tours: switched off above.'
+    : 'Featured tours (' + promoted.length + '): ' + (promoted.length ? promoted.map(t => esc2(t.title)).join('; ') : 'none') + ' &middot; ' + open('p4', 'Choose tours');
+  box.innerHTML = h;
+  box.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { try { parent.postMessage({ type: 'ets-open-tab', tab: b.getAttribute('data-open') }, location.origin); } catch (e) {} });
+}
+document.addEventListener('change', e => { if (e.target && e.target.matches && e.target.matches('[data-k="INTRO_WHATSON"],[data-k="INTRO_TOURS"]')) renderLineup(); });
+setTimeout(renderLineup, 600);
 </script>
 <script src="publish.js"></script>
 <script>GHPublish.attach({ buttons: ["dlBtn"] });</script>

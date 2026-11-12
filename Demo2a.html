@@ -853,24 +853,24 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
 /* Watch an element's size; where the browser cannot, fall back to window resizes. A missing feature must never stop the map loading. */
 function watchSize(el, fn) { try { new ResizeObserver(fn).observe(el); } catch (e) { addEventListener("resize", fn); } }
 </script>
-<script src="welcome-themes.js?v=20261112c"></script>
-<script src="marker-shapes.js?v=20261112c"></script>
-<script src="lines-style.js?v=20261112c"></script>
-<script src="ets-config.js?v=20261112c"></script>
-<script src="labels.js?v=20261112c"></script>
-<script src="schedule.js?v=20261112c"></script>
-<script src="announcements.js?v=20261112c"></script>
-<script src="tour-info.js?v=20261112c"></script>
-<script src="tour-camera.js?v=20261112c"></script>
-<script src="marker-fill.js?v=20261112c"></script>
-<script src="spot-markers.js?v=20261112c"></script>
+<script src="welcome-themes.js?v=20261112d"></script>
+<script src="marker-shapes.js?v=20261112d"></script>
+<script src="lines-style.js?v=20261112d"></script>
+<script src="ets-config.js?v=20261112d"></script>
+<script src="labels.js?v=20261112d"></script>
+<script src="schedule.js?v=20261112d"></script>
+<script src="announcements.js?v=20261112d"></script>
+<script src="tour-info.js?v=20261112d"></script>
+<script src="tour-camera.js?v=20261112d"></script>
+<script src="marker-fill.js?v=20261112d"></script>
+<script src="spot-markers.js?v=20261112d"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
   if (typeof Papa === "undefined") {
     document.write('<script src="https://unpkg.com/papaparse@5.4.1/dist/papaparse.min.js"><\/script>');
   }
 </script>
-<script src="icons.js?v=20261112c"></script>
+<script src="icons.js?v=20261112d"></script>
 <script>
 const $ = id => document.getElementById(id);
 
@@ -1170,7 +1170,7 @@ function startWelcome(featuredId){
     ANN_READY.then(() => { if (!stopped) nextSite(); });
   }
 
-  const rotation = () => ANN.concat(window.ETSTours ? ETSTours.featured() : []);   // what's on, then featured tours
+  const rotation = () => (SITE.introWhatsOn !== false ? ANN : []).concat(SITE.introTours !== false && window.ETSTours ? ETSTours.featured("welcome") : []);   // what's on, then featured tours
   const annFor = id => ANN.find(a => a.venues.some(v => key(v) === key(id))) || null;   // an announcement that happens at this place
   const venueOf = a => { for (const v of a.venues) { const it = findItem(v); if (it) return it; } return null; };
   function setTag(a) {
@@ -1235,7 +1235,7 @@ function startWelcome(featuredId){
     document.getElementById("wsName").textContent = a.name;
     document.getElementById("wsText").textContent = blurb;
     document.getElementById("wsIn").textContent = [a.meta || EventSchedule.statusText(a.st), it ? "at " + it.name : ""].filter(Boolean).join(" \u00b7 ");
-    const tour = a.tourId && window.ETSTours ? ETSTours.get(a.tourId) : null;
+    const tour = a.tourId && window.ETSTours && ETSTours.isOpen(a.tourId) ? ETSTours.get(a.tourId) : null;     // an event tour that has not started yet has no Start button
     goBtn.textContent = tour ? TourInfo.goText(tour) : it ? Labels.t("welcome.seeOnMap") : (a.link ? (a.linkText || Labels.t("welcome.learnMore")) : Labels.t("welcome.close"));
     siteBox.classList.remove("in"); void siteBox.offsetWidth; siteBox.classList.add("in");   // after the card's classes are set, so the pointer measures the final position
     present(it, a.color);
@@ -1248,7 +1248,7 @@ function startWelcome(featuredId){
     document.querySelectorAll(".pin.spot,.kmark.spot").forEach(e => e.classList.remove("spot"));
     const featuredFirst = featuredId && !featuredShown;         // a QR visitor's own place always comes first
     const rot = rotation();
-    if (rot.length && !featuredFirst && slideN++ % 2 === 0) { showAnnouncement(rot[annIdx++ % rot.length]); return; }   // what's on, then a place, then what's on...
+    if (rot.length && !featuredFirst && slideN++ % (SITE.introEvery || 2) === 0) { showAnnouncement(rot[annIdx++ % rot.length]); return; }   // what's on, then a place, then what's on...
     const placePool = places.concat(kids).filter(i => PHOTO_SRC[i.id]);
     const spotMode = introMotion ? SITE.introFeatures : "";                  // stories and spots only show once the camera has zoomed in
     const spotPool = (spotMode && window.introSpots) ? window.introSpots().map(spotAsStop).filter(Boolean) : [];
@@ -1293,7 +1293,7 @@ function startWelcome(featuredId){
 
   function goToFeatured() {
     const ann = currentAnn;
-    const tour = ann && ann.tourId && window.ETSTours ? ETSTours.get(ann.tourId) : null;
+    const tour = ann && ann.tourId && window.ETSTours && ETSTours.isOpen(ann.tourId) ? ETSTours.get(ann.tourId) : null;
     if (tour) { finish(true); setTimeout(() => ETSTours.start(tour.id), WELCOME_TRANSITION_TIME); return; }   // a featured tour: the button starts it
     if (!currentItem) {
       if (!ann) return;                                         // a "what's on" slide with no place on the map
@@ -1514,6 +1514,9 @@ const SETTINGS_READY = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("
       SITE.introStyle = (S.INTRO_STYLE || "").toLowerCase();        // "", "zoom" or "spin"   (Site Settings > After the Welcome Screen)
       SITE.introFeatures = (S.INTRO_FEATURES || "").toLowerCase();  // "", "mixed" or "spots"
       SITE.introCard = (S.INTRO_CARD || "").toLowerCase();          // "", "bottom" or "top"
+      SITE.introWhatsOn = (S.INTRO_WHATSON || "yes").toLowerCase() !== "no";        // announcements in the welcome screen
+      SITE.introTours = (S.INTRO_TOURS || "yes").toLowerCase() !== "no";            // featured tours in the welcome screen
+      SITE.introEvery = { third: 3, fourth: 4 }[(S.INTRO_EVERY || "").toLowerCase()] || 2;   // one "what's on" slide in every N
       SITE.tourSpin = /^(y|yes|true|1)$/i.test(S.TOUR_SPIN || "");
       SITE.tourSpinSpeed = /^(slow|medium|fast)$/i.test(S.TOUR_SPIN_SPEED || "") ? S.TOUR_SPIN_SPEED.toLowerCase() : "medium";
       SITE.tourTilt = Math.max(0, Math.min(60, parseFloat(S.TOUR_TILT) || 0));
@@ -2609,6 +2612,10 @@ $("res").onclick = e => {
   }
 
   const tourAnn = t => ANN.find(a => a.tourId && key(a.tourId) === key(t.id)) || null;   // an announcement that is on now (or soon) and features this tour
+  /* A tour set to "event only" is open only while an announcement that features it is on. In a full event's own map every tour is open. */
+  const annStatus = () => window.Announcements ? Announcements.withStatus(ANN_ALL.filter(a => a.kind === "announcement")) : [];
+  const openTest = () => { const st = annStatus(); return t => !!EVENT_SLUG || TourInfo.isOpen(t, st); };
+  const tourOpen = t => openTest()(t);
   /* ?camdebug=1 on the address shows a small panel that says what the camera did and why. For finding out why something does not move. */
   const CAMDEBUG = /[?&]camdebug=1/.test(location.search);
   let camPanel = null;
@@ -2629,7 +2636,8 @@ $("res").onclick = e => {
     place();
     const card = $("tourCard");
     card.classList.remove("overview"); card.classList.add("list");
-    card.innerHTML = TourInfo.listHtml(tours, { limit: timeLimit, esc, announce: tourAnn, readable: Announcements.readable, L: Labels.t, chips: Labels.chips() });
+    const open = openTest();
+    card.innerHTML = TourInfo.listHtml(tours, { limit: timeLimit, esc, announce: tourAnn, hide: t => !open(t), happening: t => t.avail === "event", readable: Announcements.readable, L: Labels.t, chips: Labels.chips() });
     card.hidden = false;
   }
 
@@ -2798,8 +2806,8 @@ $("res").onclick = e => {
       if (!id) return;
       if (String(r.TYPE || "").toLowerCase() === "line") { String(r.ROUTE || "").split(/[|;,]/).map(s => s.trim()).filter(Boolean).forEach(x => mapLineIds.add(x)); return; }   // map lines are drawn, not listed as tours
       const stops = TS.filter(x => key(x.TOUR_ID) === key(id)).sort((a,b) => parseFloat(a.STEP) - parseFloat(b.STEP));
-      tours.push({ id, title: r.TITLE || id, intro: r.INTRO || "", category: r.CATEGORY || null, route: r.ROUTE || "", type: String(r.TYPE || "tour").toLowerCase(), modes: r.MODES || "", length: parseFloat(r.LENGTH_MI) || 0, stops,
-        summary: String(r.SUMMARY || "").trim(), effort: String(r.EFFORT || "").trim(), minutes: String(r.MINUTES || "").trim(), featured: /^(y|yes|true|1)$/i.test(String(r.FEATURED || "").trim()), spin: String(r.SPIN || "").trim().toLowerCase() });
+      tours.push(Object.assign({ id, title: r.TITLE || id, intro: r.INTRO || "", category: r.CATEGORY || null, route: r.ROUTE || "", type: String(r.TYPE || "tour").toLowerCase(), modes: r.MODES || "", length: parseFloat(r.LENGTH_MI) || 0, stops,
+        summary: String(r.SUMMARY || "").trim(), effort: String(r.EFFORT || "").trim(), minutes: String(r.MINUTES || "").trim(), spin: String(r.SPIN || "").trim().toLowerCase() }, (() => { const f = TourInfo.flags(r); return { featWelcome: f.welcome, featEvents: f.events, featured: f.welcome || f.events, avail: f.avail }; })()));
     });
     window.introSpots = () => items.filter(i => i.ll && i.el && (i.r.INTRO || "").trim().toLowerCase() !== "no");   // spots the intro may feature
     window.introShowSpot = id => { const it = items.find(x => x.id === id); if (it) showSpot(it); };
@@ -2841,6 +2849,7 @@ $("res").onclick = e => {
     const k = key(id);
     const ti = tours.findIndex(t => key(t.id) === k);
     if (ti >= 0) {
+      if (!tourOpen(tours[ti])) return false;                   // an event tour that is not on right now
       T = tours[ti];
       if (routeLines(T.route).length) clearTourLine(); else setTourLine(T.stops.map(st => (byId(st.ITEM_ID) || {}).ll).filter(Boolean));
       go(0);
@@ -2859,9 +2868,15 @@ $("res").onclick = e => {
     blurb: t.summary || t.intro || "", meta: TourInfo.meta(t), venues: [], link: "", linkText: "", enabled: true, st: { state: "none" } });
   window.ETSTours = {
     get: id => tours.find(t => key(t.id) === key(id)) || null,
-    start: id => { const i = tours.findIndex(t => key(t.id) === key(id)); if (i < 0) return false; startTour(i); return true; },
-    // tours marked Featured, leaving out any that an announcement already features
-    featured: () => tours.filter(t => t.featured && !ANN.some(a => a.tourId && key(a.tourId) === key(t.id))).map(asEntry)
+    isOpen: id => { const t = tours.find(x => key(x.id) === key(id)); return !!t && tourOpen(t); },
+    start: id => {
+      const i = tours.findIndex(t => key(t.id) === key(id)); if (i < 0) return false;
+      if (!tourOpen(tours[i])) { toast(Labels.t("tours.notRunning")); return false; }
+      startTour(i); return true;
+    },
+    // tours promoted on the welcome screen ("welcome") or in the Events panel (anything else), leaving out any that an announcement already features
+    // and any event tour that is not on right now
+    featured: where => { const open = openTest(); return tours.filter(t => (where === "welcome" ? t.featWelcome : t.featEvents) && open(t) && !ANN.some(a => a.tourId && key(a.tourId) === key(t.id))).map(asEntry); }
   };
 })();
 
@@ -3596,10 +3611,10 @@ $("aerialBtn").onclick = () => setAerial($("aerialBtn").getAttribute("aria-press
 const evStatus = ev => (window.EventSchedule && ev.schedule) ? EventSchedule.status(ev.schedule) : null;
 function renderWhatsOn(box){                                    // the announcements, above the list of events
   const items = window.Announcements ? Announcements.withStatus(ANN_ALL.filter(a => a.kind === "announcement")) : [];
-  const things = window.ETSTours ? ETSTours.featured() : [];
+  const things = window.ETSTours ? ETSTours.featured("events") : [];
   if (!items.length && !things.length) return;
   const startBtn = (parent, id) => {
-    const tour = window.ETSTours ? ETSTours.get(id) : null;
+    const tour = window.ETSTours && ETSTours.isOpen(id) ? ETSTours.get(id) : null;                // an event tour that is not on yet has no Start button
     if (!tour) return;
     const b = document.createElement("button");
     b.type = "button";
@@ -3708,7 +3723,7 @@ function refreshEventButton(){
   const own = !!(SITE.event.title || SITE.event.text);
   const pub = EVENTS_INDEX.filter(e => e.public !== false);
   const notices = ANN_ALL.filter(a => a.kind === "announcement");
-  const things = window.ETSTours ? ETSTours.featured() : [];
+  const things = window.ETSTours ? ETSTours.featured("events") : [];
   if (!own && !pub.length && !notices.length && !things.length) return;
   const liveNow = pub.some(e => { const s = evStatus(e); return s && s.state === "now" && e.slug !== EVENT_SLUG; }) || ANN.some(a => a.kind === "announcement" && a.st.state === "now");
   $("eventBtn").textContent = liveNow ? Labels.t("events.nowButton") : (own ? SITE.event.button : "Events");

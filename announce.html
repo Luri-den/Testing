@@ -94,7 +94,7 @@ async function getCsv(name) {
 async function init() {
   if (!window.Papa) { setStatus("The page could not load its spreadsheet reader. Check your internet connection and reload."); return; }
   const [ann, locs, kids, tours] = await Promise.all([getCsv(ETS_CONFIG.ANNOUNCEMENTS_FILE), getCsv("locations.csv"), getCsv("childmarkers.csv"), getCsv("tours.csv")]);
-  TOURS = tours.filter(r => String(r.TYPE || "tour").toLowerCase() !== "line" && String(r.TOUR_ID || "").trim()).map(r => ({ id: String(r.TOUR_ID).trim(), title: String(r.TITLE || r.TOUR_ID).trim(), type: String(r.TYPE || "tour").toLowerCase() }));
+  TOURS = tours.filter(r => String(r.TYPE || "tour").toLowerCase() !== "line" && String(r.TOUR_ID || "").trim()).map(r => ({ id: String(r.TOUR_ID).trim(), title: String(r.TITLE || r.TOUR_ID).trim(), type: String(r.TYPE || "tour").toLowerCase(), event: String(r.AVAILABILITY || "").trim().toLowerCase() === "event" }));
   ITEMS = ann.map(Announcements.fromRow).filter(a => a.name || a.id);
   PLACES = locs.map(r => ({ id: String(r.ID || "").trim(), name: String(r.NAME || "").trim(), sub: "" }))
     .concat(kids.map(r => ({ id: String(r.CHILD_ID || "").trim(), name: String(r.NAME || "").trim(), sub: "part of " + String(r.PARENT_ID || "").trim() })))
@@ -174,9 +174,10 @@ function buildForm(a) {
       PLACES.map(p => '<label data-t="' + esc((p.id + " " + p.name + " " + p.sub).toLowerCase()) + '"><input type="checkbox" class="vn" value="' + esc(p.id) + '"' + (venueIds.has(p.id) ? " checked" : "") + "> " + esc(p.name || p.id) + ' <small style="color:#777">' + esc(p.id) + (p.sub ? ", " + esc(p.sub) : "") + "</small></label>").join("") +
     "</div>" +
     '<label for="f_tour">Feature a tour or trail (optional)</label><select id="f_tour"><option value="">(none)</option>' +
-      TOURS.map(t => '<option value="' + esc(t.id) + '"' + (a.tourId === t.id ? " selected" : "") + ">" + esc(t.title) + " (" + (t.type === "trail" ? "trail" : "tour") + ")</option>").join("") +
+      TOURS.map(t => '<option value="' + esc(t.id) + '"' + (a.tourId === t.id ? " selected" : "") + ">" + esc(t.title) + " (" + (t.type === "trail" ? "trail" : "tour") + (t.event ? ", event only" : "") + ")</option>").join("") +
       (a.tourId && !TOURS.some(t => t.id === a.tourId) ? '<option value="' + esc(a.tourId) + '" selected>' + esc(a.tourId) + " (not found)</option>" : "") + "</select>" +
     '<div class="hint">Visitors get a "Start the tour" button on the welcome screen and in the Events panel.</div>' +
+    '<div class="hint" id="tourNote"></div>' +
     '<div class="row"><div><label for="f_link">Web page (optional)</label><input type="url" id="f_link" value="' + esc(a.link) + '" placeholder="https://..."></div>' +
     '<div><label for="f_linktext">Button words</label><input type="text" id="f_linktext" value="' + esc(a.linkText) + '" placeholder="Learn more"></div></div>' +
 
@@ -199,6 +200,8 @@ function buildForm(a) {
     "<h2>How it will look on the welcome screen</h2>" +
     '<div class="pv" id="pv"></div>';
 
+  const tourNote = () => { const t = TOURS.find(x => x.id === $("f_tour").value); $("tourNote").innerHTML = t && t.event ? "<b>" + esc(t.title) + "</b> is an <b>event tour</b>: visitors can start it only while this announcement is on. Before it starts, the announcement still shows as coming soon, but without a Start button." : ""; };
+  $("f_tour").addEventListener("change", tourNote); tourNote();
   $("form").querySelectorAll("input,select,textarea").forEach(el => { if (el.id !== "vSearch") { el.addEventListener("input", onEdit); el.addEventListener("change", onEdit); } });
   $("vSearch").addEventListener("input", () => { const q = $("vSearch").value.trim().toLowerCase(); $("venues").querySelectorAll("label[data-t]").forEach(l => l.hidden = !!q && !l.dataset.t.includes(q)); });
   syncVisibility(); preview();

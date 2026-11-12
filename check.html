@@ -53,6 +53,7 @@ code{background:#eee;padding:1px 4px;border-radius:3px}
 <script src="welcome-themes.js"></script>
 <script src="schedule.js"></script>
 <script src="announcements.js"></script>
+<script src="tour-info.js"></script>
 <script src="labels.js"></script>
 <script src="marker-fill.js"></script>
 <script src="ets-config.js"></script>
@@ -167,7 +168,7 @@ async function runOnce(){
     site = parseCsv("Settings", "site.csv", got["site.csv"].text, ["KEY","VALUE"], "the Settings editor");
     site.rows.forEach(r => { S[v(r, "KEY")] = v(r, "VALUE"); });
   } else add("note", "Settings", "site.csv", "No site.csv, so the page uses its built-in defaults.", "");
-  const KNOWN = ["PLACE","HEADER","TAB_TITLE","BAR_COLOR","ACCENT_COLOR","TOUR_SPIN","TOUR_SPIN_SPEED","TOUR_TILT","CENTER_LAT","CENTER_LNG","ZOOM","BOUNDS_WEST","BOUNDS_SOUTH","BOUNDS_EAST","BOUNDS_NORTH","MIN_ZOOM","MAX_ZOOM","FIT_TO_MARKERS","PASSPORT","PASSPORT_RANKS","YEAR_SLIDER","OVERLAY_SLIDER","AERIAL_BUTTON","EVENT_BUTTON","EVENT_TITLE","EVENT_TEXT","WELCOME_THEME","WELCOME_TEXT"];
+  const KNOWN = ["ACCENT_COLOR", "AERIAL_BUTTON", "BAR_COLOR", "BAR_STYLE", "BOTTOM_ON", "BOUNDS_EAST", "BOUNDS_NORTH", "BOUNDS_SOUTH", "BOUNDS_WEST", "CENTER_LAT", "CENTER_LNG", "EVENT_BUTTON", "EVENT_TEXT", "EVENT_TITLE", "FIT_TO_MARKERS", "FONT_BODY", "FONT_HEAD", "HEADER", "INTRO_CARD", "INTRO_EVERY", "INTRO_FEATURES", "INTRO_STYLE", "INTRO_TOURS", "INTRO_WHATSON", "LAYOUT_BOTTOM", "LAYOUT_FLOAT", "LAYOUT_MORE", "LAYOUT_OFF", "LAYOUT_STYLE", "LAYOUT_TOP", "MAPS_LINK", "MAP_TONE", "MAX_ZOOM", "MIN_ZOOM", "OVERLAY_SLIDER", "PASSPORT", "PASSPORT_RANKS", "PASSPORT_STYLE", "PLACE", "PRIZES", "RING_COLOR", "RING_TEXT", "RING_TRACK", "SEARCH_WIDTH", "SEARCH_WIDTH_PHONE", "TAB_TITLE", "TOUR_SPIN", "TOUR_SPIN_SPEED", "TOUR_TILT", "WELCOME_TEXT", "WELCOME_THEME", "YEAR_SLIDER", "ZOOM", "ZOOM_POS"];
   Object.keys(S).forEach(k => { if (k && !KNOWN.includes(k)) add("note", "Settings", k, "Is not a setting the page knows about, so it is ignored.", "Check the spelling, or remove the row."); });
   if (site && !S.PLACE) add("warn", "Settings", "PLACE", "Is empty. {PLACE} will be blank in the header and welcome screen.", "Fill it in on the Settings editor.");
   if (S.BAR_COLOR && !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(S.BAR_COLOR)) add("warn", "Settings", "BAR_COLOR", '"' + S.BAR_COLOR + '" is not a color like #E47303.', "Pick the color again in the Settings editor.");
@@ -181,6 +182,9 @@ async function runOnce(){
   if (z != null && ((minZ != null && z < minZ) || (maxZ != null && z > maxZ))) add("warn", "Settings", "ZOOM", "The starting zoom is outside the allowed zoom range.", "");
   if (S.ACCENT_COLOR && !/^#[0-9a-f]{6}$/i.test(S.ACCENT_COLOR)) add("warn", "Settings", "ACCENT_COLOR", '"' + S.ACCENT_COLOR + '" is not a color like #E47303, so the top bar color is used.', "Pick the color again in the Settings editor.");
   if (S.TOUR_SPIN && !/^(yes|no)$/i.test(S.TOUR_SPIN)) add("warn", "Settings", "TOUR_SPIN", '"' + S.TOUR_SPIN + '" should be yes or no.', "");
+  if (S.INTRO_WHATSON && !/^(yes|no)$/i.test(S.INTRO_WHATSON)) add("warn", "Settings", "INTRO_WHATSON", '"' + S.INTRO_WHATSON + '" should be yes or no.', "");
+  if (S.INTRO_TOURS && !/^(yes|no)$/i.test(S.INTRO_TOURS)) add("warn", "Settings", "INTRO_TOURS", '"' + S.INTRO_TOURS + '" should be yes or no.', "");
+  if (S.INTRO_EVERY && !/^(third|fourth)$/i.test(S.INTRO_EVERY)) add("warn", "Settings", "INTRO_EVERY", '"' + S.INTRO_EVERY + '" should be third, fourth or blank.', "");
   if (S.TOUR_SPIN_SPEED && !/^(slow|medium|fast)$/i.test(S.TOUR_SPIN_SPEED)) add("warn", "Settings", "TOUR_SPIN_SPEED", '"' + S.TOUR_SPIN_SPEED + '" should be slow, medium or fast.', "");
   if (S.TOUR_TILT && !(num(S.TOUR_TILT) >= 0 && num(S.TOUR_TILT) <= 60)) add("warn", "Settings", "TOUR_TILT", '"' + S.TOUR_TILT + '" should be a number from 0 to 60.', "");
   if (S.WELCOME_THEME && window.WelcomeThemes && !WelcomeThemes.list[lc(S.WELCOME_THEME)]) add("warn", "Settings", "WELCOME_THEME", '"' + S.WELCOME_THEME + '" is not a theme (' + Object.keys(WelcomeThemes.list).join(", ") + ").", "Pick one in the Settings editor.");
@@ -376,8 +380,14 @@ async function runOnce(){
         const ref = "tour " + id;
         if (v(r, "EFFORT") && !/^(easy|moderate|strenuous)$/i.test(v(r, "EFFORT"))) add("note", "Tours", ref, 'Effort "' + v(r, "EFFORT") + '" is not Easy, Moderate or Strenuous. It still shows, as typed.', "");
         if (v(r, "MINUTES") && !(num(v(r, "MINUTES")) > 0)) add("warn", "Tours", ref, 'MINUTES "' + v(r, "MINUTES") + '" is not a positive number, so the time is worked out from the route instead.', "Type a number of minutes, or clear it in " + WT + ".");
-        if (v(r, "FEATURED") && !/^(y|yes|true|1|n|no|false|0)$/i.test(v(r, "FEATURED"))) add("warn", "Tours", ref, 'FEATURED "' + v(r, "FEATURED") + '" should be yes or blank.', "Tick or untick Feature in " + WT + ".");
-        if (/^(y|yes|true|1)$/i.test(v(r, "FEATURED")) && !v(r, "ROUTE") && !(got["tourstops.csv"].text || "").split(/\r?\n/).some(l => lc(l.split(",")[0]) === lc(id))) add("warn", "Tours", ref, "Is featured but has no stops and no route, so there is nothing to show when a visitor presses Start.", "Add stops or a route in " + WT + ".");
+        const YN = /^(y|yes|true|1|n|no|false|0)$/i, hasNew = Object.prototype.hasOwnProperty.call(r, "SHOW_WELCOME") || Object.prototype.hasOwnProperty.call(r, "SHOW_EVENTS");
+        if (Object.prototype.hasOwnProperty.call(r, "FEATURED")) add("note", "Tours", ref, hasNew ? "Still has the old FEATURED column next to the new SHOW_WELCOME and SHOW_EVENTS columns. The old one is ignored." : "Uses the old FEATURED column, which still works (it means both the welcome screen and the Events panel).", "Open the Tours editor and publish: it turns the old column into the two new ones.");
+        ["SHOW_WELCOME", "SHOW_EVENTS", "FEATURED"].forEach(k => { if (v(r, k) && !YN.test(v(r, k))) add("warn", "Tours", ref, k + ' "' + v(r, k) + '" should be yes or blank.', "Tick or untick it in " + WT + "."); });
+        if (v(r, "AVAILABILITY") && !/^(always|event)$/i.test(v(r, "AVAILABILITY"))) add("warn", "Tours", ref, 'AVAILABILITY "' + v(r, "AVAILABILITY") + '" should be blank, always or event.', "Choose it again in " + WT + ".");
+        const promoted = window.TourInfo ? TourInfo.flags(r) : { welcome: false, events: false, avail: "always" };
+        if (promoted.avail === "event" && (promoted.welcome || promoted.events)) add("note", "Tours", ref, "Is an event tour that is also ticked for the welcome screen or the Events panel. Those ticks are ignored: its announcement promotes it while it is on.", "");
+        if (promoted.avail !== "event" && promoted.welcome && /^(no|n|false|0)$/i.test(S.INTRO_TOURS || "")) add("note", "Tours", ref, "Is ticked for the welcome screen, but tours are switched off for the welcome screen in the Site Settings.", "");
+        if ((promoted.welcome || promoted.events) && !v(r, "ROUTE") && !(got["tourstops.csv"].text || "").split(/\r?\n/).some(l => lc(l.split(",")[0]) === lc(id))) add("warn", "Tours", ref, "Is promoted but has no stops and no route, so there is nothing to show.", "Add stops or a route in " + WT + ", or untick it.");
         if (v(r, "SPIN") && !/^(yes|no)$/i.test(v(r, "SPIN"))) add("warn", "Tours", ref, 'SPIN "' + v(r, "SPIN") + '" should be yes, no or blank (blank follows the site setting).', "Choose the camera setting again in " + WT + ".");
         if (!v(r, "SUMMARY") && !v(r, "INTRO")) add("note", "Tours", ref, "Has no short description or intro, so its card in the visitor's list has no text.", "");
       });
@@ -446,6 +456,14 @@ async function runOnce(){
         else if (v(r, "BLURB").length > 170) add("note", "Announcements", ref, "Its description is " + v(r, "BLURB").length + " characters. The welcome screen cuts it at about 170.", "");
         if (!v(r, "VENUE_IDS") && !v(r, "TOUR_ID") && !v(r, "LINK") && !off) add("note", "Announcements", ref, "Has no place, tour or web page, so its welcome-screen button just closes the screen.", "");
       });
+      // an event tour is visible only while an announcement that features it is on, so it needs one
+      if (got["tours.csv"].text != null) {
+        const featuredBy = new Set(A.rows.filter(r => v(r, "NAME") && v(r, "TOUR_ID")).map(r => lc(v(r, "TOUR_ID"))));
+        Papa.parse(got["tours.csv"].text, { header: true, skipEmptyLines: "greedy" }).data.forEach(r => {
+          const id = v(r, "TOUR_ID"); if (!id || lc(v(r, "TYPE")) === "line" || !(window.TourInfo && TourInfo.flags(r).avail === "event")) return;
+          if (!featuredBy.has(lc(id))) add("warn", "Tours", "tour " + id, "Is an event tour (only visible while an announcement features it), but no announcement features it, so visitors will never see it.", "In the Announcements tab, make an announcement and choose this tour, or set the tour to Always in the Tours editor.");
+        });
+      }
     }
   }
 

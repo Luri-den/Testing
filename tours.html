@@ -81,6 +81,10 @@
     width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff;color:var(--ink)}
   .field textarea{min-height:70px;resize:vertical;line-height:1.45}
   .field .sub{font-size:11px;color:var(--muted);margin-top:3px}
+  .evbadge{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:#fff1d6;color:#8a5a00;border:1px solid #f0c36b;border-radius:999px;padding:1px 7px;margin-left:6px}
+  .warnbox{background:#fff4e5;border:1px solid #f0b36b;border-radius:6px;padding:8px 10px;font-size:12px;line-height:1.45;color:#6b3f00;margin-top:6px}
+  .linkbtn{background:none;border:0;padding:0;color:#0b5cad;text-decoration:underline;cursor:pointer;font-size:inherit}
+  .annlist{margin:4px 0 0;padding-left:18px;font-size:12px;color:var(--muted)}
 
   .pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 
@@ -192,6 +196,8 @@
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="lines-style.js"></script>
+<script src="schedule.js"></script>
+<script src="announcements.js"></script>
 <script src="tour-info.js"></script>
 
 <script>
@@ -224,7 +230,20 @@ const MODES = [   // how people travel a tour or trail
   ["drive", "Drive", "by car, with stops along public roads. Any vehicle will do."],
   ["virtual", "Virtual", "from anywhere, on screen. For places that are hard to visit, closed or far away, or as an introduction before a visit."]
 ];
-const TOUR_COLS  = ["TOUR_ID","TITLE","INTRO","CATEGORY","ROUTE","TYPE","MODES","LENGTH_MI","SUMMARY","EFFORT","MINUTES","FEATURED","SPIN"];
+const TOUR_COLS  = ["TOUR_ID","TITLE","INTRO","CATEGORY","ROUTE","TYPE","MODES","LENGTH_MI","SUMMARY","EFFORT","MINUTES","SHOW_WELCOME","SHOW_EVENTS","AVAILABILITY","SPIN"];
+let ANNS = [];                                   // announcements (announcements.csv), to show which ones feature each tour
+const annsFor = id => ANNS.filter(a => a.tourId && String(a.tourId).trim().toLowerCase() === String(id || "").trim().toLowerCase());
+const annLine = a => { const st = window.EventSchedule && a.schedule ? EventSchedule.status(a.schedule) : null; return esc(a.name) + (a.enabled ? "" : " (switched off)") + (st ? " \u2014 " + esc(EventSchedule.statusText(st)) : " \u2014 no dates yet"); };
+function availHint(r) {
+  const id = String(r.TOUR_ID || "").trim(), linked = annsFor(id), event = String(r.AVAILABILITY || "").trim().toLowerCase() === "event";
+  const list = linked.length ? '<ul class="annlist">' + linked.map(a => "<li>" + annLine(a) + "</li>").join("") + "</ul>" : "";
+  if (event && !linked.length) return '<div class="warnbox">No announcement features this tour yet, so visitors will never see it. In the <b>Announcements</b> tab, make one and choose this tour under "Feature a tour or trail". <button type="button" class="linkbtn" data-open="p14">Open Announcements</button></div>';
+  if (event) {
+    const on = linked.some(a => a.enabled && a.schedule && window.EventSchedule && EventSchedule.status(a.schedule).state === "now");
+    return '<div class="sub">' + (on ? "<b>Visitors can see it right now.</b>" : "Visitors cannot see it right now. It appears when one of these announcements starts, and goes when it ends:") + "</div>" + list;
+  }
+  return linked.length ? '<div class="sub">Always available. These announcements feature it, which adds a tag and a Start button while they run:</div>' + list : '<div class="sub">Always available to visitors.</div>';
+}
 const STOP_COLS  = ["TOUR_ID","STEP","ITEM_ID","NOTE","VEHICLE"];
 
 /* Vehicles available on the live site */
@@ -338,6 +357,8 @@ function readCSV(file, kind){
   r.readAsText(file);
 }
 
+if (window.Announcements) Announcements.load().then(l => { ANNS = l; try { renderTourList(); renderForm(); } catch (e) {} });
+
 /* Auto-load all five from same folder; keep going if any fail */
 (async () => {
   const specs = [
@@ -400,6 +421,14 @@ function ingestCSV(text, kind, filename){
 
   if (kind === "tours"){
     headers.tour = parsed.meta.fields?.length ? parsed.meta.fields.slice() : TOUR_COLS.slice();
+    // An older file has one FEATURED column that meant both "on the welcome screen" and "in the Events panel". Carry its value over to the two new columns.
+    {
+      const had = headers.tour.slice(), hadNew = had.includes("SHOW_WELCOME") || had.includes("SHOW_EVENTS");
+      if (had.includes("FEATURED")) {
+        rows.forEach(r => { if (!hadNew) { const y = /^(y|yes|true|1)$/i.test(String(r.FEATURED || "").trim()) ? "yes" : ""; r.SHOW_WELCOME = y; r.SHOW_EVENTS = y; } delete r.FEATURED; });
+        headers.tour = headers.tour.filter(c => c !== "FEATURED");
+      }
+    }
     for (const c of TOUR_COLS) if (!headers.tour.includes(c)) headers.tour.push(c);
     tours = rows.map(r => ({ row: r, stops: [] }));
     loaded.tours = true;
@@ -594,7 +623,7 @@ function renderTourList(){
     const color = CATEGORIES[cat]?.color || "#E47303";
     row.innerHTML =
       `<span class="sw" style="background:${ownLine(t) ? routeColor(t) : color}"></span>` +
-      `<span class="name">${esc(t.row.TITLE || t.row.TOUR_ID || "(unnamed)")}</span>` +
+      `<span class="name">${esc(t.row.TITLE || t.row.TOUR_ID || "(unnamed)")}${String(t.row.AVAILABILITY||"").trim().toLowerCase()==="event"?'<span class="evbadge" title="Visitors see this tour only while an announcement for it is on">Event</span>':""}</span>` +
       `<span class="cnt">${String(t.row.TYPE||"").toLowerCase() === "line" ? "line" : String(t.row.TYPE||"").toLowerCase() === "trail" ? "trail " + t.stops.length : t.stops.length}</span>`;
     row.onclick = () => { selectedTour = t; selectedStop = null; render(); };
     list.appendChild(row);
@@ -682,8 +711,17 @@ function renderForm(){
         <div class="sub">The map always frames the whole tour in the middle of the screen. Turning is slow, stops the moment a visitor touches the map, and never happens for visitors who asked their device to reduce motion.</div>
       </div>
       <div class="field">
-        <label style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="f-FEATURED" ${/^(y|yes|true|1)$/i.test(String(r.FEATURED||"").trim())?"checked":""}> Feature this on the welcome screen and in the Events panel</label>
+        <label>When can visitors use it?</label>
+        <select id="f-AVAILABILITY">${[["", "Always"], ["event", "Only while an announcement features it (event tour)"]].map(([v, t]) => `<option value="${v}" ${String(r.AVAILABILITY||"").trim().toLowerCase()===v?"selected":""}>${t}</option>`).join("")}</select>
+        <div id="availHint">${availHint(r)}</div>
       </div>
+      <div class="field" id="promoBox" ${String(r.AVAILABILITY||"").trim().toLowerCase()==="event"?'style="display:none"':""}>
+        <label>Promote it</label>
+        <label style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="f-SHOW_WELCOME" ${TourInfo.flags(r).welcome?"checked":""}> Show on the welcome screen</label>
+        <label style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="f-SHOW_EVENTS" ${TourInfo.flags(r).events?"checked":""}> Show in the Events panel (Things to do)</label>
+        <div class="sub">How often the welcome screen mixes tours in is set in the Site Settings tab, under the welcome screen.</div>
+      </div>
+      <div id="eventNote" style="font-size:11px;color:var(--muted);margin:0 0 10px;line-height:1.5;${String(r.AVAILABILITY||"").trim().toLowerCase()==="event"?"":"display:none"}">An event tour is promoted by its announcement: it shows on the welcome screen and in the Events panel while that announcement is on.</div>
       <div class="field">
         <label>Category</label>
         <div class="catrow">
@@ -744,7 +782,17 @@ function renderForm(){
   bindText(box, "f-SUMMARY",  v => { r.SUMMARY = v; });
   bindText(box, "f-MINUTES",  v => { r.MINUTES = v; minHint(); });
   box.querySelector("#f-EFFORT").onchange = e => { r.EFFORT = e.target.value; };
-  box.querySelector("#f-FEATURED").onchange = e => { r.FEATURED = e.target.checked ? "yes" : ""; };
+  box.querySelector("#f-SHOW_WELCOME").onchange = e => { r.SHOW_WELCOME = e.target.checked ? "yes" : ""; };
+  box.querySelector("#f-SHOW_EVENTS").onchange = e => { r.SHOW_EVENTS = e.target.checked ? "yes" : ""; };
+  const wireOpen = () => box.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { try { parent.postMessage({ type: "ets-open-tab", tab: b.getAttribute("data-open") }, location.origin); } catch (err) {} });
+  box.querySelector("#f-AVAILABILITY").onchange = e => {
+    r.AVAILABILITY = e.target.value;
+    const ev = e.target.value === "event";
+    box.querySelector("#availHint").innerHTML = availHint(r); wireOpen();
+    box.querySelector("#promoBox").style.display = ev ? "none" : ""; box.querySelector("#eventNote").style.display = ev ? "block" : "none";
+    renderTourList();
+  };
+  wireOpen();
   box.querySelector("#f-SPIN").onchange = e => { r.SPIN = e.target.value; };
   { const at = tours.indexOf(selectedTour); box.querySelector("#upTour").disabled = at <= 0; box.querySelector("#downTour").disabled = at < 0 || at >= tours.length - 1; }
   box.querySelector("#upTour").onclick = () => moveTour(-1);

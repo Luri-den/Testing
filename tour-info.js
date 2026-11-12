@@ -44,6 +44,23 @@
     return word + " " + Math.max(1, Math.round(meters / 1609.344 * PACE[mode])) + " min \u00b7 " + distance(meters);
   }
 
+  /* What a tour's row in tours.csv says about promotion and availability. Old files have one FEATURED column that meant both
+     "on the welcome screen" and "in the Events panel"; new files have SHOW_WELCOME and SHOW_EVENTS. AVAILABILITY is blank or
+     "always" (the tour is always there) or "event" (visitors see it only while an announcement that features it is on). */
+  const yes = v => /^(y|yes|true|1)$/i.test(String(v == null ? "" : v).trim());
+  function flags(r) {
+    const has = k => Object.prototype.hasOwnProperty.call(r, k);
+    const split = has("SHOW_WELCOME") || has("SHOW_EVENTS"), old = yes(r.FEATURED);
+    return { welcome: split ? yes(r.SHOW_WELCOME) : old, events: split ? yes(r.SHOW_EVENTS) : old,
+             avail: String(r.AVAILABILITY == null ? "" : r.AVAILABILITY).trim().toLowerCase() === "event" ? "event" : "always" };
+  }
+  // is this tour open to visitors right now? `anns` are announcements with a status, as Announcements.withStatus gives them
+  const sameId = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  function isOpen(t, anns) {
+    if (t.avail !== "event") return true;
+    return (anns || []).some(a => a.tourId && sameId(a.tourId, t.id) && a.st && a.st.state === "now");
+  }
+
   const kindWord = (t, L) => (L || L0)(t.type === "trail" ? "tours.trailWord" : "tours.tourWord");
   const goText = (t, L) => (L || L0)(!(t.stops && t.stops.length) ? "tours.showRoute" : t.type === "trail" ? "tours.startTrail" : "tours.startTour");
 
@@ -63,17 +80,19 @@
   function listHtml(tours, o) {
     o = Object.assign({ L: L0 }, o);
     const L = o.L, limit = o.limit || 0, esc = o.esc, chips = o.chips || (window.Labels ? Labels.chips() : [{ minutes: 30, label: "30 min" }, { minutes: 60, label: "1 hour" }, { minutes: 120, label: "2 hours" }, { minutes: 240, label: "Half day" }]);
-    const shown = tours.map((t, i) => ({ t, i })).filter(x => fits(x.t, limit));
+    const shown = tours.map((t, i) => ({ t, i })).filter(x => fits(x.t, limit) && !(o.hide && o.hide(x.t)));   // o.hide: tours that are not open right now
+    const isNow = x => !!(o.happening && o.happening(x.t));                                                    // event tours that are on now
     const isFeat = x => x.t.featured || (o.announce && o.announce(x.t));
-    const feat = shown.filter(isFeat), rest = shown.filter(x => !isFeat(x));
+    const now = shown.filter(isNow), feat = shown.filter(x => !isNow(x) && isFeat(x)), rest = shown.filter(x => !isNow(x) && !isFeat(x));
     let h = '<div class="tcHead"><h2>' + esc(L("tours.title")) + '</h2><button type="button" class="tcClose" data-g="x" aria-label="' + esc(L("tours.close")) + '">&times;</button></div>' +
       '<div class="tcPrompt">' + esc(L("tours.timePrompt")) + "</div>" +
       '<div class="tcChips" role="group" aria-label="' + esc(L("tours.timePrompt")) + '">' +
       [{ minutes: 0, label: L("tours.chipAny") }].concat(chips).map(c => '<button type="button" class="tcChip' + (c.minutes === limit ? " on" : "") + '" data-chip="' + c.minutes + '" aria-pressed="' + (c.minutes === limit) + '">' + esc(c.label) + "</button>").join("") + "</div>" +
       '<div class="tcScroll">';
     if (!shown.length) return h + '<p class="tcNone">' + esc(L("tours.none")) + "</p></div>";
+    if (now.length) h += '<h3 class="tcSec">' + esc(L("tours.happeningNow")) + "</h3>" + now.map(x => card(x.t, x.i, o)).join("");
     if (feat.length) h += '<h3 class="tcSec">' + esc(L("tours.featured")) + "</h3>" + feat.map(x => card(x.t, x.i, o)).join("");
-    if (rest.length) h += (feat.length ? '<h3 class="tcSec">' + esc(L("tours.all")) + "</h3>" : "") + rest.map(x => card(x.t, x.i, o)).join("");
+    if (rest.length) h += ((now.length || feat.length) ? '<h3 class="tcSec">' + esc(L("tours.all")) + "</h3>" : "") + rest.map(x => card(x.t, x.i, o)).join("");
     return h + "</div>";
   }
 
@@ -97,5 +116,5 @@
       '</div><div class="tcFoot"><button type="button" class="tcGo big" data-t="' + i + '">' + esc(goText(t, L)) + "</button></div>";
   }
 
-  window.TourInfo = { PACE, GRACE, minutes, duration, meta, fits, distance, legText, primaryMode, listHtml, overviewHtml, kindWord, goText };
+  window.TourInfo = { PACE, GRACE, minutes, duration, meta, fits, distance, legText, primaryMode, listHtml, overviewHtml, kindWord, goText, flags, isOpen };
 })();
