@@ -756,7 +756,7 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
 #hereChip.pretend{border-style:dashed}
 #hereChip .hdot{width:10px;height:10px;border-radius:50%;background:#0072B2;flex:none}
 #hereChip label{display:flex;align-items:center;gap:4px;white-space:nowrap}
-#hereChip [hidden]{display:none}
+#hereChip[hidden],#hereChip [hidden]{display:none}
 #hereChip button{border:0;background:#0072B2;color:#fff;border-radius:999px;padding:5px 12px;font-size:13px;min-height:32px;cursor:pointer}
 #hereAsk{position:fixed;inset:0;z-index:9500;display:flex;align-items:flex-end;justify-content:center;background:#0006;padding:14px}
 #hereAsk[hidden]{display:none}
@@ -3112,6 +3112,8 @@ $("res").onclick = e => {
   map.on("dragstart", e => { if (state === "follow" && e && e.originalEvent) setState("on"); });     // they moved the map themselves: stop keeping it on them
 
   trk.on(e => { if (e.type === "fix") onFix(e.fix); else if (e.type === "stop") cleanup(); else if (e.type === "error") onError(e.code); });
+
+  if (PRETEND) Promise.all([SETTINGS_READY, new Promise(r => window.__mapLoaded ? r() : map.once("load", r))]).then(() => { if (state === "off" && SITE.hereButton !== false) begin(); }).catch(() => {});   // pretend mode starts itself
 
   window.HereUI = {
     state: () => state, lastFix: () => (state !== "off" ? trk.last() : null), refresh,
