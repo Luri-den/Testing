@@ -29,6 +29,7 @@
     ["tours.mode.hike",   "Tour overview", "Word before the time between stops, hiking", "Hike"],
     ["tours.mode.bike",   "Tour overview", "Word before the time between stops, by bike", "Bike"],
     ["tours.mode.drive",  "Tour overview", "Word before the time between stops, driving", "Drive"],
+    ["maps.open",        "Place cards", "Button that opens a place in the phone's Maps app", "Open in Maps"],
     ["events.nowButton",  "Events and welcome screen", "Events button while something is on", "Happening Now"],
     ["events.whatsOn",    "Events and welcome screen", "Heading over the announcements in the Events panel", "What\u2019s on"],
     ["events.thingsToDo", "Events and welcome screen", "Heading over the featured tours in the Events panel", "Things to do"],

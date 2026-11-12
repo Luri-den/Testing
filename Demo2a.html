@@ -95,7 +95,7 @@ html.settings-loading #tools { visibility: hidden; }
 .kid:hover{background:#fff8f0}
 
 @media(min-width:700px){
-  #panel{left:auto;width:380px;top:125px;bottom:auto;max-height:calc(100% - 140px);right:10px;border-radius:8px}
+  #panel{left:auto;width:380px;top:calc(var(--barB,115px) + 10px);bottom:auto;max-height:calc(100% - var(--barB,115px) - 25px);right:10px;border-radius:8px}
 }
 
 /* WELCOME GIF INTRO */
@@ -658,6 +658,51 @@ html.sq #q,html.sq #tools button,html.sq #passportBtn,html.sq #catChips button,h
 html.sq #tools.open #toolsMore{border-radius:6px}
 
 </style>
+<style>
+/* ---- Site Settings that the Settings editor offers: passport ring, band header, bottom bar, fonts, paper tone, Maps link ---- */
+#passportBtn.ring{display:inline-flex;align-items:center;gap:7px;padding:3px 13px 3px 4px;white-space:nowrap;flex:0 0 auto;color:var(--ringtext,var(--bar,#E47303))}
+@media (max-width:720px){   /* phones: a ring on its own with the found count in the middle, so it fits in the row beside the other buttons */
+  #passportBtn.ring{position:relative;box-sizing:border-box;width:36px;height:36px;padding:2px;gap:0;justify-content:center;border-radius:50%}
+  #passportBtn.ring .pring{width:28px;height:28px}
+  #passportBtn.ring #passportCount{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0}
+  #passportBtn.ring #passportCount::after{content:attr(data-found);font-size:11px;font-weight:bold}
+}
+#passportBtn.ring .pring{width:30px;height:30px;transform:rotate(-90deg);flex:none}
+.pring circle{fill:none;stroke-width:4}
+.pring .pt{stroke:var(--ringtrack,#e6e0d8)}
+.pring .pf{stroke:var(--ring,var(--bar,#E47303));stroke-linecap:round;stroke-dasharray:0 100;transition:stroke-dasharray .6s}
+html.band #bar{background:var(--bar,#800000);pointer-events:auto;padding-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+html.band #bar h1{display:block;order:-1;flex:1 1 100%;font-size:18px;font-weight:700;color:#fff}
+html.band #map{top:var(--bandh,0px)}
+#panel{max-height:min(55vh,calc(100% - var(--barB,0px) - 10px))}
+#botbar{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;flex-wrap:wrap;align-items:center;gap:6px;box-sizing:border-box;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:var(--bar,#800000);box-shadow:0 -2px 8px rgba(0,0,0,.35);font-size:13px}
+html:not(.bot) #botbar{display:none}
+#botbar > *{pointer-events:auto}
+#botbar button{padding:6px 10px;border:0;border-radius:4px;background:#fff;color:#000;cursor:pointer}
+#botbar label{display:flex;align-items:center;gap:6px;flex:1 1 210px}
+#botbar input[type=range]{flex:1}
+#botbar [hidden]{display:none}
+#botbar label#yearBox{flex:0 0 190px;flex-direction:column;align-items:stretch;gap:0}
+#botbar label#ovw{flex:1 1 260px}
+html.sq #botbar button{border-radius:4px!important}
+@media (max-width:720px){#botbar button{padding:8px 12px}}
+html.bot #map{bottom:var(--botH,0px)}
+html.bot #welcomeSkip{bottom:calc(var(--botH,0px) + 14px)}
+html.bot #spotBox,html.bot #eventBox{bottom:var(--botH,0px)}
+@media (max-width:699px){html.bot #panel{bottom:var(--botH,0px)}}
+#klegend.lay-in{position:static!important;margin:0!important;transform:none!important}
+html:not(.band) .maplibregl-ctrl-top-right{top:var(--barB,0px)}
+@media (max-width:720px){ html.qwpf #q{flex:1 1 0!important;min-width:110px;max-width:var(--qw-p)} }   /* the phone search width is a maximum: the box gives up space so buttons stay on the same row */
+html.paper #panel,html.paper #spotCard,html.paper #eventCard,html.paper #wsBox,html.paper #tourCard{background:#fbf5e6}
+.kmark.spot{z-index:3}
+.kmark.spot > *{transform:scale(1.7);transition:transform .3s}
+.maps-link{display:inline-block;margin:6px 0;padding:8px 14px;border-radius:999px;background:var(--bar,#800000);color:#fff;font-weight:600;text-decoration:none}
+.maps-link[hidden]{display:none}
+html.fontset,html.fontset body{font-family:var(--font-body,Arial,sans-serif)}
+html.fontset button,html.fontset input,html.fontset select,html.fontset textarea{font-family:inherit}
+html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family:var(--font-head,var(--font-body,Arial,sans-serif))}
+@media (prefers-reduced-motion:reduce){.pring .pf{transition:none}}
+</style>
 </head>
 
 <body>
@@ -686,6 +731,7 @@ html.sq #tools.open #toolsMore{border-radius:6px}
     <p id="sp-when"><b></b></p>
     <p id="sp-text"></p>
     <small id="sp-credit"></small>
+    <a id="sp-maps" class="maps-link" target="_blank" rel="noopener" hidden>Open in Maps</a>
     <button id="sp-go" type="button">Explore the Map</button>
   </div>
 </div>
@@ -945,6 +991,89 @@ const WELCOME_STEPS = [
   { gif: "welcome1.gif" },
   { type: "sites" }
 ];
+
+
+/* ===== "Open in Maps": opens the place as a pin in the phone's own maps app (no route is planned here) ===== */
+function mapsUrl(lng, lat, name){
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  return ios ? "https://maps.apple.com/?ll=" + lat + "," + lng + "&q=" + encodeURIComponent(name || "Place")
+             : "https://www.google.com/maps/search/?api=1&query=" + lat + "," + lng;
+}
+function setMaps(a, ll, name){
+  if (!a) return;
+  const lng = ll && (ll.lng !== undefined ? ll.lng : ll[0]), lat = ll && (ll.lat !== undefined ? ll.lat : ll[1]);
+  const ok = SITE.mapsLink !== false && isFinite(lng) && isFinite(lat) && ll;
+  a.hidden = !ok;
+  if (ok) { a.href = mapsUrl(lng, lat, name); a.textContent = Labels.t("maps.open"); }
+}
+
+
+/* ===== Map style: Standard | Warm | Muted (colors the street map only; aerial photos and old-map overlays stay as they are) ===== */
+function applyTone(tone){
+  const T = { warm: { sat: -0.3, con: -0.05, bmax: 0.97, tint: 0.14 }, muted: { sat: -0.65, con: -0.1, bmax: 1, tint: 0 } }[tone];
+  document.documentElement.classList.toggle("paper", tone === "warm");     // warm also gives the cards a paper color
+  if (!T) return;
+  const go = () => {
+    map.setPaintProperty("osm", "raster-saturation", T.sat);
+    map.setPaintProperty("osm", "raster-contrast", T.con);
+    map.setPaintProperty("osm", "raster-brightness-max", T.bmax);
+    if (T.tint && !map.getLayer("tone")) {
+      map.addSource("tone", { type: "geojson", data: { type: "Feature", geometry: { type: "Polygon", coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } } });
+      map.addLayer({ id: "tone", type: "fill", source: "tone", paint: { "fill-color": "#8a5a1f", "fill-opacity": T.tint } });   // a thin sepia wash just above the street map
+    }
+  };
+  if (window.__mapLoaded) go(); else map.once("load", go);
+}
+
+/* ===== Legend placement (it is built after the map loads, so the layout step can only note where it should go) ===== */
+function placeLegend(){
+  const L = $("klegend"), z = window.__legendZone;
+  if (!L || !z) return;
+  if (z === "off") { L.classList.add("lay-off"); return; }
+  const dest = z === "top" ? $("tools") : z === "bottom" ? (document.documentElement.classList.contains("bot") ? $("botbar") : $("tools")) : z === "more" ? $("toolsMore") : null;
+  if (dest) { L.classList.add("lay-in"); L.style.order = 90; dest.appendChild(L); }
+}
+
+/* ===== Solid top band (LAYOUT_STYLE=band): the bar becomes a colored header and the map starts beneath it ===== */
+function startBand(){
+  const bar = $("bar"), tools = $("tools");
+  if (!bar) return;
+  let last = -1;
+  const fit = () => {
+    if (tools && tools.classList.contains("open")) return;      // let the More drawer overlap the map instead of squeezing it
+    const h = bar.offsetHeight;
+    if (h === last) return;
+    last = h;
+    document.documentElement.style.setProperty("--bandh", h + "px");
+    try { map.resize(); } catch (e) {}
+  };
+  new ResizeObserver(fit).observe(bar);
+  fit();
+}
+
+/* ===== Passport progress ring (PASSPORT_STYLE=ring; colors RING_COLOR / RING_TRACK / RING_TEXT) ===== */
+function buildRing(){
+  const b = $("passportBtn"), c = $("passportCount");
+  if (!b || !c) return;
+  const R = SITE.ringColors || {}, ok = v => /^#[0-9a-f]{3,8}$/i.test(v || "");
+  if (ok(R.fill))  b.style.setProperty("--ring", R.fill);
+  if (ok(R.track)) b.style.setProperty("--ringtrack", R.track);
+  if (ok(R.text))  b.style.setProperty("--ringtext", R.text);
+  b.classList.add("ring");
+  b.setAttribute("aria-label", "History passport");
+  b.innerHTML = '<svg class="pring" viewBox="0 0 36 36" aria-hidden="true"><circle class="pt" cx="18" cy="18" r="15.9"/><circle class="pf" cx="18" cy="18" r="15.9" pathLength="100"/></svg>';
+  b.appendChild(c);
+  const upd = () => {
+    const m = /(\d+)\s*\/\s*(\d+)/.exec(c.textContent);
+    const pct = m && +m[2] ? Math.round(100 * m[1] / m[2]) : 0;
+    b.querySelector(".pf").style.strokeDasharray = pct + " 100";
+    c.dataset.found = m ? m[1] : "0";                                   // phones show just this number in the middle of the ring
+    b.title = m ? m[1] + " of " + m[2] + " stamps found" : "History passport";
+  };
+  new MutationObserver(upd).observe(c, { childList: true, characterData: true, subtree: true });
+  upd();
+}
+
 
 /* Where the top bar ends (--barB), so the intro card stays below it. */
 (function trackBar(){
@@ -1224,6 +1353,9 @@ SITE.fitMarkers = true;
 SITE.fromCsv = false;
 SITE.passport = true;
 SITE.passportRanks = true;
+SITE.passportStyle = "";
+SITE.ringColors = {};
+SITE.mapsLink = true;
 SITE.prizes = true;
 SITE.yearSlider = true;
 SITE.aerialButton = true;
@@ -1242,11 +1374,14 @@ function applyLayout(S){
   const css = v => v >= 100 ? "100%" : "calc(" + v + "% - 4px)";
   const wd = pct("SEARCH_WIDTH"), wp = pct("SEARCH_WIDTH_PHONE");
   if (wd) { root.style.setProperty("--qw-d", css(wd)); root.classList.add("qwd"); }
-  if (wp) { root.style.setProperty("--qw-p", css(wp)); root.classList.add("qwp"); }
+  if (wp) { root.style.setProperty("--qw-p", css(wp)); root.classList.add("qwp"); if (wp < 100) root.classList.add("qwpf"); }
   if ((S.BAR_STYLE || "").toLowerCase() === "bar") root.classList.add("sq");
 
   let top = g("LAYOUT_TOP"), more = g("LAYOUT_MORE"), off = g("LAYOUT_OFF");
-  if (!top.length && !more.length && !off.length) return;      // no saved layout: keep the built-in one
+  const bottom0 = g("LAYOUT_BOTTOM");
+  const zoneOf = { top, bottom: bottom0, more, off };
+  window.__legendZone = ["top", "bottom", "more", "off"].find(z => zoneOf[z].includes("legend")) || "";   // the legend is built later, see placeLegend()
+  if (!top.length && !more.length && !off.length && !bottom0.length && !g("LAYOUT_FLOAT").length) return;      // no saved layout: keep the built-in one
   const el = { search: $("q"), near: $("near"), event: $("eventBtn"), more: $("moreBtn"), tour: $("tour"), tours: $("tours"),
     stories: $("stories"), chips: $("catChipsWrap"), aerial: $("aerialBtn"), year: $("yearBox"), oldmaps: $("ovw"), passport: $("passportBtn") };
   const helper = id => id === "spacer" || id === "newrow";
@@ -1255,6 +1390,7 @@ function applyLayout(S){
   top = uniq(top);
   more = uniq(more.filter(id => id !== "search" && id !== "more" && !helper(id)));
   off = uniq(off.filter(id => id !== "search" && id !== "more"));
+  const bottom = uniq(bottom0.filter(id => id !== "search" && id !== "more"));
   Object.keys(el).forEach(id => { if (!seen.has(id)) { top.push(id); seen.add(id); } });   // anything not listed stays in the bar
 
   root.classList.add("lay");
@@ -1266,10 +1402,32 @@ function applyLayout(S){
   });
   more.forEach((id, i) => { el[id].style.order = i; M.appendChild(el[id]); });
   off.forEach(id => { if (el[id]) el[id].classList.add("lay-off"); });
+  if (bottom.length || window.__legendZone === "bottom") {              // second bar along the bottom of the screen
+    let B = $("botbar");
+    if (!B) { B = document.createElement("div"); B.id = "botbar"; document.body.appendChild(B); }
+    const nodes = bottom.map(id => { const h = helper(id); const n = h ? mk(id === "spacer" ? "lay-sp" : "lay-nr") : el[id]; n.__home = n.parentNode; n.__helper = h; return n; });
+    const phoneOnly = (S.BOTTOM_ON || "").toLowerCase() !== "all";      // default: the bottom bar is a phone feature
+    const mq = matchMedia("(max-width:720px)");
+    const setH = () => root.style.setProperty("--botH", root.classList.contains("bot") ? Math.round(B.offsetHeight) + "px" : "0px");
+    const apply = () => {
+      const on = !phoneOnly || mq.matches;
+      root.classList.toggle("bot", on);
+      nodes.forEach((n, i) => {
+        if (on) { n.style.order = 10 + i; n.style.display = ""; B.appendChild(n); }
+        else if (n.__helper) n.style.display = "none";                   // spacers and line breaks mean nothing in the top bar
+        else { n.style.order = 100 + i; T.appendChild(n); }                 // on computers the buttons go back to the top bar (not into the More drawer where some of them start)
+      });
+      placeLegend(); setH();
+    };
+    new ResizeObserver(setH).observe(B);
+    mq.addEventListener("change", apply); apply();
+  }
   if (typeof syncMoreBtn === "function") syncMoreBtn();
 }
 
-const SETTINGS_READY = dataFetch("site.csv", { cache: "no-store" })
+
+const PREVIEW_SETTINGS = (() => { const v = new URLSearchParams(location.search).get("settings") || ""; return v.startsWith("blob:") ? v : ""; })();   // the Settings editor's live preview hands over unsaved settings this way
+const SETTINGS_READY = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("site.csv", { cache: "no-store" }))
   .then(r => r.ok ? r.text() : "")
   .catch(() => "")
   .then(txt => {
@@ -1285,6 +1443,23 @@ const SETTINGS_READY = dataFetch("site.csv", { cache: "no-store" })
     if (S.HEADER)    document.querySelector("#bar h1").textContent = fill(S.HEADER);
     if (S.TAB_TITLE) document.title = fill(S.TAB_TITLE);
     if (/^#[0-9a-f]{3,8}$/i.test(S.BAR_COLOR || "")) document.documentElement.style.setProperty("--bar", S.BAR_COLOR);
+    { /* phone browser bar color + optional fonts (built-in phone fonts, nothing downloaded) */
+      const tc = document.querySelector('meta[name="theme-color"]');
+      if (tc && /^#[0-9a-f]{3,8}$/i.test(S.BAR_COLOR || "")) tc.content = S.BAR_COLOR;
+      const FONTS = {
+        classic:    'Georgia,"Times New Roman",serif',
+        book:       'Charter,"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif',
+        humanist:   '"Gill Sans","Gill Sans MT",Calibri,"Trebuchet MS",sans-serif',
+        typewriter: '"American Typewriter","Courier New",Courier,monospace'
+      };
+      const fb = FONTS[(S.FONT_BODY || "").toLowerCase()], fh = FONTS[(S.FONT_HEAD || "").toLowerCase()];
+      if (fb) document.documentElement.style.setProperty("--font-body", fb);
+      if (fh) document.documentElement.style.setProperty("--font-head", fh);
+      if (fb || fh) document.documentElement.classList.add("fontset");
+      applyTone((S.MAP_TONE || "").toLowerCase());
+      if ((S.ZOOM_POS || "").toLowerCase() === "top") { try { map.removeControl(navCtl); map.addControl(navCtl, "top-right"); } catch (e) {} }
+      if ((S.LAYOUT_STYLE || "").toLowerCase() === "band") { document.documentElement.classList.add("band"); startBand(); }
+    }
     {   // buttons and highlights follow ACCENT_COLOR, or else the header color; their text is whichever of white or dark reads better
       const six = c => /^#[0-9a-f]{6}$/i.test(c || "");
       const acc = six(S.ACCENT_COLOR) ? S.ACCENT_COLOR : six(S.BAR_COLOR) ? S.BAR_COLOR : "#B45309", root = document.documentElement.style;
@@ -1309,6 +1484,9 @@ const SETTINGS_READY = dataFetch("site.csv", { cache: "no-store" })
     SITE.fitMarkers = (S.FIT_TO_MARKERS || "yes").toLowerCase() !== "no";
     SITE.passport = (S.PASSPORT || "yes").toLowerCase() !== "no";
     SITE.passportRanks = (S.PASSPORT_RANKS || "yes").toLowerCase() !== "no";
+    SITE.passportStyle = (S.PASSPORT_STYLE || "").toLowerCase();
+    SITE.ringColors = { fill: S.RING_COLOR, track: S.RING_TRACK, text: S.RING_TEXT };
+    SITE.mapsLink = (S.MAPS_LINK || "yes").toLowerCase() !== "no";
     SITE.prizes = (S.PRIZES || "yes").toLowerCase() !== "no";
     SITE.yearSlider = (S.YEAR_SLIDER || "yes").toLowerCase() !== "no";
     SITE.overlaySlider = (S.OVERLAY_SLIDER || "yes").toLowerCase() !== "no";
@@ -1371,6 +1549,7 @@ async function applySettingsToMap(){
   await SETTINGS_READY;
   if (!SITE.fromCsv) return;
   if (!SITE.passport) $("passportBtn").style.display = "none";
+  else if (SITE.passportStyle === "ring") buildRing();
   if (!SITE.yearSlider) $("yr").closest("label").style.display = "none";
   if (!SITE.aerialButton) $("aerialBtn").hidden = true;
   if (SITE.event.title || SITE.event.text) {
@@ -1403,6 +1582,7 @@ const map = new maplibregl.Map({
   maxBounds: SITE.maxBounds
 });
 window.map = map;
+map.once("load", () => { window.__mapLoaded = true; });
 
 const spotId = new URLSearchParams(location.search).get("spot");
 const siteId = new URLSearchParams(location.search).get("site");
@@ -1421,7 +1601,8 @@ if (skipWelcome) {
   });
 }
 
-map.addControl(new maplibregl.NavigationControl({ showCompass:false }), "bottom-right");
+const navCtl = new maplibregl.NavigationControl({ showCompass:false });
+map.addControl(navCtl, "bottom-right");
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
 
 const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -1841,6 +2022,7 @@ function select(it){
     `<h2>${esc(it.name)}</h2>` +
     (d.HIST_NAMES ? `<p><b>Also known as:</b> ${esc(d.HIST_NAMES)}</p>` : "") +
     (d.ADDRESS ? `<p><b>Address:</b> ${esc(d.ADDRESS)}</p>` : "") +
+    (SITE.mapsLink !== false && it.ll ? `<p><a class="maps-link" target="_blank" rel="noopener" href="${mapsUrl(it.ll.lng !== undefined ? it.ll.lng : it.ll[0], it.ll.lat !== undefined ? it.ll.lat : it.ll[1], it.name)}">${esc(Labels.t("maps.open"))}</a></p>` : "") +
     `<p>${esc(d.DETAILS || "")}</p>` +
     (it.kids && it.kids.length
       ? "<h3>Places here</h3>" +
@@ -2090,6 +2272,7 @@ $("res").onclick = e => {
     $("sp-when").textContent = r.YEAR || "";
     $("sp-text").textContent = r.DETAILS || "";
     $("sp-credit").textContent = coverNote(id, r.CREDIT) || (r.CREDIT ? "Photo: " + r.CREDIT : "");
+    setMaps($("sp-maps"), ll, r.TITLE);
     $("sp-img").dataset.caption = coverNote(id);
     const qGal = buildGallery(id);
     if (qGal) $("sp-credit").after(qGal);
@@ -2219,6 +2402,7 @@ $("res").onclick = e => {
     $("sp-title").textContent = r.TITLE || "";
     $("sp-when").textContent = r.YEAR || "";
     $("sp-text").textContent = r.DETAILS || "";
+    setMaps($("sp-maps"), it.ll, r.TITLE);
     $("sp-credit").textContent = [coverNote(it.id, r.CREDIT) || (r.CREDIT ? "Photo: " + r.CREDIT : ""), r.SOURCE ? "Source: " + r.SOURCE : ""].filter(Boolean).join(" · ");
     $("sp-img").dataset.caption = coverNote(it.id);
     const oldGal = $("spotCard").querySelector(".gal");
@@ -2422,6 +2606,7 @@ $("res").onclick = e => {
     cb.checked = mo.on;
     cb.onchange = () => mo.set(cb.checked);
   }
+  placeLegend();                                                // the layout may put the legend in the bar
 
   $("stories").onclick = () => {
     showAll = !showAll;
