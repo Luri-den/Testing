@@ -138,11 +138,15 @@ html.settings-loading #tools { visibility: hidden; }
 #welcomeSite{position:absolute;inset:0;pointer-events:none}
 #wsLine{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 #wsLine path{stroke:#fff;stroke-width:2}
-#wsPhoto{position:absolute;left:14px;top:calc(104px + env(safe-area-inset-top));width:min(46vw,230px);height:min(46vw,230px);border-radius:50%;object-fit:cover;border:8px solid var(--c);background:#fff;box-shadow:0 0 0 3px #fff,0 4px 14px #0007}
-#wsBox{position:absolute;left:14px;top:calc(104px + min(46vw,230px) + 14px + env(safe-area-inset-top));width:min(calc(100vw - 28px),360px);box-sizing:border-box;background:#fff;border:6px solid var(--c);border-radius:18px;padding:12px 14px;box-shadow:0 0 0 3px #fff,0 4px 14px #0006;pointer-events:auto;cursor:pointer}
-#welcomeSite.right #wsPhoto,#welcomeSite.right #wsBox{left:auto;right:14px}
-#wsBox h2{margin:0 0 6px;font-size:21px}
-#wsBox p{margin:0;font-size:16px;line-height:1.35}
+#wsPhoto{float:left;box-sizing:border-box;width:var(--P);height:var(--P);margin:calc(var(--P) * -0.45 - 18px) 12px 4px -4px;shape-outside:circle(50%);shape-margin:6px;border-radius:50%;object-fit:cover;border:5px solid var(--c);background:#fff;box-shadow:0 0 0 3px #fff,0 3px 10px #0007}
+#wsBox{--P:min(34vw,140px);display:flow-root;position:absolute;left:14px;top:calc(var(--barB,0px) + 10px + var(--P) * 0.45);width:min(calc(100vw - 28px),360px);box-sizing:border-box;background:#fff;border:6px solid var(--c);border-radius:18px;padding:12px 14px;box-shadow:0 0 0 3px #fff,0 4px 14px #0006;pointer-events:auto;cursor:pointer}
+#welcomeSite.right #wsBox{left:auto;right:14px}
+#welcomeSite.right #wsPhoto{float:right;margin:calc(var(--P) * -0.45 - 18px) -4px 4px 12px}
+#wsBox h2{margin:0 0 6px;font-size:19px}
+#wsBox p{margin:0;font-size:15px;line-height:1.35}
+#welcomeSite.photo #wsBox{top:calc(var(--barB,0px) + 10px)}
+#welcomeSite.bottom #wsBox,#welcomeSite.photo.bottom #wsBox{top:auto;bottom:calc(max(env(safe-area-inset-bottom),var(--botH,0px)) + 56px)}
+#welcomeSite.photo #wsPhoto{float:none;display:block;width:100%;height:min(28vh,190px);margin:0 0 10px;border-radius:10px;border:0;shape-outside:none;box-shadow:none;object-position:center 30%}
 #wsBox small{display:block;margin-top:6px;color:#555}
 #wsBox .go{margin-top:8px;display:inline-block;background:var(--ets-accent,#B45309);color:var(--ets-on-accent,#fff);border:0;border-radius:4px;padding:8px 12px;font-size:14px;cursor:pointer}
 #wsTag{display:inline-block;margin:0 0 6px;padding:3px 10px;border-radius:999px;font:700 12px/1.4 system-ui,Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase}
@@ -151,7 +155,8 @@ html.settings-loading #tools { visibility: hidden; }
 @keyframes annPulse{50%{opacity:.25}}
 @media (prefers-reduced-motion:reduce){#wsTag.live::before,.ann-tag.live::before{animation:none}}
 #welcomeSite.nophoto #wsPhoto{display:none}
-#welcomeSite.nophoto #wsBox{top:calc(96px + env(safe-area-inset-top))}
+#welcomeSite.nophoto #wsBox{top:calc(var(--barB,0px) + 10px)}
+#welcomeSite.nophoto.bottom #wsBox{top:auto}
 .ann-item{margin:8px 0;padding:10px 12px;border-left:8px solid var(--c,#D55E00);background:#fff;border-radius:6px;box-shadow:0 1px 4px #0002}
 .ann-tag{display:inline-block;margin:0 8px 4px 0;padding:2px 9px;border-radius:999px;font:700 11px/1.4 system-ui,Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase}
 .ann-item b{font-size:16px}.ann-item small{display:block;color:#555;margin:2px 0 4px}.ann-item p{margin:4px 0 6px;font-size:14px;line-height:1.4}
@@ -941,6 +946,24 @@ const WELCOME_STEPS = [
   { type: "sites" }
 ];
 
+/* Where the top bar ends (--barB), so the intro card stays below it. */
+(function trackBar(){
+  const bar = document.getElementById("bar");
+  if (!bar) return;
+  const set = () => document.documentElement.style.setProperty("--barB", Math.round(bar.getBoundingClientRect().bottom) + "px");
+  if (window.ResizeObserver) new ResizeObserver(set).observe(bar);
+  addEventListener("resize", set); set();
+})();
+/* A story or spot, shaped like a place so the intro can feature it. No photo means no stop: the intro is photo-first. */
+function spotAsStop(i){
+  const p = coverPath(i.id, (i.r.PHOTO || "").trim());
+  if (!p) return null;
+  return { id: i.id, ll: i.ll, el: i.el, isSpot: true, kind: i.kind, src: assetUrl(p),
+           name: i.r.TITLE || i.id, year: (i.r.YEAR || "").trim(),
+           color: (i.r.ICON_COLOR || "").trim() || (i.kind === "story" ? "#D55E00" : "#333333"),
+           d: { BLURB: i.r.BLURB, DETAILS: i.r.DETAILS } };
+}
+
 function startWelcome(featuredId){
   const overlay = document.getElementById("welcomeOverlay");
   const image   = document.getElementById("welcomeImage");
@@ -960,6 +983,14 @@ function startWelcome(featuredId){
   const tagEl = document.getElementById("wsTag"), photoEl = document.getElementById("wsPhoto"), goBtn = document.getElementById("wsGo");
   let annIdx = 0, slideN = 0, currentAnn = null;
 
+  /* The camera: Site Settings > After the Welcome Screen. "zoom" flies to each place and tilts the map; "spin" also turns around it.
+     Visitors who asked their device to reduce motion get the plain version. */
+  const introMotion = matchMedia("(prefers-reduced-motion: reduce)").matches ? "" : (SITE.introStyle === "spin" ? "spin" : SITE.introStyle === "zoom" ? "zoom" : "");
+  const siteTime = introMotion ? 6500 : WELCOME_SITE_TIME;
+  let startCam = null;            // where the map was before the first zoom, so it can go back there
+  let introAim = null, introGen = 0;
+  const clearIntroMotion = () => { if (introAim) { map.off("move", introAim); introAim = null; } introGen++; };
+
   function startSites() {
     image.hidden = true;
     siteBox.hidden = false;
@@ -977,26 +1008,53 @@ function startWelcome(featuredId){
     tagEl.style.color = Announcements.readable(a.color);
     tagEl.classList.toggle("live", !!(a.st && a.st.state === "now"));
   }
-  function point(tgt, color) {                                  // the pointer from the box to a marker on the map
+
+  /* Show a place on the map with the card pointing at it: where the card sits, the pointer, and the camera. */
+  function present(it, color) {
     const line = document.getElementById("wsLine");
-    if (!tgt) { line.innerHTML = ""; return; }
+    if (!it) { siteBox.classList.remove("bottom"); line.innerHTML = ""; return; }
+    const tgt = it.el.style.display !== "none" ? it : (it.parent || it);
     const p = map.project(tgt.ll);
     siteBox.classList.toggle("right", p.x < window.innerWidth * 0.5);
-    const box = document.getElementById("wsBox");
-    const bl = box.offsetLeft, bt = box.offsetTop, br = bl + box.offsetWidth, bb = bt + box.offsetHeight;
-    const sx = Math.max(bl, Math.min(p.x, br)), sy = Math.max(bt, Math.min(p.y, bb));
-    let dx = p.x - sx, dy = p.y - sy;
-    const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
-    const w = 14;
-    line.innerHTML = `<path style="fill:${color}" d="M${sx - dy * w},${sy + dx * w}L${p.x},${p.y}L${sx + dy * w},${sy - dx * w}Z"/>`;
+    tgt.el.classList.add("spot");
+    if (introMotion) it.el.classList.add("spot");
+    const H = window.innerHeight, barB = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--barB")) || 0;
+    const cardH = it.isSpot ? 340 : 260, pinY = p.y + map.getContainer().getBoundingClientRect().top;
+    let pos = SITE.introCard === "top" ? "top" : "bottom";                    // bottom is the stable default
+    if (!SITE.introCard && !introMotion && pinY > (H - 56 - cardH) - 40 && pinY > barB + 10 + cardH + 40) pos = "top";   // only flip if the card would cover the pin
+    siteBox.classList.toggle("bottom", pos === "bottom");
+    const aim = () => {                                          // redrawn while the camera moves, so the pointer stays on the pin
+      const t = it.el.style.display !== "none" ? it : (it.parent || it);
+      const mr = map.getContainer().getBoundingClientRect(), sr = line.getBoundingClientRect();
+      const q = map.project(t.ll), pt = { x: q.x + mr.left - sr.left, y: q.y + mr.top - sr.top };
+      const box = document.getElementById("wsBox");
+      const bl = box.offsetLeft, bt = box.offsetTop, br = bl + box.offsetWidth, bb = bt + box.offsetHeight;
+      const sx = Math.max(bl, Math.min(pt.x, br)), sy = Math.max(bt, Math.min(pt.y, bb));
+      let dx = pt.x - sx, dy = pt.y - sy;
+      const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+      const w = 14;
+      line.innerHTML = `<path style="fill:${color}" d="M${sx - dy * w},${sy + dx * w}L${pt.x},${pt.y}L${sx + dy * w},${sy - dx * w}Z"/>`;
+    };
+    aim();
+    if (introMotion) {
+      const gen = ++introGen, W = window.innerWidth, mr0 = map.getContainer().getBoundingClientRect();
+      const pinTarget = pos === "bottom" ? Math.max(barB + 80, H * 0.33) : H * 0.70;   // keep the pin in the clear part of the screen
+      const off = [(p.x < W * 0.5 ? 0.3 : 0.7) * W - W / 2, pinTarget - (mr0.top + mr0.height / 2)];
+      introAim = aim; map.on("move", aim);
+      if (!startCam) startCam = { center: map.getCenter(), zoom: map.getZoom() };
+      map.flyTo({ center: it.ll, zoom: Math.max(map.getZoom(), 16.3), pitch: 50, offset: off, duration: 2200, essential: true });
+      if (introMotion === "spin") map.once("moveend", () => {
+        if (stopped || gen !== introGen) return;
+        map.easeTo({ center: it.ll, offset: off, bearing: map.getBearing() + 50, duration: Math.max(1500, siteTime - 2600), easing: t => t, essential: true });
+      });
+    }
   }
 
   function showAnnouncement(a) {                                // a "what's on" slide: tag, name, when, one line about it
     const it = venueOf(a);
     currentItem = it; currentAnn = a;
     if (it) lastId = it.id;
-    const tgt = it ? (it.el.style.display !== "none" ? it : (it.parent || it)) : null;
-    siteBox.classList.add("nophoto");
+    siteBox.classList.add("nophoto"); siteBox.classList.remove("photo");
     siteBox.style.setProperty("--c", a.color);
     setTag(a);
     let blurb = a.blurb;
@@ -1006,19 +1064,23 @@ function startWelcome(featuredId){
     document.getElementById("wsIn").textContent = [a.meta || EventSchedule.statusText(a.st), it ? "at " + it.name : ""].filter(Boolean).join(" \u00b7 ");
     const tour = a.tourId && window.ETSTours ? ETSTours.get(a.tourId) : null;
     goBtn.textContent = tour ? TourInfo.goText(tour) : it ? Labels.t("welcome.seeOnMap") : (a.link ? (a.linkText || Labels.t("welcome.learnMore")) : Labels.t("welcome.close"));
-    if (tgt) tgt.el.classList.add("spot");
-    siteBox.classList.remove("in"); void siteBox.offsetWidth; siteBox.classList.add("in");   // after "nophoto", so the pointer measures the final position
-    point(tgt, a.color);
-    siteTimer = setTimeout(nextSite, WELCOME_SITE_TIME);
+    siteBox.classList.remove("in"); void siteBox.offsetWidth; siteBox.classList.add("in");   // after the card's classes are set, so the pointer measures the final position
+    present(it, a.color);
+    siteTimer = setTimeout(nextSite, siteTime);
   }
 
   function nextSite() {
     if (stopped) return;
-    document.querySelectorAll(".pin.spot").forEach(e => e.classList.remove("spot"));
+    clearIntroMotion();
+    document.querySelectorAll(".pin.spot,.kmark.spot").forEach(e => e.classList.remove("spot"));
     const featuredFirst = featuredId && !featuredShown;         // a QR visitor's own place always comes first
     const rot = rotation();
     if (rot.length && !featuredFirst && slideN++ % 2 === 0) { showAnnouncement(rot[annIdx++ % rot.length]); return; }   // what's on, then a place, then what's on...
-    const pool = places.concat(kids).filter(i => PHOTO_SRC[i.id]);
+    const placePool = places.concat(kids).filter(i => PHOTO_SRC[i.id]);
+    const spotMode = introMotion ? SITE.introFeatures : "";                  // stories and spots only show once the camera has zoomed in
+    const spotPool = (spotMode && window.introSpots) ? window.introSpots().map(spotAsStop).filter(Boolean) : [];
+    const useSpots = spotPool.length && (spotMode === "spots" || (spotMode === "mixed" && Math.random() < 0.4));
+    const pool = useSpots ? spotPool : placePool;
     if (!pool.length) { if (++tries > 20) finish(); else siteTimer = setTimeout(nextSite, 600); return; }
 
     let it = null;
@@ -1033,33 +1095,33 @@ function startWelcome(featuredId){
     lastId = it.id;
     currentItem = it; currentAnn = null;
     siteBox.classList.remove("nophoto");
-    goBtn.textContent = Labels.t("welcome.goThere");
-    setTag(annFor(it.id));                                      // a place that hosts something that is on now wears its tag
-
-    const tgt = it.el.style.display !== "none" ? it : (it.parent || it);
+    siteBox.classList.toggle("photo", !!it.isSpot);                           // spots get a wide photo card instead of the round one
+    goBtn.textContent = it.isSpot ? Labels.t("welcome.seeSpot") : Labels.t("welcome.goThere");
+    setTag(it.isSpot ? null : annFor(it.id));                   // a place that hosts something that is on now wears its tag
     siteBox.style.setProperty("--c", it.color);
 
-    const t = (it.d.DETAILS || "").trim(), m = /[.!?](\s|$)/.exec(t);
-    let blurb = m ? t.slice(0, m.index + 1) : t;
-    if (blurb.length > 170) blurb = blurb.slice(0, 167) + "...";
+    const bl = (it.d.BLURB || "").trim();                                   // short preview text, if the place has one
+    const t = bl || (it.d.DETAILS || "").trim(), m = /[.!?](\s|$)/.exec(t);
+    let blurb = bl ? bl : (m ? t.slice(0, m.index + 1) : t);               // otherwise the first sentence of DETAILS
+    if (!bl && blurb.length > 170) blurb = blurb.slice(0, 167) + "...";
     const e = yr4(it.d.EST);
 
-    document.getElementById("wsPhoto").src = PHOTO_SRC[it.id];
+    document.getElementById("wsPhoto").src = it.src || PHOTO_SRC[it.id];
     document.getElementById("wsName").textContent = it.name;
     document.getElementById("wsText").textContent = blurb;
-    document.getElementById("wsIn").textContent =
-      [it.parent ? "In " + it.parent.name : "", e ? "Established " + e : ""].filter(Boolean).join(" \u00b7 ");
+    document.getElementById("wsIn").textContent = it.isSpot
+      ? [Labels.t(it.kind === "story" ? "welcome.story" : "welcome.spot"), it.year].filter(Boolean).join(" \u00b7 ")
+      : [it.parent ? "In " + it.parent.name : "", e ? "Established " + e : ""].filter(Boolean).join(" \u00b7 ");
 
-    tgt.el.classList.add("spot");
     siteBox.classList.remove("in"); void siteBox.offsetWidth; siteBox.classList.add("in");
-    point(tgt, it.color);
-    siteTimer = setTimeout(nextSite, WELCOME_SITE_TIME);
+    present(it, it.color);
+    siteTimer = setTimeout(nextSite, siteTime);
   }
 
   function goToFeatured() {
     const ann = currentAnn;
     const tour = ann && ann.tourId && window.ETSTours ? ETSTours.get(ann.tourId) : null;
-    if (tour) { finish(); setTimeout(() => ETSTours.start(tour.id), WELCOME_TRANSITION_TIME); return; }   // a featured tour: the button starts it
+    if (tour) { finish(true); setTimeout(() => ETSTours.start(tour.id), WELCOME_TRANSITION_TIME); return; }   // a featured tour: the button starts it
     if (!currentItem) {
       if (!ann) return;                                         // a "what's on" slide with no place on the map
       if (ann.link) { if (ann.kind === "event") location.href = location.pathname + ann.link; else window.open(ann.link, "_blank", "noopener"); }
@@ -1067,21 +1129,25 @@ function startWelcome(featuredId){
       return;
     }
     const item = currentItem;
-    finish();
+    const z = Math.max(map.getZoom(), (item.parent || item.isSpot) ? 17 : 15);
+    finish(true);
+    if (introMotion) map.easeTo({ center: item.ll, zoom: z, pitch: 0, bearing: 0, duration: 900, essential: true });
     setTimeout(() => {
-      select(item);
-      map.easeTo({ center: item.ll, zoom: Math.max(map.getZoom(), item.parent ? 17 : 15) });
+      if (item.isSpot) window.introShowSpot(item.id); else select(item);
+      map.easeTo({ center: item.ll, zoom: z, pitch: 0, bearing: 0 });
     }, WELCOME_TRANSITION_TIME);
   }
 
   document.getElementById("wsGo").addEventListener("click", e => { e.stopPropagation(); goToFeatured(); });
 
-  function finish(){
+  function finish(toFeatured){
     if (stopped) return;
     stopped = true;
     clearTimeout(timer);
     clearTimeout(siteTimer);
-    document.querySelectorAll(".pin.spot").forEach(e => e.classList.remove("spot"));
+    clearIntroMotion();
+    if (introMotion && startCam && !toFeatured) map.easeTo({ center: startCam.center, zoom: startCam.zoom, bearing: 0, pitch: 0, duration: 900, essential: true });   // back to where the map started
+    document.querySelectorAll(".pin.spot,.kmark.spot").forEach(e => e.classList.remove("spot"));
     overlay.classList.remove("show");
     overlay.classList.add("exit");
     setTimeout(() => { overlay.remove(); }, WELCOME_TRANSITION_TIME);
@@ -1225,6 +1291,9 @@ const SETTINGS_READY = dataFetch("site.csv", { cache: "no-store" })
       root.setProperty("--ets-accent", acc);
       root.setProperty("--ets-on-accent", Announcements.readable(acc));
       root.setProperty("--ets-accent-text", Announcements.onWhite(acc));
+      SITE.introStyle = (S.INTRO_STYLE || "").toLowerCase();        // "", "zoom" or "spin"   (Site Settings > After the Welcome Screen)
+      SITE.introFeatures = (S.INTRO_FEATURES || "").toLowerCase();  // "", "mixed" or "spots"
+      SITE.introCard = (S.INTRO_CARD || "").toLowerCase();          // "", "bottom" or "top"
       SITE.tourSpin = /^(y|yes|true|1)$/i.test(S.TOUR_SPIN || "");
       SITE.tourSpinSpeed = /^(slow|medium|fast)$/i.test(S.TOUR_SPIN_SPEED || "") ? S.TOUR_SPIN_SPEED.toLowerCase() : "medium";
       SITE.tourTilt = Math.max(0, Math.min(60, parseFloat(S.TOUR_TILT) || 0));
@@ -2446,6 +2515,8 @@ $("res").onclick = e => {
       tours.push({ id, title: r.TITLE || id, intro: r.INTRO || "", category: r.CATEGORY || null, route: r.ROUTE || "", type: String(r.TYPE || "tour").toLowerCase(), modes: r.MODES || "", length: parseFloat(r.LENGTH_MI) || 0, stops,
         summary: String(r.SUMMARY || "").trim(), effort: String(r.EFFORT || "").trim(), minutes: String(r.MINUTES || "").trim(), featured: /^(y|yes|true|1)$/i.test(String(r.FEATURED || "").trim()), spin: String(r.SPIN || "").trim().toLowerCase() });
     });
+    window.introSpots = () => items.filter(i => i.ll && i.el && (i.r.INTRO || "").trim().toLowerCase() !== "no");   // spots the intro may feature
+    window.introShowSpot = id => { const it = items.find(x => x.id === id); if (it) showSpot(it); };
     await LABELS_READY;
     $("tours").textContent = Labels.t("tours.button");
     $("tours").hidden = !tours.length;
