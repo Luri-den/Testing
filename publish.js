@@ -11,7 +11,17 @@
 (function () {
   "use strict";
 
-  const DEFAULTS = { owner: "Luri-den", repo: "ETS", branch: "" };   // blank branch = the repo's default
+  // The repository is worked out from the address of the site: https://OWNER.github.io/REPO/... means owner OWNER, repo REPO.
+  // Anywhere else (your own domain, a test server) it starts blank and the connection box asks for it.
+  function guess() {
+    try {
+      const m = /^([a-z0-9-]+)\.github\.io$/i.exec(location.hostname);
+      if (!m) return { owner: "", repo: "" };
+      const first = location.pathname.split("/").filter(Boolean)[0] || "";
+      return { owner: m[1], repo: /\.[a-z0-9]+$/i.test(first) || !first ? m[1] + ".github.io" : first };   // no folder in the address = the OWNER.github.io repository
+    } catch (e) { return { owner: "", repo: "" }; }
+  }
+  const DEFAULTS = Object.assign(guess(), { branch: "" });   // blank branch = the repo's default
   const SKEY = "ghpublish.settings.v1", TKEY = "ghpublish.token.v1";
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));

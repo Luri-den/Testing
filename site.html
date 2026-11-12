@@ -106,6 +106,18 @@ input[type=range]{padding:0;border:0}
     <label>Top Bar Color</label>
     <div class="two"><input type="color" data-k="BAR_COLOR"><input data-k="BAR_COLOR" placeholder="#E47303"></div>
 
+    <h2>Tours &amp; Trails Look</h2>
+    <label>Buttons and Highlights Color</label>
+    <div class="two"><input type="color" data-k="ACCENT_COLOR"><input data-k="ACCENT_COLOR" placeholder="Empty = same as the Top Bar Color"></div>
+    <small>Used on tour buttons, time buttons, stop numbers and the welcome-screen button. The words on a button switch between white and dark by themselves, so they stay readable on any color you pick.</small>
+    <button type="button" id="accClear" style="margin-top:6px">Use the Top Bar Color</button>
+    <label class="chk"><input type="checkbox" data-k="TOUR_SPIN"> Slowly turn the camera around a tour or trail when a visitor opens it (each tour can override this in the Tours editor)</label>
+    <label>Turning Speed</label>
+    <select data-k="TOUR_SPIN_SPEED"><option value="">Medium (a full turn in 45 seconds)</option><option value="slow">Slow (90 seconds)</option><option value="fast">Fast (24 seconds)</option></select>
+    <label>Tilt (0 = flat, up to 60 degrees)</label>
+    <input type="number" data-k="TOUR_TILT" min="0" max="60" step="5" placeholder="0">
+    <small>Turning stops the moment a visitor touches the map, and never happens for visitors whose device is set to reduce motion.</small>
+
     <h2>Bar Layout (Top, Bottom, Drawer, Etc)</h2>
     <small>Click / Press and drag a button into another box. Bars run left to right and will wrap large buttons to new rows. The Bottom Bar stays hidden until you put something in it. Yellow buttons can't leave the top bar. The Legend can float over the map (as now), sit in either Bar, or go in the Drawer.</small>
     <div id="board">
@@ -247,6 +259,7 @@ const DEFAULTS = {
   HEADER: "Discover {PLACE}'s Past",
   TAB_TITLE: "Explore {PLACE}'s Past",
   BAR_COLOR: "#E47303",
+  ACCENT_COLOR: "", TOUR_SPIN: "no", TOUR_SPIN_SPEED: "", TOUR_TILT: "",
   CENTER_LAT: "39.8283", CENTER_LNG: "-98.5795", ZOOM: "4",
   BOUNDS_WEST: "-125", BOUNDS_SOUTH: "24", BOUNDS_EAST: "-66", BOUNDS_NORTH: "50",
   MIN_ZOOM: "", MAX_ZOOM: "",
@@ -278,6 +291,7 @@ const ORDER = Object.keys(DEFAULTS);
 
 let S = null;            // current settings (all strings)
 let extra = {};          // keys in the CSV this editor doesn't know about; kept as-is
+let loadedKeys = new Set();   // keys that were in the file when it was loaded
 let lastText = null;     // last loaded CSV text, for Reload
 let mapLoaded = false;
 let markersAdded = false;
@@ -377,6 +391,7 @@ function preview() {
   $('pvTab').textContent = 'Tab title: ' + fill(S.TAB_TITLE);
 }
 
+$('accClear').onclick = () => { const t = document.querySelector('input[data-k="ACCENT_COLOR"]:not([type=color])'); t.value = ''; t.dispatchEvent(new Event('input', { bubbles: true })); };
 document.querySelectorAll('[data-k]').forEach(f => f.addEventListener('input', () => {
   if (!S) return;
   S[f.dataset.k] = f.type === 'checkbox' ? (f.checked ? 'yes' : 'no') : f.value;
@@ -421,15 +436,20 @@ $('zoomBounds').onclick = () => {
   map.fitBounds([[num('BOUNDS_WEST'), num('BOUNDS_SOUTH')], [num('BOUNDS_EAST'), num('BOUNDS_NORTH')]], { padding: 40 });
 };
 
+// A setting that was not in the file and is still at its standard value is left out, so saving does not fill the file with settings you never touched.
+// (A brand-new file gets everything.)
+const wanted = k => loadedKeys.size === 0 || loadedKeys.has(k) || (String(S[k]).trim() !== '' && S[k] !== DEFAULTS[k]);
+
 // ---------- load / start / reload ----------
 function startFrom(text) {
-  S = {}; extra = {};
+  S = {}; extra = {}; loadedKeys = new Set();
   ORDER.forEach(k => S[k] = DEFAULTS[k]);
   if (text) {
     Papa.parse(text, { header: true, skipEmptyLines: 'greedy' }).data.forEach(r => {
       const k = String(r.KEY || '').trim().toUpperCase();
       if (!k) return;
       const v = String(r.VALUE == null ? '' : r.VALUE).trim();
+      loadedKeys.add(k);
       if (ORDER.includes(k)) S[k] = v; else extra[k] = v;
     });
   }
@@ -564,7 +584,7 @@ $('layReset').onclick = () => {
 $('dlBtn').onclick = () => {
   if (!S) return;
   if (!boundsOk()) { alert('Fix the allowed area first: west must be less than east, and south less than north.'); return; }
-  const rows = ORDER.map(k => ({ KEY: k, VALUE: S[k] }))
+  const rows = ORDER.filter(wanted).map(k => ({ KEY: k, VALUE: S[k] }))
     .concat(Object.entries(extra).map(([KEY, VALUE]) => ({ KEY, VALUE })));
   const csv = Papa.unparse(rows, { columns: ['KEY', 'VALUE'] });
   const a = document.createElement('a');
@@ -612,7 +632,7 @@ const PREVIEW_PAGE = ((window.ETS_CONFIG&&window.ETS_CONFIG.LIVE_PAGE)||"Demo2a.
 const PV_SIZE = { phone: [390, 780], desk: [1280, 800] };
 let pvMode = '', pvTimer = null, pvBlob = '';
 function settingsCsv() {
-  const rows = ORDER.map(k => ({ KEY: k, VALUE: S[k] })).concat(Object.entries(extra).map(([KEY, VALUE]) => ({ KEY, VALUE })));
+  const rows = ORDER.filter(wanted).map(k => ({ KEY: k, VALUE: S[k] })).concat(Object.entries(extra).map(([KEY, VALUE]) => ({ KEY, VALUE })));
   return Papa.unparse(rows, { columns: ['KEY', 'VALUE'] });
 }
 function pvFit() {

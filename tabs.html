@@ -36,6 +36,8 @@
     .pubbtn { padding: 9px 16px; font-size: 14px; border-radius: 6px; border: 1px solid #888; background: #fff; cursor: pointer; }
     .pubbtn.go { background: #238636; border-color: #238636; color: #fff; font-weight: bold; }
     .pubbtn:disabled { opacity: .45; cursor: default; }
+    .ghbox { border: 1px solid #c5cfdb; border-radius: 8px; padding: 10px 14px; margin: 0 0 14px; background: #f6f8fb; max-width: 760px; }
+    .ghbox #ghStatus { margin-bottom: 8px; }
     #pubSummary { margin: 12px 0; } #pubSummary li { margin: 3px 0; } #pubSummary details { margin-top: 8px; font-size: 13px; color: #555; }
     #restoreSel { padding: 8px; min-width: 320px; max-width: 100%; }
 
@@ -113,6 +115,7 @@
     <button class="top-tab" data-target="p10" data-group="items" data-blurb="QR codes. Make a printable label for a spot, story, place, event or the whole map: a QR code with a caption, a source line (like County Library), your colors, and an optional picture in the middle. Print or save it to put on a sign.">QR Signs</button>
     <button class="top-tab" data-target="p4" data-group="tours" data-blurb="Tours and Trails. Design tours, trails and plain map lines on one screen: draw the route, click markers to add stops, choose how people travel it (walk, hike, bike, drive or virtual), and style the line.">Tours and Trails</button>
     <button class="top-tab" data-target="p1" data-group="look" data-blurb="Change the color and text of the header, the movable map bounds, and the default camera location.">Site Settings</button>
+    <button class="top-tab" data-target="p17" data-group="look" data-blurb="Wording. Change any phrase visitors read that the site makes up itself: button names, headings, the time buttons and their order, and how dates are written. Edits labels.csv.">Wording</button>
     <button class="top-tab" data-target="p16" data-group="look" data-blurb="Icons. Draw and edit the little pictures used on markers, stamps and tours. Pick one, then draw or edit its code. Edits icons.js.">Icons</button>
     <button class="top-tab" data-target="p5" data-group="look" data-blurb="Boundary Line. Edit the visible city, county, or area boundary line by clicking and dragging, adding, or subtracting points on a map. Edits border.geojson.">Boundary</button>
     <button class="top-tab" data-target="p6" data-group="look" data-blurb="Overlay Maps. Align old maps to the current map by resizing, skewing, and rotating them. Edits overlays.json.">Old Maps (Overlays)</button>
@@ -185,6 +188,10 @@
       <iframe src="icon-editor.html"></iframe>
     </div>
 
+    <div id="p17" class="page-container">
+      <iframe src="wording.html"></iframe>
+    </div>
+
         <div id="p10" class="page-container">
       <iframe src="qr.html"></iframe>
     </div>
@@ -201,10 +208,15 @@
     <div id="pub" class="page-container">
       <div class="pubwrap">
         <h2>Publish</h2>
-        <p>Every editor keeps its own changes until you publish. Press the button to gather them all, read what changed, and publish them together.</p>
-        <button id="pubScan" class="pubbtn">Look for Changes</button> <span id="pubMsg"></span>
+        <div id="ghBox" class="ghbox">
+          <div id="ghStatus"></div>
+          <button id="ghSetup" class="pubbtn">Set up the GitHub connection</button>
+          <button id="ghTest" class="pubbtn">Test the connection</button> <span id="ghMsg"></span>
+        </div>
+        <p>Every editor keeps its own changes until you publish. This page gathers them all, shows what changed, and publishes them together.</p>
+        <p><button id="pubGo" class="pubbtn go" disabled>Publish These Changes</button>
+        <button id="pubScan" class="pubbtn">Look for Changes Again</button> <span id="pubMsg"></span></p>
         <div id="pubSummary"></div>
-        <p><button id="pubGo" class="pubbtn go" hidden>Publish These Changes</button></p>
         <hr>
         <h2>Restore a Previous Version</h2>
         <p>Made a mistake? This brings your data files (places, spots, tours, settings and so on) back to how they were at an earlier publish. Photos are left alone. It adds a new version on top, so nothing is lost and you can undo it the same way.</p>
@@ -363,7 +375,7 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------- Publish All ---------- */
   const NOUN = { "locations.csv": "Places", "childmarkers.csv": "Parts of places", "spots.csv": "Spots and stories", "tours.csv": "Tours and trails", "tourstops.csv": "Tour stops",
     "stamps.csv": "Stamps", "tasks.csv": "Tasks", "prizes.csv": "Prizes", "categories.csv": "Categories", "site.csv": "Site settings" };
-  const NICE = { "icons.js": "Icons", "announcements.csv": "Announcements", "lines.geojson": "Drawn lines", "border.geojson": "Boundary line", "overlays.json": "Old maps (overlays)", "settings.json": "Settings" };
+  const NICE = { "labels.csv": "Wording", "icons.js": "Icons", "announcements.csv": "Announcements", "lines.geojson": "Drawn lines", "border.geojson": "Boundary line", "overlays.json": "Old maps (overlays)", "settings.json": "Settings" };
   const isMedia = p => /\.(jpe?g|png|webp|gif|mp4|webm)$/i.test(p);
   let found = [];
   async function describe(f) {
@@ -383,18 +395,45 @@ document.addEventListener("DOMContentLoaded", () => {
       return NOUN[name] + ": " + (parts.length ? parts.join(", ") : "reordered or reformatted");
     } catch (e) { return NOUN[name] + " updated"; }
   }
+  // Is this file really different from what is live? Editors hand over their file whether or not you touched it, and
+  // they tidy it (line endings, blank new columns, default settings), so compare what matters: the rows, their order, and any filled-in value.
+  const norm = t => String(t).replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").trim();
+  async function isChanged(f) {
+    const name = f.path.split("/").pop();
+    if (isMedia(name)) return true;
+    let live = null;
+    try { const r = await fetch(f.path, { cache: "no-store" }); if (r.ok) live = await r.text(); } catch (e) {}
+    if (live == null) return true;                                   // not on the live site yet
+    const nowText = await f.blob.text();
+    if (norm(nowText) === norm(live)) return false;
+    if (/\.(json|geojson)$/i.test(name)) { try { return JSON.stringify(JSON.parse(nowText)) !== JSON.stringify(JSON.parse(live)); } catch (e) { return true; } }
+    if (!/\.csv$/i.test(name)) return true;
+    const now = Papa.parse(norm(nowText), { header: true, skipEmptyLines: "greedy" }), old = Papa.parse(norm(live), { header: true, skipEmptyLines: "greedy" });
+    const fields = now.meta.fields || [], key = fields[0], common = fields.filter(x => (old.meta.fields || []).includes(x)), extra = fields.filter(x => !common.includes(x));
+    const val = (x, c) => String(x[c] == null ? "" : x[c]).trim(), sig = x => JSON.stringify(common.map(c => val(x, c)));
+    const blank = x => fields.slice(1).every(c => !val(x, c));      // a row with nothing but its name is an editor's placeholder, not content
+    const nowRows = now.data.filter(x => !blank(x)), oldRows = old.data.filter(x => !(old.meta.fields || []).slice(1).every(c => !val(x, c)));
+    if (nowRows.length !== oldRows.length) return true;
+    if (nowRows.some(x => extra.some(c => val(x, c)))) return true;  // a new column that actually has something in it
+    const om = new Map(oldRows.map(x => [val(x, key), sig(x)]));
+    if (nowRows.some(x => !om.has(val(x, key)) || om.get(val(x, key)) !== sig(x))) return true;
+    return nowRows.some((x, i) => val(x, key) !== val(oldRows[i], key));   // same rows, different order
+  }
   $("pubScan").onclick = async () => {
-    $("pubMsg").textContent = "Gathering changes from every tab\u2026"; $("pubSummary").textContent = ""; $("pubGo").hidden = true;
+    $("pubMsg").textContent = "Gathering changes from every tab\u2026"; $("pubSummary").textContent = ""; $("pubGo").disabled = true;
     const files = {};
-    for (const f of document.querySelectorAll(".page-container iframe")) {
-      try { const w = f.contentWindow; if (w.GHPublish && w.GHPublish.collect) (await w.GHPublish.collect()).forEach(x => { files[x.path] = x; }); } catch (e) {}
-    }
+    const lists = await Promise.all([...document.querySelectorAll(".page-container iframe")].map(async f => {
+      try { const w = f.contentWindow; return (w.GHPublish && w.GHPublish.collect) ? await w.GHPublish.collect() : []; } catch (e) { return []; }
+    }));
+    lists.forEach(l => l.forEach(x => { files[x.path] = x; }));
     found = Object.values(files);
-    if (!found.length) { $("pubMsg").textContent = "Nothing to publish. Make a change in one of the tabs first."; return; }
+    const real = await Promise.all(found.map(isChanged));
+    found = found.filter((f, i) => real[i]);
+    if (!found.length) { $("pubMsg").textContent = "Nothing to publish. Everything in the editors already matches the live site."; $("pubSummary").textContent = ""; return; }
     const lines = (await Promise.all(found.map(describe))).filter(Boolean), media = found.filter(f => isMedia(f.path)).length;
     if (media) lines.push(media + " photo or media file" + (media === 1 ? "" : "s") + " added or replaced");
     $("pubSummary").innerHTML = "<b>These changes are ready:</b><ul>" + lines.map(l => "<li>" + esc(l) + "</li>").join("") + "</ul><details><summary>Files (" + found.length + ")</summary>" + found.map(f => esc(f.path)).join("<br>") + "</details>";
-    $("pubMsg").textContent = ""; $("pubGo").hidden = false;
+    $("pubMsg").textContent = ""; $("pubGo").disabled = false;
   };
   $("pubGo").onclick = async () => {
     if (!GHPublish.hasToken()) { GHPublish.settingsDialog(); $("pubMsg").textContent = "Fill in your GitHub connection, then press Publish again."; return; }
@@ -405,16 +444,16 @@ document.addEventListener("DOMContentLoaded", () => {
       for (const f of document.querySelectorAll(".page-container iframe")) { try { f.contentWindow.GHPublish.finish(found); } catch (e) {} }
       const s = GHPublish.settings();
       $("pubMsg").innerHTML = "\u2714 Published " + found.length + " file" + (found.length === 1 ? "" : "s") + '. <a target="_blank" rel="noopener" href="https://github.com/' + esc(s.owner) + "/" + esc(s.repo) + "/commit/" + esc((c && c.sha) || "") + '">View on GitHub</a>';
-      $("pubGo").hidden = true; found = []; $("pubSummary").textContent = ""; loadHistory();
+      found = []; $("pubSummary").textContent = ""; loadHistory();
     } catch (e) { $("pubMsg").textContent = "Couldn't publish: " + e.message; }
-    $("pubGo").disabled = false;
+    $("pubGo").disabled = !found.length;
   };
 
   /* ---------- Restore a previous version ---------- */
   const isData = p => p.indexOf("/") < 0 && /\.(csv|json|geojson)$/i.test(p) && p !== "manifest.json";
   async function loadHistory() {
     const sel = $("restoreSel"); $("restoreBtn").disabled = true;
-    if (!GHPublish.hasToken()) { sel.innerHTML = "<option>Set up your GitHub connection first (the gear next to any Publish button)</option>"; return; }
+    if (!GHPublish.hasToken()) { sel.innerHTML = "<option>Set up the GitHub connection first (the box at the top of this page)</option>"; return; }
     try {
       const list = await GHPublish.api("/commits?sha=" + encodeURIComponent(await GHPublish.branchName()) + "&per_page=30");
       const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
@@ -446,7 +485,32 @@ document.addEventListener("DOMContentLoaded", () => {
       loadHistory();
     } catch (e) { $("restoreMsg").textContent = "Couldn't restore: " + e.message; $("restoreBtn").disabled = false; }
   };
-  tabs.find(t => t.dataset.target === "pub").addEventListener("click", loadHistory);
+  /* ---------- the GitHub connection ---------- */
+  function showGh() {
+    const s = GHPublish.settings(), set = !!(s.owner && s.repo);
+    $("ghStatus").innerHTML = GHPublish.hasToken() ? "\u2714 <b>Connected</b> to <b>" + esc(s.owner) + "/" + esc(s.repo) + "</b>. Press Test to be sure it works."
+      : set ? "<b>Not connected yet.</b> Publishing to <b>" + esc(s.owner) + "/" + esc(s.repo) + "</b> needs a GitHub access token. The button below walks you through it."
+      : "<b>Not set up yet.</b> Tell the hub which GitHub repository holds your site, and give it an access token. The button below walks you through it.";
+    $("ghSetup").textContent = GHPublish.hasToken() ? "Change the GitHub connection" : "Set up the GitHub connection";
+  }
+  $("ghSetup").onclick = () => GHPublish.settingsDialog(() => { showGh(); loadHistory(); $("ghMsg").textContent = ""; });
+  $("ghTest").onclick = async () => {
+    if (!GHPublish.hasToken()) { $("ghMsg").textContent = "Not connected yet. Press \u201cSet up the GitHub connection\u201d first."; return; }
+    $("ghMsg").textContent = "Testing\u2026";
+    try {
+      const r = await GHPublish.api(""), s = GHPublish.settings();
+      $("ghMsg").textContent = r.permissions && r.permissions.push ? "\u2714 Works. You can publish to " + s.owner + "/" + s.repo + "." : "Connected, but this token is not allowed to change the repository. Make a new token that can read and write Contents.";
+    } catch (e) {
+      $("ghMsg").textContent = "\u2716 Could not connect: " + e.message + (e.status === 401 ? " The token is wrong or has expired." : e.status === 404 ? " Check the owner and repository names, and that the token can see this repository." : "");
+    }
+  };
+  showGh(); window.addEventListener("focus", showGh);
+  let scanning = false;
+  tabs.find(t => t.dataset.target === "pub").addEventListener("click", async () => {
+    showGh(); loadHistory();
+    if (scanning) return;
+    scanning = true; try { await $("pubScan").onclick(); } finally { scanning = false; }   // look for changes without being asked
+  });
 })();
   </script>
 </body>

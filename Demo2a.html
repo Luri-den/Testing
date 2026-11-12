@@ -144,7 +144,7 @@ html.settings-loading #tools { visibility: hidden; }
 #wsBox h2{margin:0 0 6px;font-size:21px}
 #wsBox p{margin:0;font-size:16px;line-height:1.35}
 #wsBox small{display:block;margin-top:6px;color:#555}
-#wsBox .go{margin-top:8px;display:inline-block;background:#E47303;color:#fff;border:0;border-radius:4px;padding:8px 12px;font-size:14px;cursor:pointer}
+#wsBox .go{margin-top:8px;display:inline-block;background:var(--ets-accent,#B45309);color:var(--ets-on-accent,#fff);border:0;border-radius:4px;padding:8px 12px;font-size:14px;cursor:pointer}
 #wsTag{display:inline-block;margin:0 0 6px;padding:3px 10px;border-radius:999px;font:700 12px/1.4 system-ui,Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase}
 #wsTag[hidden]{display:none}
 #wsTag.live::before,.ann-tag.live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-right:6px;animation:annPulse 1.4s ease-in-out infinite}
@@ -155,7 +155,7 @@ html.settings-loading #tools { visibility: hidden; }
 .ann-item{margin:8px 0;padding:10px 12px;border-left:8px solid var(--c,#D55E00);background:#fff;border-radius:6px;box-shadow:0 1px 4px #0002}
 .ann-tag{display:inline-block;margin:0 8px 4px 0;padding:2px 9px;border-radius:999px;font:700 11px/1.4 system-ui,Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase}
 .ann-item b{font-size:16px}.ann-item small{display:block;color:#555;margin:2px 0 4px}.ann-item p{margin:4px 0 6px;font-size:14px;line-height:1.4}
-.ann-item button{margin:2px 6px 0 0;padding:6px 10px;border:0;border-radius:4px;background:#E47303;color:#fff;font-size:13px;cursor:pointer}
+.ann-item button{margin:2px 6px 0 0;padding:7px 11px;border:0;border-radius:4px;background:var(--ets-accent,#B45309);color:var(--ets-on-accent,#fff);font-size:13px;font-weight:700;cursor:pointer}
 #welcomeSite.in #wsPhoto,#welcomeSite.in #wsBox,#welcomeSite.in #wsLine{animation:wsIn 450ms cubic-bezier(.22,.61,.36,1) both}
 @keyframes wsIn{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:none}}
 .pin.spot{box-shadow:0 0 0 6px #fff,0 0 0 11px var(--c);animation:spotPulse 1.6s ease-out infinite}
@@ -767,9 +767,11 @@ html.sq #tools.open #toolsMore{border-radius:6px}
 <script src="marker-shapes.js"></script>
 <script src="lines-style.js"></script>
 <script src="ets-config.js"></script>
+<script src="labels.js"></script>
 <script src="schedule.js"></script>
 <script src="announcements.js"></script>
 <script src="tour-info.js"></script>
+<script src="tour-camera.js"></script>
 <script src="marker-fill.js"></script>
 <script src="spot-markers.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -811,6 +813,7 @@ const EVENTS_INDEX_READY = fetch("events/index.json", { cache: "no-store" })
 
 /* WHAT'S ON: notices from announcements.csv, plus full events (events/index.json) that have dates.
    ANN_ALL is everything; ANN is what is on now or starting soon (the welcome screen and the Events button use it). */
+const LABELS_READY = window.Labels ? Labels.load() : Promise.resolve();   // the wording the curator chose (labels.csv)
 let ANN_ALL = [], ANN = [];
 const findItem = id => places.concat(kids).find(i => key(i.id) === key(id)) || null;
 const ANN_READY = Promise.all([window.Announcements ? Announcements.load() : [], EVENTS_INDEX_READY]).then(([a]) => {
@@ -1002,7 +1005,7 @@ function startWelcome(featuredId){
     document.getElementById("wsText").textContent = blurb;
     document.getElementById("wsIn").textContent = [a.meta || EventSchedule.statusText(a.st), it ? "at " + it.name : ""].filter(Boolean).join(" \u00b7 ");
     const tour = a.tourId && window.ETSTours ? ETSTours.get(a.tourId) : null;
-    goBtn.textContent = tour ? (!tour.stops.length ? "Show the route" : tour.type === "trail" ? "Start the trail" : "Start the tour") : it ? "See it on the map" : (a.link ? (a.linkText || "Learn more") : "Close");
+    goBtn.textContent = tour ? TourInfo.goText(tour) : it ? Labels.t("welcome.seeOnMap") : (a.link ? (a.linkText || Labels.t("welcome.learnMore")) : Labels.t("welcome.close"));
     if (tgt) tgt.el.classList.add("spot");
     siteBox.classList.remove("in"); void siteBox.offsetWidth; siteBox.classList.add("in");   // after "nophoto", so the pointer measures the final position
     point(tgt, a.color);
@@ -1030,7 +1033,7 @@ function startWelcome(featuredId){
     lastId = it.id;
     currentItem = it; currentAnn = null;
     siteBox.classList.remove("nophoto");
-    goBtn.textContent = "Go There";
+    goBtn.textContent = Labels.t("welcome.goThere");
     setTag(annFor(it.id));                                      // a place that hosts something that is on now wears its tag
 
     const tgt = it.el.style.display !== "none" ? it : (it.parent || it);
@@ -1216,6 +1219,16 @@ const SETTINGS_READY = dataFetch("site.csv", { cache: "no-store" })
     if (S.HEADER)    document.querySelector("#bar h1").textContent = fill(S.HEADER);
     if (S.TAB_TITLE) document.title = fill(S.TAB_TITLE);
     if (/^#[0-9a-f]{3,8}$/i.test(S.BAR_COLOR || "")) document.documentElement.style.setProperty("--bar", S.BAR_COLOR);
+    {   // buttons and highlights follow ACCENT_COLOR, or else the header color; their text is whichever of white or dark reads better
+      const six = c => /^#[0-9a-f]{6}$/i.test(c || "");
+      const acc = six(S.ACCENT_COLOR) ? S.ACCENT_COLOR : six(S.BAR_COLOR) ? S.BAR_COLOR : "#B45309", root = document.documentElement.style;
+      root.setProperty("--ets-accent", acc);
+      root.setProperty("--ets-on-accent", Announcements.readable(acc));
+      root.setProperty("--ets-accent-text", Announcements.onWhite(acc));
+      SITE.tourSpin = /^(y|yes|true|1)$/i.test(S.TOUR_SPIN || "");
+      SITE.tourSpinSpeed = /^(slow|medium|fast)$/i.test(S.TOUR_SPIN_SPEED || "") ? S.TOUR_SPIN_SPEED.toLowerCase() : "medium";
+      SITE.tourTilt = Math.max(0, Math.min(60, parseFloat(S.TOUR_TILT) || 0));
+    }
 
     const lng = num("CENTER_LNG"), lat = num("CENTER_LAT"), z = num("ZOOM");
     if (lng !== null && lat !== null) SITE.center = [lng, lat];
@@ -2029,28 +2042,48 @@ $("res").onclick = e => {
 @media(prefers-reduced-motion:reduce){.tring{animation:none}}
 #klegend{position:absolute;left:8px;bottom:42px;z-index:4;background:#fffe;padding:4px 8px;border-radius:6px;font-size:12px;display:flex;gap:12px}
 #klegend span{display:flex;align-items:center;gap:4px}
-#tourCard{position:fixed;left:0;right:0;bottom:0;z-index:7;max-height:48vh;overflow:auto;background:#fff;border-top:6px solid #D55E00;padding:12px 14px calc(14px + env(safe-area-inset-bottom));box-sizing:border-box}
+#tourCard{position:fixed;left:0;right:0;bottom:0;z-index:7;max-height:48vh;overflow:auto;background:#fff;border-top:6px solid var(--ets-accent,#B45309);padding:12px 14px calc(14px + env(safe-area-inset-bottom));box-sizing:border-box}
 #tourCard[hidden]{display:none}
 #tourCard img{max-height:150px;max-width:100%;border-radius:8px;display:block;margin-bottom:6px;cursor:zoom-in}
 #tourCard h2{margin:4px 0}
 #tourCard small{display:block;color:#555}
-#tourCard.list{max-height:64vh}
-.tcHead{display:flex;justify-content:space-between;align-items:center}
+#tourCard.list,#tourCard.overview{display:flex;flex-direction:column;max-height:58vh;overflow:hidden;padding-bottom:0}
+#tourCard .tcScroll{overflow:auto;flex:1;min-height:0;padding-bottom:8px;-webkit-overflow-scrolling:touch}
+.tcHead{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .tcHead h2{margin:0}
-.tcClose{border:0;background:#eee;border-radius:50%;width:32px;height:32px;font-size:20px;line-height:1;cursor:pointer}
-.tcChips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
-.tcChip{border:1px solid #bbb;background:#fff;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
-.tcChip.on{background:#222;color:#fff;border-color:#222}
+.tcClose{border:0;background:#eee;border-radius:50%;width:34px;height:34px;font-size:22px;line-height:1;cursor:pointer;flex:none}
+.tcBack{border:0;background:none;color:var(--ets-accent-text,#B45309);font-size:14px;font-weight:700;cursor:pointer;padding:6px 0}
+.tcPrompt{font-size:13px;color:#555;margin:6px 0 0}
+.tcChips{display:flex;gap:6px;overflow-x:auto;flex-wrap:nowrap;margin:6px 0 8px;padding-bottom:4px}
+.tcChip{flex:none;border:1px solid #bbb;background:#fff;border-radius:999px;padding:7px 13px;font-size:13px;cursor:pointer;color:#222}
+.tcChip.on{background:var(--ets-accent,#B45309);color:var(--ets-on-accent,#fff);border-color:var(--ets-accent,#B45309)}
 #tourCard .tcSec{margin:12px 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#666}
-.tc{border:1px solid #ddd;border-left:6px solid #bbb;border-radius:8px;padding:8px 10px;margin:6px 0;background:#fff}
-.tc.feat{border-left-color:#E47303;background:#fffaf2}
+.tc{border:1px solid #ddd;border-left:6px solid #bbb;border-radius:8px;padding:8px 10px;margin:6px 0;background:#fff;cursor:pointer}
+.tc.feat{border-left-color:var(--ets-accent,#B45309)}
 .tcTop{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.tcTop h2{margin:2px 0}
+.tcOpen{background:none;border:0;padding:0;font:inherit;font-size:16px;text-align:left;cursor:pointer;color:inherit}
 .tcKind{font-size:11px;background:#eee;border-radius:999px;padding:1px 8px;color:#444}
 #tourCard .tcMeta{display:block;color:#555;margin-top:2px}
-.tc p{margin:6px 0;font-size:14px;line-height:1.35}
-.tcGo{background:#E47303;color:#fff;border:0;border-radius:4px;padding:8px 12px;font-size:14px;cursor:pointer;margin-top:2px}
+.tc p,.tcDesc{margin:6px 0;font-size:14px;line-height:1.4}
+.tcGo{background:var(--ets-accent,#B45309);color:var(--ets-on-accent,#fff);border:0;border-radius:6px;padding:8px 14px;font-size:14px;font-weight:700;cursor:pointer;margin-top:6px}
+.tcGo.big{width:100%;padding:13px;font-size:16px;margin:0}
+.tcFoot{flex:none;padding:10px 0 calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #eee}
 .tcTag{display:inline-block;margin:0 0 4px;padding:2px 9px;border-radius:999px;font:700 11px/1.4 system-ui,Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase}
 .tcNone{color:#666}
+.tcStops{list-style:none;margin:6px 0;padding:0}
+.tcStops li{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid #eee}
+.tcStops b{display:block}
+.tcNum{flex:none;width:26px;height:26px;border-radius:50%;background:var(--ets-accent,#B45309);color:var(--ets-on-accent,#fff);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.tcStops.dots .tcNum{width:14px;height:14px;margin:6px 6px 0 6px;font-size:0}
+.tcNote{display:block;font-size:13px;color:#555;margin-top:1px}
+.tcLeg{display:inline-block;margin-top:4px;font-size:12px;background:#f1f1f1;border-radius:4px;padding:2px 8px;color:#444}
+.tcHint{background:#eef7ee;border-left:4px solid #3a7d44;padding:8px 10px;font-size:13px;margin:8px 0;border-radius:4px}
+.tstopmk{width:26px;height:26px;border-radius:50%;background:var(--ets-accent,#B45309);color:var(--ets-on-accent,#fff);border:2px solid #fff;box-shadow:0 1px 5px #0006;display:flex;align-items:center;justify-content:center;font:700 13px system-ui,Arial,sans-serif}
+@media (min-width:900px){
+  #tourCard{left:12px;right:auto;top:var(--ets-top,76px);bottom:auto;width:380px;max-height:calc(100vh - var(--ets-top,76px) - 12px);border-top:0;border-left:6px solid var(--ets-accent,#B45309);border-radius:12px;box-shadow:0 4px 18px #0004;padding-bottom:12px}
+  #tourCard.list,#tourCard.overview{max-height:calc(100vh - var(--ets-top,76px) - 12px)}
+}
 </style>`);
 
   const icon = (kind, c) => kind === "story"
@@ -2138,6 +2171,9 @@ $("res").onclick = e => {
     const k = key(id);
     return places.concat(kids).find(p => key(p.id) === k) || items.find(i => key(i.id) === k);
   };
+  // A story or spot carries its spreadsheet row in .r (an object). A place also has an .r, but it is a number (its marker size),
+  // so "has an .r" is not enough to tell them apart.
+  const isSpot = it => !!(it && it.r && typeof it.r === "object");
 
   function clearHi() { if (ring) { ring.remove(); ring = null; } }
 
@@ -2147,10 +2183,10 @@ $("res").onclick = e => {
     const st = T.stops[n];
     const it = byId(st.ITEM_ID);
     const card = $("tourCard");
-    card.classList.remove("list");
+    card.classList.remove("list", "overview");
     let name = "Missing item: " + st.ITEM_ID;
     let when = "", text = "", credit = "", ll = null, img = null;
-    if (it && it.r) {
+    if (isSpot(it)) {
       const r = it.r;
       const cp = coverPath(it.id, r.PHOTO);
       name = r.TITLE;
@@ -2204,7 +2240,7 @@ $("res").onclick = e => {
       `<small id="tc"></small>` +
       `<p><b>${esc(T.title)}: stop ${n + 1} of ${T.stops.length}</b></p>` +
       `<button class="kid" data-g="-1" ${n ? "" : "disabled"}>&larr; Back</button>` +
-      `<button class="kid" data-g="1" ${n < T.stops.length - 1 ? "" : "disabled"}>Next: ${esc(nxt ? (nxt.r ? nxt.r.TITLE : nxt.name) : "end of tour")} &rarr;</button>` +
+      `<button class="kid" data-g="1" ${n < T.stops.length - 1 ? "" : "disabled"}>Next: ${esc(nxt ? (isSpot(nxt) ? nxt.r.TITLE : nxt.name) : "end of tour")} &rarr;</button>` +
       `<button class="kid" data-g="x">End tour</button>`;
     card.querySelector("h2").textContent = name;
     $("tw").textContent = when;
@@ -2219,13 +2255,78 @@ $("res").onclick = e => {
   }
 
   const tourAnn = t => ANN.find(a => a.tourId && key(a.tourId) === key(t.id)) || null;   // an announcement that is on now (or soon) and features this tour
+  /* ?camdebug=1 on the address shows a small panel that says what the camera did and why. For finding out why something does not move. */
+  const CAMDEBUG = /[?&]camdebug=1/.test(location.search);
+  let camPanel = null;
+  const camlog = msg => {
+    if (!CAMDEBUG) return;
+    if (!camPanel) { camPanel = document.createElement("pre"); camPanel.style.cssText = "position:fixed;right:8px;bottom:8px;z-index:99;max-width:min(520px,92vw);max-height:40vh;overflow:auto;margin:0;padding:8px 10px;background:#111d;color:#cfe;font:11px/1.4 monospace;white-space:pre-wrap;border-radius:6px"; document.body.appendChild(camPanel); }
+    camPanel.textContent += new Date().toLocaleTimeString() + "  " + msg + "\n"; camPanel.scrollTop = camPanel.scrollHeight;
+  };
+  const camera = TourCamera.create(map, { log: camlog });
+  if (CAMDEBUG) camlog("camera ready. map.setPadding: " + (typeof map.setPadding) + " | reduced motion: " + (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches));
+  let ovMarkers = [], ovIndex = -1;
+  const place = () => { const bar = document.getElementById("bar"); document.documentElement.style.setProperty("--ets-top", ((bar ? bar.getBoundingClientRect().bottom : 64) + 12) + "px"); };
+  const hav = (a, b) => { const R = 6371000, r = d => d * Math.PI / 180, h = Math.sin(r(b[1] - a[1]) / 2) ** 2 + Math.cos(r(a[1])) * Math.cos(r(b[1])) * Math.sin(r(b[0] - a[0]) / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+  const spinsFor = t => t.spin === "yes" || (t.spin !== "no" && !!SITE.tourSpin);
+
   function listTours() {
+    leaveOverview(true);
+    place();
     const card = $("tourCard");
-    card.classList.add("list");
-    card.innerHTML = TourInfo.listHtml(tours, { limit: timeLimit, esc, announce: tourAnn, readable: Announcements.readable });
+    card.classList.remove("overview"); card.classList.add("list");
+    card.innerHTML = TourInfo.listHtml(tours, { limit: timeLimit, esc, announce: tourAnn, readable: Announcements.readable, L: Labels.t, chips: Labels.chips() });
     card.hidden = false;
   }
+
+  /* The overview: the tour is framed in the middle of the part of the map you can see, its stops are numbered on the map,
+     and the panel lists every stop with the walk to the next one. */
+  function overviewStops(t) {
+    const mode = TourInfo.primaryMode(t), lines = routeLines(t.route);
+    let prev = null;
+    return t.stops.map(st => {
+      const it = byId(st.ITEM_ID);
+      let leg = "";
+      if (mode && it && it.ll && prev) {
+        const path = legPath(lines, prev, it.ll);
+        leg = TourInfo.legText(path && path.length > 1 ? pathInfo(path).total : hav(prev, it.ll), mode, Labels.t);
+      }
+      if (it && it.ll) prev = it.ll;
+      return { name: it ? (isSpot(it) ? it.r.TITLE : it.name) : "(missing: " + st.ITEM_ID + ")", note: st.NOTE || "", leg };
+    });
+  }
+  function leaveOverview(resetCamera, instant) {
+    camera.stop(!!resetCamera, !!instant);
+    ovMarkers.forEach(m => { try { m.remove(); } catch (e) {} }); ovMarkers = [];
+    ovIndex = -1;
+  }
+  function showOverview(i) {
+    const t = tours[i]; if (!t) return;
+    leaveOverview(false);
+    ovIndex = i; place();
+    const card = $("tourCard");
+    card.classList.remove("list"); card.classList.add("overview");
+    card.innerHTML = TourInfo.overviewHtml(t, i, { esc, announce: tourAnn, readable: Announcements.readable, L: Labels.t, stops: overviewStops(t) });
+    card.hidden = false;
+    // show this tour's line and number its stops
+    lineVisibility(String(t.route || "").split(/[|;,]/).map(x => x.trim()).filter(Boolean));
+    const stopPts = t.stops.map(st => { const it = byId(st.ITEM_ID); return it && it.ll ? it.ll : null; }).filter(Boolean);
+    if (routeLines(t.route).length) clearTourLine(); else setTourLine(stopPts);
+    stopPts.forEach((ll, n) => {
+      try { const d = document.createElement("div"); d.className = "tstopmk"; d.textContent = t.type === "trail" ? "" : String(n + 1); ovMarkers.push(new maplibregl.Marker({ element: d }).setLngLat(ll).addTo(map)); } catch (e) {}
+    });
+    // frame everything in the part of the map that is not under the panel, then turn if the curator asked for that
+    requestAnimationFrame(() => { try {
+      const r = card.getBoundingClientRect(), wide = innerWidth >= 900;
+      const pad = wide ? { top: 24, right: 24, bottom: 24, left: Math.round(r.right) + 24 } : { top: 24, right: 24, left: 24, bottom: Math.round(innerHeight - r.top) + 24 };
+      const pts = [].concat.apply([], routeLines(t.route)).concat(stopPts);
+      camlog("overview of " + t.id + ": " + pts.length + " points. Site setting: turn=" + !!SITE.tourSpin + ", speed=" + (SITE.tourSpinSpeed || "medium") + ", tilt=" + (SITE.tourTilt || 0) + ". This tour says: " + (t.spin || "use the site setting") + ". So turning is " + (spinsFor(t) ? "ON" : "OFF") + ".");
+      const f = camera.frame(pts, { padding: pad, maxZoom: 17, pitch: SITE.tourTilt || 0 });
+      if (f && spinsFor(t)) camera.spin({ speed: SITE.tourSpinSpeed, delay: 900 });
+    } catch (e) { camlog("overview camera ERROR: " + e.message); } });
+  }
   function startTour(i) {
+    leaveOverview(true, true);
     T = tours[i];
     lineVisibility(String(T.route || "").split(/[|;,]/).map(s => s.trim()).filter(Boolean));
     const coords = T.stops.map(st => { const it = byId(st.ITEM_ID); return it && it.ll ? it.ll : null; }).filter(Boolean);
@@ -2274,7 +2375,7 @@ $("res").onclick = e => {
     const pts = [].concat.apply([], routeLines(T.route));
     if (pts.length) { const b = new maplibregl.LngLatBounds(); pts.forEach(p => b.extend(p)); map.fitBounds(b, { padding: 80, maxZoom: 16 }); }
     const card = $("tourCard");
-    card.classList.remove("list");
+    card.classList.remove("list", "overview");
     card.innerHTML = "<b>" + esc(T.title) + "</b><br><small>" + esc(tourBadge(T)) + "</small><p>" + esc(T.intro) + "</p><button type=\"button\" data-g=\"x\">Close</button>";
     card.hidden = false;
   }
@@ -2283,11 +2384,17 @@ $("res").onclick = e => {
     const t = e.target.closest("[data-t]");
     const g = e.target.closest("[data-g]");
     const chip = e.target.closest("[data-chip]");
+    const ov = e.target.closest("[data-ov]");
     if (chip) { timeLimit = +chip.dataset.chip || 0; listTours(); return; }
     if (t) {
       startTour(+t.dataset.t);
+    } else if (ov && !g) {
+      showOverview(+ov.dataset.ov);
     } else if (g && !g.disabled) {
-      if (g.dataset.g === "x") {
+      if (g.dataset.g === "list") {
+        listTours();
+      } else if (g.dataset.g === "x") {
+        leaveOverview(true);
         $("tourCard").hidden = true;
         clearHi();
         clearTourLine();
@@ -2337,8 +2444,10 @@ $("res").onclick = e => {
       if (String(r.TYPE || "").toLowerCase() === "line") { String(r.ROUTE || "").split(/[|;,]/).map(s => s.trim()).filter(Boolean).forEach(x => mapLineIds.add(x)); return; }   // map lines are drawn, not listed as tours
       const stops = TS.filter(x => key(x.TOUR_ID) === key(id)).sort((a,b) => parseFloat(a.STEP) - parseFloat(b.STEP));
       tours.push({ id, title: r.TITLE || id, intro: r.INTRO || "", category: r.CATEGORY || null, route: r.ROUTE || "", type: String(r.TYPE || "tour").toLowerCase(), modes: r.MODES || "", length: parseFloat(r.LENGTH_MI) || 0, stops,
-        summary: String(r.SUMMARY || "").trim(), effort: String(r.EFFORT || "").trim(), minutes: String(r.MINUTES || "").trim(), featured: /^(y|yes|true|1)$/i.test(String(r.FEATURED || "").trim()) });
+        summary: String(r.SUMMARY || "").trim(), effort: String(r.EFFORT || "").trim(), minutes: String(r.MINUTES || "").trim(), featured: /^(y|yes|true|1)$/i.test(String(r.FEATURED || "").trim()), spin: String(r.SPIN || "").trim().toLowerCase() });
     });
+    await LABELS_READY;
+    $("tours").textContent = Labels.t("tours.button");
     $("tours").hidden = !tours.length;
     try { refreshEventButton(); } catch (e) {}   // featured tours count as "things to do"
     lineVisibility([]);
@@ -2382,7 +2491,7 @@ $("res").onclick = e => {
     }
     const it = byId(id);
     if (!it || !it.ll) return false;
-    if (!it.r) { focus = it.parent || null; update(); }
+    if (!isSpot(it)) { focus = it.parent || null; update(); }
     map.flyTo({ center: it.ll, zoom: Math.max(map.getZoom(), it.parent ? 17 : 16) });
     pulse(it);
     return true;
@@ -3137,13 +3246,13 @@ function renderWhatsOn(box){                                    // the announcem
     if (!tour) return;
     const b = document.createElement("button");
     b.type = "button";
-    b.textContent = !tour.stops.length ? "Show the route" : tour.type === "trail" ? "Start the trail" : "Start the tour";
+    b.textContent = TourInfo.goText(tour);
     b.onclick = () => { closeEventPanel(); ETSTours.start(tour.id); };
     parent.appendChild(b);
   };
   if (items.length) {
     const h = document.createElement("h3");
-    h.textContent = "What\u2019s on";
+    h.textContent = Labels.t("events.whatsOn");
     box.appendChild(h);
   }
   items.forEach(a => {
@@ -3166,14 +3275,14 @@ function renderWhatsOn(box){                                    // the announcem
     if (venue) {
       const b = document.createElement("button");
       b.type = "button";
-      b.textContent = "See it on the map";
+      b.textContent = Labels.t("welcome.seeOnMap");
       b.onclick = () => { closeEventPanel(); select(venue); map.easeTo({ center: venue.ll, zoom: Math.max(map.getZoom(), venue.parent ? 17 : 15) }); };
       d.appendChild(b);
     }
     if (a.link) {
       const b = document.createElement("button");
       b.type = "button";
-      b.textContent = a.linkText || "Learn more";
+      b.textContent = a.linkText || Labels.t("welcome.learnMore");
       b.onclick = () => window.open(a.link, "_blank", "noopener");
       d.appendChild(b);
     }
@@ -3181,7 +3290,7 @@ function renderWhatsOn(box){                                    // the announcem
   });
   if (things.length) {
     const h = document.createElement("h3");
-    h.textContent = "Things to do";
+    h.textContent = Labels.t("events.thingsToDo");
     box.appendChild(h);
     things.forEach(a => {
       const d = document.createElement("div");
@@ -3245,7 +3354,7 @@ function refreshEventButton(){
   const things = window.ETSTours ? ETSTours.featured() : [];
   if (!own && !pub.length && !notices.length && !things.length) return;
   const liveNow = pub.some(e => { const s = evStatus(e); return s && s.state === "now" && e.slug !== EVENT_SLUG; }) || ANN.some(a => a.kind === "announcement" && a.st.state === "now");
-  $("eventBtn").textContent = liveNow ? "Happening Now" : (own ? SITE.event.button : "Events");
+  $("eventBtn").textContent = liveNow ? Labels.t("events.nowButton") : (own ? SITE.event.button : "Events");
   $("eventBtn").classList.toggle("now", liveNow);
   $("eventBtn").hidden = false;
 }
