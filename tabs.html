@@ -113,10 +113,12 @@
     <button class="top-tab" data-target="p10" data-group="items" data-blurb="QR codes. Make a printable label for a spot, story, place, event or the whole map: a QR code with a caption, a source line (like County Library), your colors, and an optional picture in the middle. Print or save it to put on a sign.">QR Signs</button>
     <button class="top-tab" data-target="p4" data-group="tours" data-blurb="Tours and Trails. Design tours, trails and plain map lines on one screen: draw the route, click markers to add stops, choose how people travel it (walk, hike, bike, drive or virtual), and style the line.">Tours and Trails</button>
     <button class="top-tab" data-target="p1" data-group="look" data-blurb="Change the color and text of the header, the movable map bounds, and the default camera location.">Site Settings</button>
+    <button class="top-tab" data-target="p16" data-group="look" data-blurb="Icons. Draw and edit the little pictures used on markers, stamps and tours. Pick one, then draw or edit its code. Edits icons.js.">Icons</button>
     <button class="top-tab" data-target="p5" data-group="look" data-blurb="Boundary Line. Edit the visible city, county, or area boundary line by clicking and dragging, adding, or subtracting points on a map. Edits border.geojson.">Boundary</button>
     <button class="top-tab" data-target="p6" data-group="look" data-blurb="Overlay Maps. Align old maps to the current map by resizing, skewing, and rotating them. Edits overlays.json.">Old Maps (Overlays)</button>
     <button class="top-tab" data-target="p7" data-group="visitors" data-blurb="Edit and preview stars, stamps, and tasks in the Passport system. Edits stamps.csv and tasks.csv.">Passport &amp; Prizes</button>
     <button class="top-tab" data-target="p9" data-group="visitors" data-blurb="Events. Save data as an event (a named folder of markers, spots, passport, settings and photos), or apply a saved event to switch what the live page shows.">Events</button>
+    <button class="top-tab" data-target="p15" data-group="visitors" data-blurb="Calendar. See every announcement and event on a month grid or a list. Conflicts (two events that both open themselves at once) and busy days are flagged. Click one to edit it, or add a new announcement on a day.">Calendar</button>
     <button class="top-tab" data-target="p14" data-group="visitors" data-blurb="Announcements. Put a quilt show, a food tour or any happening on the welcome screen, with a colored tag and dates. It shows while it is on and for a few days before. This edits announcements.csv.">Announcements</button>
     <button class="top-tab" data-target="pub" data-group="publish" data-blurb="Publish. Gather every change from all the tabs into one publish, with a plain-language summary of what changed. You can also bring your data files back to an earlier version.">Publish &amp; Restore</button>
     <button class="top-tab" data-target="p13" data-group="publish" data-blurb="Open the live map to view changes once they are completed and uploaded.">Preview Live Site</button>
@@ -173,6 +175,14 @@
 
     <div id="p14" class="page-container">
       <iframe src="announce.html"></iframe>
+    </div>
+
+    <div id="p15" class="page-container">
+      <iframe src="calendar.html"></iframe>
+    </div>
+
+    <div id="p16" class="page-container">
+      <iframe src="icon-editor.html"></iframe>
     </div>
 
         <div id="p10" class="page-container">
@@ -298,6 +308,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const dirtyTabs = new Set();
   window.ETSHub = { anyDirty: () => dirtyTabs.size > 0 };
   window.addEventListener("beforeunload", e => { if (dirtyTabs.size) { e.preventDefault(); e.returnValue = ""; } });
+  window.addEventListener("message", e => {          // another tab (the Calendar) asks to open a tab, and maybe one item in it
+    if (e.origin !== location.origin || !e.data || e.data.type !== "ets-open-tab") return;
+    const tab = document.querySelector('.top-tab[data-target="' + e.data.tab + '"]');
+    if (!tab) return;
+    tab.click();
+    const fr = document.querySelector("#" + e.data.tab + " iframe");
+    if (fr && fr.contentWindow && e.data.payload) fr.contentWindow.postMessage(e.data.payload, location.origin);
+  });
   window.addEventListener("message", e => {
     if (e.origin !== location.origin || !e.data || e.data.type !== "ets-dirty") return;
     const fr = [...document.querySelectorAll(".page-container iframe")].find(f => f.contentWindow === e.source);
@@ -345,7 +363,7 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------- Publish All ---------- */
   const NOUN = { "locations.csv": "Places", "childmarkers.csv": "Parts of places", "spots.csv": "Spots and stories", "tours.csv": "Tours and trails", "tourstops.csv": "Tour stops",
     "stamps.csv": "Stamps", "tasks.csv": "Tasks", "prizes.csv": "Prizes", "categories.csv": "Categories", "site.csv": "Site settings" };
-  const NICE = { "announcements.csv": "Announcements", "lines.geojson": "Drawn lines", "border.geojson": "Boundary line", "overlays.json": "Old maps (overlays)", "settings.json": "Settings" };
+  const NICE = { "icons.js": "Icons", "announcements.csv": "Announcements", "lines.geojson": "Drawn lines", "border.geojson": "Boundary line", "overlays.json": "Old maps (overlays)", "settings.json": "Settings" };
   const isMedia = p => /\.(jpe?g|png|webp|gif|mp4|webm)$/i.test(p);
   let found = [];
   async function describe(f) {

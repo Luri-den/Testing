@@ -1,0 +1,1528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passport Editor</title>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script src="editor-common.js"></script>
+<script>Workspace.install();</script>
+<script src="marker-fill.js"></script>
+<style>
+  :root{
+    --line:#d7dde5; --accent:#2b6cb0; --ink:#1a202c;
+    --bg:#eef1f5; --panel:#fff; --muted:#6b7280;
+    --stamp:#D55E00; --gold:#FFC20E;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font:14px system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}
+
+  #top{position:absolute;z-index:20;top:0;left:0;right:0;height:52px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 12px}
+  #top h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+  #top .grow{flex:1}
+  #top .status{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
+  button{font:inherit;padding:6px 12px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;color:var(--ink)}
+  button:hover{background:#f6f8fb}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.primary:hover{background:#245a94}
+  button.warn{background:#fff5f5;border-color:#f3c2c2;color:#a33}
+  button.warn:hover{background:#ffecec}
+  button.small{padding:3px 8px;font-size:12px}
+  button.tabbtn{border-radius:0;border:none;border-bottom:3px solid transparent;background:transparent;padding:10px 18px;font-weight:600;color:var(--muted)}
+  button.tabbtn.on{color:var(--accent);border-bottom-color:var(--accent);background:#fff}
+
+  #tabs{position:absolute;z-index:15;top:52px;left:0;right:0;height:42px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:stretch}
+  #tabs .grow{flex:1}
+
+  #layout{position:absolute;top:94px;left:0;right:0;bottom:0;display:grid;grid-template-columns:260px 1fr;overflow:hidden}
+
+  /* left: list of stamps or tasks */
+  #left{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding-bottom:20px}
+  .sec{padding:10px 14px 4px}
+  .sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:8px 0 6px;font-weight:600;display:flex;align-items:center;justify-content:space-between}
+  .sec h2 button{padding:3px 8px;font-size:11px}
+
+  .row{display:flex;align-items:center;gap:8px;padding:8px 10px;margin:2px 6px;border-radius:6px;cursor:pointer;font-size:13px}
+  .row:hover{background:#f4f7fb}
+  .row.sel{background:#e6effa;font-weight:600}
+  .row .sw{width:26px;height:26px;border-radius:50%;background:#eee;display:flex;align-items:center;justify-content:center;flex:none}
+  .row .sw svg{width:22px;height:22px;display:block}
+  .row .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .cnt{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .row .badge{font-size:10px;padding:2px 6px;border-radius:999px;background:#eef3fb;color:#2b6cb0;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .row .badge.behavior{background:#e6f5ec;color:#2f855a}
+  .row .badge.item{background:#fff7e6;color:#b7791f}
+  .row .badge.category{background:#f3e8ff;color:#6b46c1}
+  .row .badge.prize{background:#fff3e0;color:#c05621}
+
+  /* right: form */
+  #right{background:var(--panel);overflow:auto;padding-bottom:30px}
+  .empty{padding:40px 24px;color:#9aa3ad;font-size:13px;text-align:center;line-height:1.6;max-width:520px;margin:0 auto}
+  .empty kbd{font:11px ui-monospace,Menlo,monospace;background:#f1f3f7;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px}
+
+  .form{padding:20px;max-width:860px;margin:0 auto}
+  .form h2{font-size:20px;margin:0 0 4px}
+  .form .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:600}
+  .field input[type=text],.field input[type=number],.field textarea,.field select{
+    width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff;color:var(--ink)}
+  .field textarea{min-height:60px;resize:vertical;line-height:1.45}
+  .field input:focus,.field textarea:focus,.field select:focus{outline:2px solid #cfe0f3;border-color:#9dbde3}
+  .field .hint{font-size:11px;color:var(--muted);margin-top:3px;font-weight:400;text-transform:none;letter-spacing:0}
+
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+  .vehicle-picker{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+  .vehicle-picker label{display:flex;flex-direction:column;align-items:center;gap:4px;border:2px solid #eef1f5;border-radius:8px;padding:8px 10px;cursor:pointer;background:#fff;min-width:80px;transition:border-color .12s,background .12s}
+  .vehicle-picker label:hover{border-color:#cfe0f3}
+  .vehicle-picker input{display:none}
+  .vehicle-picker input:checked + * + b{color:var(--accent)}
+  .vehicle-picker label.on{border-color:var(--accent);background:#f0f6fc}
+  .vehicle-picker b{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  .vehicle-picker svg{display:block}
+
+  .divider{height:1px;background:var(--line);margin:20px 0}
+
+  /* stamp preview card */
+  .stamp-preview{background:#fafbfd;border:1px solid var(--line);border-radius:12px;padding:20px;text-align:center;margin:16px 0}
+  .stamp-preview .emblem{width:110px;height:110px;border-radius:50%;background:#fffdf6;border:6px solid var(--stamp);display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0 auto 12px;box-shadow:inset 0 0 0 3px #fffdf6,inset 0 0 0 5px var(--stamp)}
+  .stamp-preview .emblem svg{width:60%;height:auto}
+  .stamp-preview .emblem b{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--stamp);margin-top:2px}
+  .stamp-preview h3{margin:6px 0 8px;font-size:22px;color:var(--stamp)}
+  .stamp-preview .stars{display:flex;gap:8px;justify-content:center;margin:8px 0}
+  .stamp-preview .stars svg{width:44px;height:44px;display:block;filter:drop-shadow(0 2px 3px #0002)}
+  .stamp-preview .stars .on path{fill:var(--gold);stroke:#c98a00;stroke-width:1.2}
+  .stamp-preview .stars .off path{fill:#ffffff;stroke:#ccc;stroke-width:1.5}
+  .stamp-preview .rank{font-size:20px;font-weight:600;margin-top:10px}
+  .stamp-preview .grand{font-size:16px;color:var(--gold);font-weight:600;margin-top:6px}
+
+  /* simulation slider */
+  .sim{background:#fff8e0;border:1px solid #f0d878;border-radius:10px;padding:12px 16px;margin:16px 0}
+  .sim label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7a5c00;font-weight:600;margin-bottom:6px}
+  .sim .row{display:flex;align-items:center;gap:12px}
+  .sim input[type=range]{flex:1}
+  .sim .val{font:600 14px ui-monospace,Menlo,monospace;color:#7a5c00;min-width:80px;text-align:right}
+  .sim .explain{font-size:12px;color:#7a5c00;margin-top:6px}
+
+  /* task checkboxes */
+  .task-list{margin-top:6px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .task-list .item{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #eef1f5;background:#fff;cursor:pointer}
+  .task-list .item:last-child{border-bottom:none}
+  .task-list .item:hover{background:#f6f8fb}
+  .task-list .item.on{background:#f0f6fc}
+  .task-list input{width:18px;height:18px;cursor:pointer}
+  .task-list .label{font-weight:600;font-size:13px}
+  .task-list .what{font-size:12px;color:var(--muted);margin-top:2px}
+  .task-list .scope{font-size:10px;padding:2px 6px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+  .task-list .scope.behavior{background:#e6f5ec;color:#2f855a}
+  .task-list .scope.item{background:#fff7e6;color:#b7791f}
+  .task-list .scope.category{background:#f3e8ff;color:#6b46c1}
+
+  .actions{margin-top:20px;display:flex;gap:8px;flex-wrap:wrap}
+  .actions .grow{flex:1}
+
+  /* task edit form */
+  .target-help{font-size:11px;color:var(--muted);margin-top:4px}
+  .warn-inline{background:#fff5f5;border:1px solid #f3c2c2;border-radius:6px;padding:8px 10px;font-size:12px;color:#a33;margin-top:8px}
+
+  .target-explain{margin-top:8px;padding:8px 10px;background:#f0f6fc;border-left:3px solid #2b6cb0;border-radius:4px;font-size:13px;color:#2b4a6b;line-height:1.5}
+.target-explain b{color:#1a3a5b}
+.target-explain.empty{background:#fff5f5;border-left-color:#c33;color:#a33}
+
+  #toast{position:fixed;z-index:100;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .18s, transform .18s;pointer-events:none;max-width:80vw;text-align:center}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  .row .badge.off{background:#fde8e8;color:#a33}
+  .row .badge.on{background:#e6f5ec;color:#2f855a}
+  .row .cicon{width:22px;height:22px;object-fit:contain;flex:none}
+  .row .dot{width:10px;height:10px;border-radius:50%;flex:none;box-shadow:0 0 0 1px #0002}
+  .icongrid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+  .icongrid .ic{padding:4px;border:2px solid #eef1f5;border-radius:8px;background:#fffdf6;cursor:pointer}
+  .icongrid .ic img{width:100%;aspect-ratio:1;object-fit:contain;display:block}
+  .icongrid .ic.on{border-color:var(--accent);background:#e6effa}
+  .ranknote{margin-top:8px;padding:8px 10px;border-radius:6px;font-size:12px;line-height:1.5}
+  .ranknote.ok{background:#f0faf3;border:1px solid #cfe8cf;color:#2a6b3a}
+  .ranknote.off{background:#fff8e6;border:1px solid #f0e0b0;color:#7a5c00}
+  .ptask{display:flex;gap:10px;align-items:flex-start;background:#fff;border:2px solid #eee;border-radius:10px;padding:10px}
+  .ptask .chk{flex:none;width:22px;height:22px;border-radius:50%;border:2px solid #ccc;background:#fff}
+  .ptask .lbl{font-size:14px;font-weight:600}
+  .ptask .th{font-size:13px;color:#555;margin-top:3px}
+  .ptask .pbtn{margin-top:8px;padding:7px 12px;border:0;border-radius:6px;background:#E47303;color:#fff;font-size:13px;font-weight:bold}
+  .ptask .cnt{font-weight:normal;color:#777;font-size:12px;margin-left:4px}
+
+  /* prize form bits */
+  .reqrow{display:grid;grid-template-columns:1fr 130px auto;gap:8px;align-items:center;margin-bottom:6px}
+  .reqrow select{width:100%}
+  .prize-preview{background:#fff8f0;border:2px solid #f0d2b5;border-radius:10px;padding:12px 14px;margin:12px 0}
+  .prize-preview.done{background:#f4fbf4;border-color:#cfe8cf}
+  .prize-preview h4{margin:0 0 4px;font-size:15px;color:#333}
+  .prize-preview .bar{height:10px;border-radius:5px;background:#fff;overflow:hidden;border:1px solid #e0c8a8;margin:8px 0}
+  .prize-preview .bar>i{display:block;height:100%;background:#E47303;transition:width .3s}
+  .prize-preview .meta{font-size:13px;color:#555;line-height:1.45}
+  .prize-preview.done .meta{color:#2e6e3a}
+  .prize-preview .claim{display:inline-block;margin-top:8px;padding:6px 12px;background:#E47303;color:#fff;border-radius:6px;font-size:13px;font-weight:bold}
+  .badge-prize{font-size:10px;padding:2px 6px;border-radius:999px;background:#fff3e0;color:#c05621;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .prizes-off-banner{background:#fff8e6;border:1px solid #f0e0b0;border-radius:8px;padding:12px 14px;font-size:13px;color:#7a5c00;line-height:1.5;margin-bottom:14px}
+</style>
+</head>
+<body>
+
+<div id="top">
+  <h1>Passport</h1>
+  <button id="pickStamps">Pick stamps.csv…</button>
+  <input id="fileStamps" type="file" accept=".csv,text/csv" hidden>
+  <button id="pickTasks">Pick tasks.csv…</button>
+  <input id="fileTasks" type="file" accept=".csv,text/csv" hidden>
+  <button id="pickPrizes">Pick prizes.csv…</button>
+  <input id="filePrizes" type="file" accept=".csv,text/csv" hidden>
+  <span class="status" id="status">Loading…</span>
+  <span class="grow"></span>
+  <button id="reloadBtn" title="Re-fetch both CSVs">↻ Reload</button>
+  <button id="publishBtn" class="primary" disabled>Download updated CSVs</button>
+</div>
+
+<div id="tabs">
+  <button class="tabbtn on" data-tab="stamps">Stamps</button>
+  <button class="tabbtn" data-tab="tasks">Tasks</button>
+  <button class="tabbtn" data-tab="categories">Categories</button>
+  <button class="tabbtn" data-tab="prizes">Prizes</button>
+  <span class="grow"></span>
+  <span id="grandWrap" style="display:flex;align-items:center;gap:8px;padding-right:14px;font-size:12px">
+    <label style="color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600">Grand Rank:</label>
+    <input id="grandInput" type="text" style="width:220px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font:inherit" placeholder="Completing all stamps earns…">
+  </span>
+</div>
+
+<div id="layout">
+  <aside id="left">
+    <div class="sec">
+      <h2 id="listTitle">Stamps <button id="addStamp" type="button">＋ New</button></h2>
+    </div>
+    <div id="list"></div>
+  </aside>
+
+  <main id="right">
+    <div id="form"><div class="empty">Loading…</div></div>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="icons.js"></script>
+
+<script>
+/* ============================================================
+   Passport Editor
+   Edits stamps.csv, tasks.csv, categories.csv and prizes.csv.
+   ============================================================ */
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const key = s => String(s||"").trim().toLowerCase();
+const uid = () => Math.random().toString(36).slice(2,6);
+
+/* Column orders */
+const STAMP_COLS = ["STAMP_ID","TITLE","VEHICLE","CATEGORY","STAR1","STAR2","STAR3","RANK1","RANK2","RANK3","GRAND_RANK","TASKS"];
+const TASK_COLS  = ["TASK_ID","LABEL","HINT","BTN","SCOPE","TARGET","COUNT"];
+const PRIZE_COLS = ["PRIZE_ID","LABEL","REQUIREMENTS","REWARD","CODE","ORDER"];
+
+/* Categories come from categories.csv (the same file the Places editor and the map read).
+   These are only the starting values if that file is missing. */
+const isYes = v => ["yes", "true", "1", "y"].includes(String(v || "").trim().toLowerCase());
+let CATEGORIES = {
+  CIV:      { label:"Civic",       color:"#E2E1E0", icon:"courthouse", ranked:false },
+  COMM:     { label:"Commercial",  color:"#E47303", icon:"store",      ranked:false },
+  RES:      { label:"Residential", color:"#BDD76B", icon:"house",      ranked:false },
+  IND:      { label:"Industrial",  color:"#AF350A", icon:"factory",    ranked:true },
+  RAIL:     { label:"Rail",        color:"#8B6F47", icon:"train",      ranked:true },
+  CANAL:    { label:"Canal",       color:"#4A7C8C", icon:"boat",       ranked:true },
+  DOWNTOWN: { label:"Downtown",    color:"#7B5EA7", icon:"hotel",      ranked:true }
+};
+const catLabel = code => { const c = CATEGORIES[String(code||"").trim().toUpperCase()]; return c ? c.label : String(code||""); };
+const catRanked = code => { const c = CATEGORIES[String(code||"").trim().toUpperCase()]; return !!(c && c.ranked); };
+
+/* The map's own data, so tasks can be pointed at things by NAME instead of by ID */
+const MAP = { places:[], kids:[], spots:[], stories:[], tours:[] };
+function allItems(){
+  const out = [];
+  MAP.places.forEach(x => out.push({ id:x.id, name:x.name, type:"place", cat:x.cat }));
+  MAP.kids.forEach(x => out.push({ id:x.id, name:x.name, type:"place (inside " + (x.parent || "?") + ")", cat:x.cat }));
+  MAP.stories.forEach(x => out.push({ id:x.id, name:x.name, type:"story", cat:x.cat }));
+  MAP.spots.forEach(x => out.push({ id:x.id, name:x.name, type:"photo spot", cat:x.cat }));
+  MAP.tours.forEach(x => out.push({ id:x.id, name:x.name, type:"tour", cat:x.cat }));
+  return out;
+}
+const itemInfo = id => allItems().find(i => key(i.id) === key(id)) || null;
+
+/* Behaviors the site currently fires — one per passportEvent() call */
+const BEHAVIORS = {
+  story: "Player opens a story (sparkle marker)",
+  spot:  "Player opens a photo spot or scans a QR sign",
+  tour:  "Player reaches the last stop of a tour"
+};
+
+/* Emblems come from icons.js: the same list the map page and the Places editor use */
+const VEHICLES = Object.keys(ICONS);
+function vehicleSVG(k){
+  const i = ICONS[k] || ICONS.train;
+  return `<svg viewBox="${i.vb}" width="60" height="30" aria-hidden="true">${i.art}</svg>`;
+}
+const VEHICLE_SVG = new Proxy({}, {
+  get: (_, k) => (typeof k === "string" && Object.prototype.hasOwnProperty.call(ICONS, k)) ? vehicleSVG(k) : undefined
+});
+
+/* ---------- State ---------- */
+let stamps = [];       // {row, tasks:[taskId...]}
+let tasks = [];        // {row}
+let prizes = [];       // {row}
+let headers = { stamp: STAMP_COLS.slice(), task: TASK_COLS.slice(), prize: PRIZE_COLS.slice() };
+let loaded = { stamps:false, tasks:false, prizes:false, cats:false, site:false };
+let selected = null;   // {kind:"stamp"|"task"|"category"|"prize", ref}
+let simProgress = 0;   // simulation slider value
+let activeTab = "stamps";
+
+/* Site settings (only what the editor needs — PRIZES for now) */
+let SITE_PRIZES = "yes";   // "yes" or "no"
+
+/* ============================================================
+   Loading
+   ============================================================ */
+
+$("pickStamps").onclick = () => $("fileStamps").click();
+$("pickTasks").onclick  = () => $("fileTasks").click();
+$("pickPrizes").onclick = () => $("filePrizes").click();
+$("fileStamps").onchange = e => readCSV(e.target.files[0], "stamps");
+$("fileTasks").onchange  = e => readCSV(e.target.files[0], "tasks");
+$("filePrizes").onchange = e => readCSV(e.target.files[0], "prizes");
+
+function readCSV(file, kind){
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => ingestCSV(r.result, kind, file.name);
+  r.readAsText(file);
+}
+
+async function fetchText(file){
+  try { const r = await fetch(file, { cache:"no-store" }); return r.ok ? r.text() : null; }
+  catch (e) { return null; }
+}
+const csvRows = text => Papa.parse(text, { header:true, skipEmptyLines:"greedy" }).data
+  .filter(r => Object.values(r).some(v => String(v||"").trim() !== ""));
+
+window.MarkerFill = window.MarkerFill || {   // stand-in so the editor still works if marker-fill.js was not uploaded
+  PATTERNS: [], cleanPattern: () => "", defaults: () => ({}), url: () => "", fromRow: () => null, normalize: c => c, tileHtml: () => "", panelHtml: () => "", wire(){}
+};
+const CAT_KNOWN = ["CODE","LABEL","COLOR","ICON","RANKED","FILL","FILL_COLOR","FILL_COLOR2"];
+let catExtraCols = [];
+const catImage = c => (c && c.fill) ? MarkerFill.url(c.fill, c.fillColor, c.fillColor2) : iconUrl((c && c.icon) || "generic");
+let catsLoaded = false;
+function ingestCats(text){
+  const fields = (Papa.parse(text, { header:true, skipEmptyLines:"greedy" }).meta.fields || []).map(f => String(f).trim());
+  const hasRanked = fields.includes("RANKED");
+  catExtraCols = fields.filter(f => f && !CAT_KNOWN.includes(f));   // columns this editor does not manage (for example SHAPE) are kept as they are, so saving never drops them
+
+  const next = {};
+  csvRows(text).forEach(r => {
+    const code = String(r.CODE||"").trim().toUpperCase();
+    const color = String(r.COLOR||"").trim();
+    if (!code || !/^#[0-9a-f]{6}$/i.test(color)) return;
+    const icon = String(r.ICON||"").trim();
+    const old = CATEGORIES[code];
+    next[code] = {
+      label: String(r.LABEL||"").trim() || code,
+      color,
+      icon: ICONS[icon] ? icon : ((old && old.icon) || "generic"),
+      ranked: hasRanked ? isYes(r.RANKED) : !!(old && old.ranked),
+      ...(MarkerFill.fromRow(r, color) || (old && old.fill ? { fill: old.fill, fillColor: old.fillColor, fillColor2: old.fillColor2 } : { fill: "" })),
+      extra: Object.fromEntries(catExtraCols.map(k => [k, String(r[k] == null ? "" : r[k])]))
+    };
+  });
+  if (Object.keys(next).length){ CATEGORIES = next; catsLoaded = true; loaded.cats = true; }
+}
+
+function ingestMapData(t){          // t = [locations, childmarkers, spots, tours] texts (or null)
+  MAP.places = []; MAP.kids = []; MAP.spots = []; MAP.stories = []; MAP.tours = [];
+  if (t[0]) csvRows(t[0]).forEach(r => { if (r.ID) MAP.places.push({ id:String(r.ID).trim(), name:r.NAME || r.ID, cat:String(r.CATEGORY||"").trim().toUpperCase() }); });
+  if (t[1]) csvRows(t[1]).forEach(r => { const id = r.CHILD_ID || r.CHILD_IS; if (id) MAP.kids.push({ id:String(id).trim(), name:r.NAME || id, parent:r.PARENT_ID, cat:String(r.CATEGORY||"").trim().toUpperCase() }); });
+  if (t[2]) csvRows(t[2]).forEach(r => {
+    if (!r.SPOT_ID) return;
+    const o = { id:String(r.SPOT_ID).trim(), name:r.TITLE || r.SPOT_ID, cat:String(r.CATEGORY||"").trim().toUpperCase() };
+    (key(r.KIND) === "story" ? MAP.stories : MAP.spots).push(o);
+  });
+  if (t[3]) csvRows(t[3]).forEach(r => { if (r.TOUR_ID) MAP.tours.push({ id:String(r.TOUR_ID).trim(), name:r.TITLE || r.TOUR_ID, cat:String(r.CATEGORY||"").trim().toUpperCase() }); });
+}
+
+async function loadFromServer(){
+  const files = ["stamps.csv","tasks.csv","prizes.csv","categories.csv","locations.csv","childmarkers.csv","spots.csv","tours.csv","site.csv"];
+  const t = await Promise.all(files.map(fetchText));
+  if (t[0] != null) ingestCSV(t[0], "stamps", "stamps.csv");
+  if (t[1] != null) ingestCSV(t[1], "tasks",  "tasks.csv");
+  if (t[2] != null) ingestCSV(t[2], "prizes", "prizes.csv");
+  if (t[3] != null) ingestCats(t[3]);
+  ingestMapData(t.slice(4, 8));
+  if (t[8] != null) ingestSiteSettings(t[8]);
+  return t;
+}
+
+function ingestSiteSettings(text){
+  try {
+    csvRows(text).forEach(r => {
+      const k = String(r.KEY || "").trim().toUpperCase();
+      const v = String(r.VALUE == null ? "" : r.VALUE).trim().toLowerCase();
+      if (k === "PRIZES") SITE_PRIZES = v === "no" ? "no" : "yes";
+    });
+    loaded.site = true;
+  } catch (e) {}
+}
+
+(async () => {
+  await loadFromServer();
+  const have = [loaded.stamps, loaded.tasks, loaded.prizes, loaded.cats].filter(Boolean).length;
+  if (!loaded.stamps && !loaded.tasks && !loaded.prizes && !loaded.cats) setStatus("Click 'Pick stamps.csv…' to begin");
+  else updateStatus();
+  render();
+})();
+
+$("reloadBtn").onclick = async () => {
+  if (!confirm("Reload everything from the server? Unsaved changes will be lost.")) return;
+  stamps = []; tasks = []; prizes = [];
+  loaded = { stamps:false, tasks:false, prizes:false, cats:false, site:false };
+  selected = null;
+  await loadFromServer();
+  render();
+  toast("Reloaded from server");
+};
+
+function ingestCSV(text, kind, filename){
+  const parsed = Papa.parse(text, { header:true, skipEmptyLines:"greedy" });
+  if (parsed.errors && parsed.errors.length){
+    const hard = parsed.errors.filter(e => !/TooFewFields|TooManyFields/.test(e.code));
+    if (hard.length) console.warn("CSV warnings for " + filename, hard);
+  }
+  const rows = parsed.data.filter(r => Object.values(r).some(v => String(v||"").trim() !== ""));
+
+  if (kind === "stamps"){
+    headers.stamp = parsed.meta.fields?.length ? parsed.meta.fields.slice() : STAMP_COLS.slice();
+    for (const c of STAMP_COLS) if (!headers.stamp.includes(c)) headers.stamp.push(c);
+    stamps = rows.map(r => {
+      const taskList = String(r.TASKS||"").split("|").map(s => s.trim()).filter(Boolean);
+      return { row: r, tasks: taskList };
+    });
+    loaded.stamps = true;
+  } else if (kind === "tasks") {
+    headers.task = parsed.meta.fields?.length ? parsed.meta.fields.slice() : TASK_COLS.slice();
+    for (const c of TASK_COLS) if (!headers.task.includes(c)) headers.task.push(c);
+    tasks = rows.map(r => ({ row: r }));
+    loaded.tasks = true;
+  } else {
+    headers.prize = parsed.meta.fields?.length ? parsed.meta.fields.slice() : PRIZE_COLS.slice();
+    for (const c of PRIZE_COLS) if (!headers.prize.includes(c)) headers.prize.push(c);
+    prizes = rows.map(r => {
+      const list = parseRequirements(r.REQUIREMENTS);
+      return { row: r, reqs: list };
+    });
+    loaded.prizes = true;
+  }
+
+  render();
+  $("publishBtn").disabled = !(loaded.stamps && loaded.tasks);
+  updateStatus();
+  updateGrandField();
+}
+
+/* Parse the REQUIREMENTS column: "RAIL:2|COMM:any|IND:1"
+   Returns [{stamp, stars}] where stars is "any" | 1 | 2 | 3 */
+function parseRequirements(s){
+  return String(s || "").split("|").map(x => x.trim()).filter(Boolean).map(x => {
+    const parts = x.split(":");
+    const stamp = String(parts[0] || "").trim();
+    let stars = String(parts[1] || "any").trim().toLowerCase();
+    if (stars === "" ) stars = "any";
+    if (stars !== "any" && !["1","2","3"].includes(stars)) stars = "any";
+    return { stamp, stars };
+  }).filter(r => r.stamp);
+}
+function serializeRequirements(reqs){
+  return reqs.map(r => r.stamp + ":" + (r.stars || "any")).join("|");
+}
+
+function setStatus(s){ $("status").textContent = s; }
+function updateStatus(){
+  const bits = [];
+  if (loaded.stamps) bits.push(`stamps.csv (${stamps.length})`);
+  if (loaded.tasks)  bits.push(`tasks.csv (${tasks.length})`);
+  if (loaded.prizes) bits.push(`prizes.csv (${prizes.length})`);
+  if (catsLoaded)    bits.push(`categories (${Object.keys(CATEGORIES).length})`);
+  const n = allItems().length;
+  if (n) bits.push(`${n} map items for the pickers`);
+  if (loaded.site) bits.push(SITE_PRIZES === "no" ? "prizes OFF in site.csv" : "prizes ON");
+  $("status").textContent = bits.length ? "Loaded: " + bits.join(" · ") : "Loading…";
+}
+
+/* Grand rank: stored per-row but always shown/edited as one value */
+function updateGrandField(){
+  if (!stamps.length){ $("grandInput").value = ""; return; }
+  const v = stamps.map(s => s.row.GRAND_RANK).find(x => x && String(x).trim()) || "";
+  $("grandInput").value = v;
+}
+$("grandInput").oninput = e => {
+  const v = e.target.value;
+  stamps.forEach(s => { s.row.GRAND_RANK = v; });
+};
+
+/* ============================================================
+   Tabs
+   ============================================================ */
+
+document.querySelectorAll(".tabbtn").forEach(btn => {
+  btn.onclick = () => {
+    activeTab = btn.dataset.tab;
+    document.querySelectorAll(".tabbtn").forEach(b => b.classList.toggle("on", b === btn));
+    selected = null;
+    render();
+  };
+});
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+
+function render(){
+  renderList();
+  renderForm();
+  // when the prize tab is not active, hide the Grand Rank field so it's less distracting
+  $("grandWrap").style.display = activeTab === "stamps" ? "" : "none";
+}
+
+function renderList(){
+  const title = $("listTitle");
+  const list = $("list");
+  list.innerHTML = "";
+
+  if (activeTab === "stamps"){
+    title.innerHTML = `Stamps <button id="addStamp" type="button">＋ New</button>`;
+    $("addStamp").onclick = addStamp;
+    if (!stamps.length){
+      list.innerHTML = `<div class="sec" style="color:#9aa3ad;font-size:12px">No stamps loaded.</div>`;
+      return;
+    }
+    for (const s of stamps){
+      const row = document.createElement("div");
+      row.className = "row" + (selected && selected.ref === s ? " sel" : "");
+      row.innerHTML =
+        `<span class="sw">${VEHICLE_SVG[key(s.row.VEHICLE)] || VEHICLE_SVG.train}</span>` +
+        `<span class="name">${esc(s.row.TITLE || s.row.STAMP_ID || "(untitled)")}</span>` +
+        `<span class="cnt">${s.tasks.length || "0"}</span>` + (stampIsOff(s) ? `<span class="badge off">hidden</span>` : "");
+      row.onclick = () => { selected = { kind:"stamp", ref:s }; simProgress = 0; render(); };
+      list.appendChild(row);
+    }
+  } else if (activeTab === "categories") {
+    title.innerHTML = `Categories <button id="addCat" type="button">＋ New</button>`;
+    $("addCat").onclick = addCategory;
+    for (const [code, c] of Object.entries(CATEGORIES)){
+      const row = document.createElement("div");
+      row.className = "row" + (selected && selected.kind === "category" && selected.ref === code ? " sel" : "");
+      row.innerHTML =
+        `<span class="dot" style="background:${esc(c.color)}"></span>` +
+        `<img class="cicon" src="${catImage(c)}" alt="" style="${c.fill ? "border-radius:4px;object-fit:cover" : ""}">` +
+        `<span class="name">${esc(c.label)} <span class="cnt">${esc(code)}</span></span>` +
+        `<span class="badge ${c.ranked ? "on" : "off"}">${c.ranked ? "ranked" : "not ranked"}</span>`;
+      row.onclick = () => { selected = { kind:"category", ref:code }; render(); };
+      list.appendChild(row);
+    }
+  } else if (activeTab === "prizes") {
+    title.innerHTML = `Prizes <button id="addPrize" type="button">＋ New</button>`;
+    $("addPrize").onclick = addPrize;
+    if (!prizes.length){
+      list.innerHTML = `<div class="sec" style="color:#9aa3ad;font-size:12px">No prizes yet. Click ＋ New to add one.</div>`;
+      return;
+    }
+    const sorted = prizes.slice().sort((a, b) => (+a.row.ORDER || 0) - (+b.row.ORDER || 0));
+    for (const p of sorted){
+      const row = document.createElement("div");
+      row.className = "row" + (selected && selected.ref === p ? " sel" : "");
+      const n = p.reqs.length;
+      row.innerHTML =
+        `<span class="name">${esc(p.row.LABEL || p.row.PRIZE_ID || "(untitled)")}</span>` +
+        `<span class="badge prize">${n} stamp${n === 1 ? "" : "s"}</span>`;
+      row.onclick = () => { selected = { kind:"prize", ref:p }; render(); };
+      list.appendChild(row);
+    }
+  } else {
+    title.innerHTML = `Tasks <button id="addTask" type="button">＋ New</button>`;
+    $("addTask").onclick = addTask;
+    if (!tasks.length){
+      list.innerHTML = `<div class="sec" style="color:#9aa3ad;font-size:12px">No tasks loaded.</div>`;
+      return;
+    }
+    for (const t of tasks){
+      const row = document.createElement("div");
+      row.className = "row" + (selected && selected.ref === t ? " sel" : "");
+      const scope = String(t.row.SCOPE||"behavior").toLowerCase();
+      row.innerHTML =
+        `<span class="name">${esc(t.row.LABEL || t.row.TASK_ID || "(untitled)")}</span>` +
+        `<span class="badge ${scope}">${esc(scope)}</span>`;
+      row.onclick = () => { selected = { kind:"task", ref:t }; render(); };
+      list.appendChild(row);
+    }
+  }
+}
+
+function renderForm(){
+  const box = $("form");
+  if (!selected){
+    if (activeTab === "stamps"){
+      box.innerHTML = `<div class="empty">${stamps.length ? "Select a stamp on the left, or click <kbd>＋ New</kbd>." : "Load stamps.csv to begin."}</div>`;
+    } else if (activeTab === "categories") {
+      box.innerHTML = `<div class="empty">Select a category on the left, or click <kbd>＋ New</kbd>.<br><br>A category decides a place's color and icon, and whether its tasks can earn ranks. The master switch for the whole rank system is in Site Settings.</div>`;
+    } else if (activeTab === "prizes") {
+      box.innerHTML = `<div class="empty">${prizes.length ? "Select a prize on the left, or click <kbd>＋ New</kbd>." : "No prizes yet. Click <kbd>＋ New</kbd> to build one."}<br><br>A prize is earned when the visitor reaches the required stars in the listed stamps. Prizes are optional: if none are set up, the passport has no prize section.</div>`;
+    } else {
+      box.innerHTML = `<div class="empty">${tasks.length ? "Select a task on the left, or click <kbd>＋ New</kbd>." : "Load tasks.csv to begin."}</div>`;
+    }
+    return;
+  }
+  if (selected.kind === "category") renderCategoryForm(box, selected.ref);
+  else if (selected.kind === "stamp") renderStampForm(box, selected.ref);
+  else if (selected.kind === "prize") renderPrizeForm(box, selected.ref);
+  else renderTaskForm(box, selected.ref);
+}
+
+/* ============================================================
+   Stamp form  (unchanged from before)
+   ============================================================ */
+
+function renderStampForm(box, s){
+  const r = s.row;
+  const vehicle = ICONS[key(r.VEHICLE)] ? key(r.VEHICLE) : "train";
+
+  const maxThreshold = Math.max(+r.STAR1||0, +r.STAR2||0, +r.STAR3||0, 1);
+  if (simProgress > maxThreshold) simProgress = maxThreshold;
+  const stars = simProgress >= (+r.STAR3||Infinity) ? 3
+              : simProgress >= (+r.STAR2||Infinity) ? 2
+              : simProgress >= (+r.STAR1||Infinity) ? 1 : 0;
+  const rank = stars === 3 ? r.RANK3 : stars === 2 ? r.RANK2 : stars === 1 ? r.RANK1 : "";
+  const allStampsDone = simProgress >= (+r.STAR3||0);
+
+  box.innerHTML = `
+    <div class="form">
+      <h2>${esc(r.TITLE || "(untitled stamp)")}</h2>
+      <div class="sub">${s.tasks.length} task${s.tasks.length===1?"":"s"} assigned · ${stars === 3 ? "fully earned" : stars > 0 ? stars + " star" + (stars>1?"s":"") : "not started"}</div>
+
+      <div class="field">
+        <label>Stamp ID</label>
+        <input type="text" id="f-STAMP_ID" value="${esc(r.STAMP_ID||"")}">
+        <div class="hint">Used by the site as the key. Renaming breaks references.</div>
+      </div>
+
+      <div class="field">
+        <label>Title</label>
+        <input type="text" id="f-TITLE" value="${esc(r.TITLE||"")}">
+      </div>
+
+      <div class="field">
+        <label>Category this rank belongs to</label>
+        <select id="f-CATEGORY">
+          <option value="">— none (always counts) —</option>
+          ${Object.entries(CATEGORIES).map(([k, c]) =>
+            `<option value="${k}" ${k === String(r.CATEGORY||"").trim().toUpperCase() ? "selected" : ""}>${esc(c.label)} (${k}) · ${c.ranked ? "ranked" : "not ranked"}</option>`).join("")}
+        </select>
+        <div id="catNote">${stampCatNote(s)}</div>
+      </div>
+
+      <div class="field">
+        <label>Emblem</label>
+        <div class="vehicle-picker" id="vehPicker">
+          ${VEHICLES.map(v => `
+            <label class="${v===vehicle?"on":""}" data-v="${v}">
+              <input type="radio" name="veh" value="${v}" ${v===vehicle?"checked":""}>
+              ${VEHICLE_SVG[v]}
+              <b>${esc(ICONS[v].label)}</b>
+            </label>
+          `).join("")}
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label>Star thresholds (how many completed tasks = 1, 2, 3 stars)</label>
+        <div class="grid3">
+          <input type="number" id="f-STAR1" value="${esc(r.STAR1||"")}" min="1" placeholder="e.g. 3">
+          <input type="number" id="f-STAR2" value="${esc(r.STAR2||"")}" min="1" placeholder="e.g. 6">
+          <input type="number" id="f-STAR3" value="${esc(r.STAR3||"")}" min="1" placeholder="e.g. 9">
+        </div>
+        <div class="hint">At ${r.STAR1||"?"} → ★ · at ${r.STAR2||"?"} → ★★ · at ${r.STAR3||"?"} → ★★★</div>
+        <div id="starWarn">${starWarnHtml(s)}</div>
+      </div>
+
+      <div class="field">
+        <label>Rank names (awarded at each star)</label>
+        <div class="grid3">
+          <input type="text" id="f-RANK1" value="${esc(r.RANK1||"")}" placeholder="Rank for 1 star">
+          <input type="text" id="f-RANK2" value="${esc(r.RANK2||"")}" placeholder="Rank for 2 stars">
+          <input type="text" id="f-RANK3" value="${esc(r.RANK3||"")}" placeholder="Rank for 3 stars">
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label>Tasks that count toward this stamp</label>
+        <div class="hint">Any completion of any assigned task adds to the total. The count against the thresholds above.</div>
+        <div class="task-list" id="taskList">
+          ${tasks.length ? tasks.map(t => {
+            const on = s.tasks.includes(String(t.row.TASK_ID).trim());
+            const scope = String(t.row.SCOPE||"behavior").toLowerCase();
+            return `
+              <label class="item ${on?"on":""}">
+                <input type="checkbox" data-taskid="${esc(t.row.TASK_ID)}" ${on?"checked":""}>
+                <div>
+                  <div class="label">${esc(t.row.LABEL || t.row.TASK_ID)}</div>
+                  <div class="what">${esc(describeTask(t.row))}</div>
+                </div>
+                <span class="scope ${scope}">${esc(scope)}</span>
+              </label>`;
+          }).join("") : `<div class="item" style="cursor:default;color:#9aa3ad;font-size:12px">No tasks loaded. Add some on the Tasks tab.</div>`}
+        </div>
+      </div>
+
+      <div class="sim">
+        <label>Simulate progress</label>
+        <div class="row">
+          <input type="range" id="simSlider" min="0" max="${maxThreshold}" value="${simProgress}" step="1">
+          <span class="val" id="simVal">${simProgress} / ${maxThreshold}</span>
+        </div>
+        <div class="explain" id="simExplain">${explainProgress(simProgress, r)}</div>
+      </div>
+
+      <div class="stamp-preview" id="stampPreview">
+        ${stampPreviewHtml(vehicle, r, stars, rank, allStampsDone)}
+      </div>
+
+      <div class="actions">
+        <button id="dupStamp" class="small">Duplicate stamp</button>
+        <span class="grow"></span>
+        <button id="delStamp" class="small warn">Delete stamp</button>
+      </div>
+    </div>
+  `;
+
+  bindText(box, "f-STAMP_ID", v => { r.STAMP_ID = v; renderList(); });
+  bindText(box, "f-TITLE",    v => { r.TITLE = v; renderList(); });
+  bindText(box, "f-STAR1",    v => { r.STAR1 = v; refreshSim(box, s); });
+  bindText(box, "f-STAR2",    v => { r.STAR2 = v; refreshSim(box, s); });
+  bindText(box, "f-STAR3",    v => { r.STAR3 = v; refreshSim(box, s); });
+  bindText(box, "f-RANK1",    v => { r.RANK1 = v; refreshSim(box, s); });
+  bindText(box, "f-RANK2",    v => { r.RANK2 = v; refreshSim(box, s); });
+  bindText(box, "f-RANK3",    v => { r.RANK3 = v; refreshSim(box, s); });
+
+  box.querySelectorAll("#vehPicker label").forEach(label => {
+    label.addEventListener("click", e => {
+      e.preventDefault();
+      const v = label.dataset.v;
+      r.VEHICLE = v;
+      box.querySelectorAll("#vehPicker label").forEach(l => l.classList.toggle("on", l === label));
+      refreshSim(box, s);
+      renderList();
+    });
+  });
+
+  box.querySelector("#f-CATEGORY").onchange = e => {
+    r.CATEGORY = e.target.value;
+    box.querySelector("#catNote").innerHTML = stampCatNote(s);
+    renderList();
+  };
+
+  box.querySelectorAll("#taskList input[type=checkbox]").forEach(cb => {
+    cb.onchange = () => {
+      const id = cb.dataset.taskid;
+      if (cb.checked) { if (!s.tasks.includes(id)) s.tasks.push(id); }
+      else { s.tasks = s.tasks.filter(x => x !== id); }
+      renderList();
+      updateStarWarn(box, s);
+      cb.closest(".item").classList.toggle("on", cb.checked);
+    };
+  });
+
+  $("simSlider").oninput = e => {
+    simProgress = +e.target.value;
+    refreshSim(box, s);
+  };
+
+  $("dupStamp").onclick = () => {
+    const nr = Object.assign({}, r);
+    nr.STAMP_ID = (r.STAMP_ID||"STAMP") + "-COPY-" + uid().slice(0,3);
+    nr.TITLE = (r.TITLE||"") + " (copy)";
+    const n = { row: nr, tasks: s.tasks.slice() };
+    stamps.push(n);
+    selected = { kind:"stamp", ref:n };
+    simProgress = 0;
+    render();
+    toast("Duplicated as " + nr.STAMP_ID);
+  };
+
+  $("delStamp").onclick = () => {
+    if (!confirm(`Delete "${r.TITLE||r.STAMP_ID}"?`)) return;
+    stamps = stamps.filter(x => x !== s);
+    selected = null;
+    render();
+    toast("Deleted stamp");
+  };
+}
+
+function refreshSim(box, s){
+  const r = s.row;
+  const vehicle = ICONS[key(r.VEHICLE)] ? key(r.VEHICLE) : "train";
+  const maxT = Math.max(+r.STAR1||0, +r.STAR2||0, +r.STAR3||0, 1);
+  const slider = box.querySelector("#simSlider");
+  if (slider){
+    slider.max = maxT;
+    if (+slider.value > maxT) { slider.value = maxT; simProgress = maxT; }
+    box.querySelector("#simVal").textContent = slider.value + " / " + maxT;
+  }
+  const stars = simProgress >= (+r.STAR3||Infinity) ? 3
+              : simProgress >= (+r.STAR2||Infinity) ? 2
+              : simProgress >= (+r.STAR1||Infinity) ? 1 : 0;
+  const rank = stars === 3 ? r.RANK3 : stars === 2 ? r.RANK2 : stars === 1 ? r.RANK1 : "";
+  const allDone = simProgress >= (+r.STAR3||0);
+
+  updateStarWarn(box, s);
+  const prev = box.querySelector("#stampPreview");
+  if (prev) prev.innerHTML = stampPreviewHtml(vehicle, r, stars, rank, allDone);
+  const ex = box.querySelector("#simExplain");
+  if (ex) ex.textContent = explainProgress(simProgress, r);
+}
+
+function stampPreviewHtml(vehicle, r, stars, rank, allDone){
+  return `
+    <div class="emblem">
+      ${VEHICLE_SVG[vehicle] || VEHICLE_SVG.train}
+      <b>${esc(r.TITLE || "STAMP")}</b>
+    </div>
+    <h3>${esc(r.TITLE || "")}</h3>
+    <div class="stars">
+      ${[1,2,3].map(i => `<span class="${i <= stars ? "on" : "off"}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+      </span>`).join("")}
+    </div>
+    <div class="rank">${esc(rank || "—")}</div>
+    ${allDone ? `<div class="grand">${esc(r.GRAND_RANK || "Local Junior Historian")}</div>` : ""}
+  `;
+}
+
+function explainProgress(n, r){
+  const t1 = +r.STAR1||0, t2 = +r.STAR2||0, t3 = +r.STAR3||0;
+  if (n >= t3 && t3 > 0) return `${n} tasks → ★★★ ${r.RANK3||""}${r.GRAND_RANK ? " — also earns "+r.GRAND_RANK : ""}`;
+  if (n >= t2 && t2 > 0) return `${n} tasks → ★★ ${r.RANK2||""} (need ${t3-n} more for ★★★)`;
+  if (n >= t1 && t1 > 0) return `${n} tasks → ★ ${r.RANK1||""} (need ${t2-n} more for ★★)`;
+  return `${n} tasks → not yet (need ${t1-n} more for the first star)`;
+}
+
+/* ============================================================
+   Task form  (unchanged from before)
+   ============================================================ */
+
+function renderTaskForm(box, t){
+  const r = t.row;
+  const scope = String(r.SCOPE||"behavior").toLowerCase();
+  const usedBy = stamps.filter(s => s.tasks.includes(String(r.TASK_ID).trim()));
+
+  box.innerHTML = `
+    <div class="form">
+      <h2>${esc(r.LABEL || "(untitled task)")}</h2>
+      <div class="sub">Used by ${usedBy.length} rank${usedBy.length===1?"":"s"}</div>
+
+      <div class="field">
+        <label>Task ID</label>
+        <input type="text" id="f-TASK_ID" value="${esc(r.TASK_ID||"")}">
+        <div class="hint">References from stamps use this. Renaming breaks those references.</div>
+      </div>
+
+      <div class="field">
+        <label>Label (shown to the player)</label>
+        <input type="text" id="f-LABEL" value="${esc(r.LABEL||"")}">
+      </div>
+
+      <div class="field">
+        <label>Hint (shown under the label)</label>
+        <input type="text" id="f-HINT" value="${esc(r.HINT||"")}">
+      </div>
+
+      <div class="field">
+        <label>Button text (the "how do I do this" button)</label>
+        <input type="text" id="f-BTN" value="${esc(r.BTN||"")}">
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label>What counts as completing this task?</label>
+        <select id="f-SCOPE">
+          <option value="behavior" ${scope==="behavior"?"selected":""}>A general behavior (any story / any spot / any tour)</option>
+          <option value="item"     ${scope==="item"?"selected":""}>One specific place, story, photo spot or tour (pick it by name)</option>
+          <option value="category" ${scope==="category"?"selected":""}>Places in a category (any one, or a number of different ones)</option>
+        </select>
+      </div>
+
+      <div class="field" id="targetField">
+        <label>${scope === "item" ? "Which one?" : scope === "category" ? "Which category?" : "Which behavior?"}</label>
+        ${targetInputHtml(scope, r.TARGET || "")}
+        <div class="target-help" id="targetHelp">${targetHelpText(scope)}</div>
+        <div class="target-explain" id="targetExplain">${explainTarget(scope, r.TARGET || "")}</div>
+      </div>
+
+      ${scope === "category" ? `
+      <div class="field">
+        <label>How many different places?</label>
+        <input type="number" id="f-COUNT" min="1" value="${esc(r.COUNT||"")}" placeholder="1">
+        <div class="hint">Leave blank for "any one place". Enter 3 for "visit three different places in this category". Visiting the same place twice counts once.</div>
+      </div>` : ""}
+
+      <div class="field">
+        <label>What the button does for the visitor</label>
+        <div class="target-explain" id="btnExplain">${buttonExplainHtml(r)}</div>
+      </div>
+
+      <div class="field">
+        <label>How it looks in the passport</label>
+        <div id="taskPreview">${taskPreviewHtml(r)}</div>
+      </div>
+
+      ${behaviorWarning(scope, r)}
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label>Used by these stamps</label>
+        <div style="font-size:13px;color:${usedBy.length ? "#333" : "#9aa3ad"}">
+          ${usedBy.length ? usedBy.map(s => esc(s.row.TITLE||s.row.STAMP_ID)).join(", ") : "Not used by any rank yet."}
+        </div>
+        ${taskRankNote(usedBy)}
+      </div>
+
+      <div class="actions">
+        <button id="dupTask" class="small">Duplicate task</button>
+        <span class="grow"></span>
+        <button id="delTask" class="small warn" ${usedBy.length ? "disabled" : ""} title="${usedBy.length ? "Remove this task from every stamp first" : ""}">Delete task</button>
+      </div>
+    </div>
+  `;
+
+  bindText(box, "f-TASK_ID", v => { r.TASK_ID = v; renderList(); });
+  const refreshExtras = () => {
+    $("targetExplain").innerHTML = explainTarget(scope, r.TARGET || "");
+    $("btnExplain").innerHTML = buttonExplainHtml(r);
+    $("taskPreview").innerHTML = taskPreviewHtml(r);
+  };
+  bindText(box, "f-LABEL",   v => { r.LABEL = v; renderList(); refreshExtras(); });
+  bindText(box, "f-HINT",    v => { r.HINT = v; refreshExtras(); });
+  bindText(box, "f-BTN",     v => { r.BTN = v; refreshExtras(); });
+  bindText(box, "f-COUNT",   v => { r.COUNT = v; refreshExtras(); });
+
+  $("f-SCOPE").onchange = e => {
+    r.SCOPE = e.target.value;
+    r.TARGET = "";
+    renderForm();
+  };
+
+  const tgt = box.querySelector("#targetInput");
+  if (tgt){
+    tgt.oninput = tgt.onchange = () => { r.TARGET = tgt.value.trim(); refreshExtras(); };
+  }
+
+  $("dupTask").onclick = () => {
+    const nr = Object.assign({}, r);
+    nr.TASK_ID = (r.TASK_ID||"task") + "-copy-" + uid().slice(0,3);
+    nr.LABEL = (r.LABEL||"") + " (copy)";
+    const n = { row: nr };
+    tasks.push(n);
+    selected = { kind:"task", ref:n };
+    render();
+    toast("Duplicated as " + nr.TASK_ID);
+  };
+
+  $("delTask").onclick = () => {
+    if (!confirm(`Delete "${r.LABEL||r.TASK_ID}"?`)) return;
+    tasks = tasks.filter(x => x !== t);
+    selected = null;
+    render();
+    toast("Deleted task");
+  };
+}
+
+function targetInputHtml(scope, value){
+  if (scope === "behavior"){
+    return `<select id="targetInput">
+      <option value="">— pick a behavior —</option>
+      ${Object.entries(BEHAVIORS).map(([k,v]) =>
+        `<option value="${k}" ${k===value?"selected":""}>${k} — ${esc(v)}</option>`).join("")}
+    </select>`;
+  }
+  if (scope === "category"){
+    return `<select id="targetInput">
+      <option value="">— pick a category —</option>
+      ${Object.entries(CATEGORIES).map(([k,c]) =>
+        `<option value="${k}" ${k===String(value).toUpperCase()?"selected":""}>${esc(c.label)} (${k}) · ${c.ranked ? "ranked" : "not ranked"}</option>`).join("")}
+    </select>`;
+  }
+  const items = allItems();
+  if (!items.length){
+    return `<input type="text" id="targetInput" value="${esc(value)}" placeholder="Exact ID">
+      <div class="target-help">Could not load the map's CSV files from this folder, so names can't be offered. Type the exact ID.</div>`;
+  }
+  return `<input type="text" id="targetInput" list="itemList" value="${esc(value)}" placeholder="Start typing a name or an ID">
+    <datalist id="itemList">
+      ${items.map(i => `<option value="${esc(i.id)}">${esc(i.name)} · ${esc(i.type)}</option>`).join("")}
+    </datalist>`;
+}
+
+function targetHelpText(scope){
+  if (scope === "behavior") return "Uses a hook the map already fires. No code change needed.";
+  if (scope === "category") return "Counts a visit to any place, story, photo spot or tour in this category.";
+  return "Counts only this one thing. The map can award it when the visitor opens it, scans its QR, or checks in.";
+}
+
+function explainTarget(scope, target){
+  const t = String(target||"").trim();
+  if (!t) return `<span style="color:#a33">Nothing picked yet. This task can't be completed until you pick something.</span>`;
+
+  if (scope === "behavior"){
+    const k = t.toLowerCase();
+    if (k === "story" || k === "stories") return `<b>Completed when:</b> the visitor opens <b>any story</b> (sparkle marker).`;
+    if (k === "spot")  return `<b>Completed when:</b> the visitor opens <b>any photo spot</b> or scans <b>any spot QR sign</b>.`;
+    if (k === "tour")  return `<b>Completed when:</b> the visitor reaches the <b>last stop of any tour</b>.`;
+    return `<span style="color:#a33">The map doesn't fire a "${esc(t)}" event, so this task can never be completed. Pick story, spot or tour.</span>`;
+  }
+  if (scope === "item"){
+    const it = itemInfo(t);
+    if (!it) return allItems().length
+      ? `<span style="color:#a33">No place, story, photo spot or tour has the ID <code>${esc(t)}</code>, so this task can never be completed.</span>`
+      : `<b>Completed when:</b> the visitor opens <code>${esc(t)}</code>.`;
+    return `<b>Completed when:</b> the visitor opens <b>${esc(it.name)}</b> (${esc(it.type)}, <code>${esc(it.id)}</code>), scans its QR code, or checks in nearby.`;
+  }
+  if (scope === "category"){
+    const c = CATEGORIES[t.toUpperCase()];
+    if (!c) return `<span style="color:#a33">There is no category called ${esc(t)} in categories.csv.</span>`;
+    const n = allItems().filter(i => i.cat === t.toUpperCase()).length;
+    return `<b>Completed when:</b> the visitor visits <b>anything in ${esc(c.label)}</b>` + (n ? ` (${n} item${n===1?"":"s"} on the map right now)` : ` <span style="color:#a33">(nothing on the map has this category yet, so it can't be completed)</span>`) + `.`;
+  }
+  return "";
+}
+
+function buttonExplainHtml(r){
+  const scope = String(r.SCOPE||"behavior").toLowerCase();
+  const target = String(r.TARGET||"").trim();
+  const btn = String(r.BTN||"").trim();
+  if (!btn) return `No button text, so visitors will see the label and hint but no button.`;
+  if (!target) return `Pick a target above and the button will have something to do.`;
+  if (scope === "behavior"){
+    const k = target.toLowerCase().replace(/s$/, "");
+    if (k === "story") return `<b>${esc(btn)}</b> shows every story on the map and zooms to them.`;
+    if (k === "spot")  return `<b>${esc(btn)}</b> shows every photo spot on the map and zooms to them.`;
+    if (k === "tour")  return `<b>${esc(btn)}</b> opens the list of tours.`;
+    return `<span style="color:#a33">This button won't do anything for "${esc(target)}".</span>`;
+  }
+  if (scope === "item"){
+    const it = itemInfo(target);
+    if (it && it.type === "tour") return `<b>${esc(btn)}</b> starts the tour <b>${esc(it.name)}</b>.`;
+    return `<b>${esc(btn)}</b> flies the map to <b>${esc(it ? it.name : target)}</b> and highlights it. It does <u>not</u> open it or light its stamp: the visitor still has to do that.`;
+  }
+  if (scope === "category") return `<b>${esc(btn)}</b> frames every place, story and spot in <b>${esc(catLabel(target))}</b> on the map.`;
+  return "";
+}
+
+function taskPreviewHtml(r){
+  const need = parseInt(r.COUNT, 10) || 1;
+  return `<div class="ptask"><div class="chk"></div><div>
+    <div class="lbl">${esc(r.LABEL || "(no label)")}${need > 1 ? `<span class="cnt">0/${need}</span>` : ""}</div>
+    ${r.HINT ? `<div class="th">${esc(r.HINT)}</div>` : ""}
+    ${r.BTN ? `<button type="button" class="pbtn">${esc(r.BTN)}</button>` : ""}
+  </div></div>`;
+}
+
+function behaviorWarning(scope, r){
+  if (scope !== "behavior") return "";
+  const target = String(r.TARGET||"").trim();
+  if (!target) return `<div class="warn-inline">Pick a behavior. Until you do, this task won't fire.</div>`;
+  const known = ["story","stories","spot","tour"];
+  if (!known.includes(target.toLowerCase())){
+    return `<div class="warn-inline">The site doesn't currently fire a "${esc(target)}" event. Either change this to story/spot/tour, or add a code hook for "${esc(target)}" in Demo2.html.</div>`;
+  }
+  if (target.toLowerCase() === "stories"){
+    return `<div class="warn-inline">Note: the site fires "story" (singular). This task says "stories" — publish will still work, but consider renaming to "story" for clarity.</div>`;
+  }
+  return "";
+}
+
+function describeTask(row){
+  const scope = String(row.SCOPE||"behavior").toLowerCase();
+  const target = String(row.TARGET||"").trim();
+  const need = parseInt(row.COUNT, 10) || 1;
+  if (scope === "behavior"){
+    const k = target.toLowerCase();
+    if (k === "stories" || k === "story") return "Any story opened";
+    if (k === "spot") return "Any photo spot opened or QR scanned";
+    if (k === "tour") return "Any tour finished";
+    return "Behavior: " + (target || "not set");
+  }
+  if (scope === "item"){
+    const it = itemInfo(target);
+    return "Open " + (it ? it.name + " (" + it.type + ")" : (target || "(not set)"));
+  }
+  if (scope === "category") return (need > 1 ? "Visit " + need + " different places in " : "Visit anything in ") + (target ? catLabel(target) : "(not set)");
+  return target || "—";
+}
+
+/* ============================================================
+   Prize form
+   ============================================================ */
+
+function renderPrizeForm(box, p){
+  const r = p.row;
+  const off = SITE_PRIZES === "no";
+  const sortedStamps = stamps.slice().sort((a, b) => String(a.row.TITLE||a.row.STAMP_ID).localeCompare(String(b.row.TITLE||b.row.STAMP_ID)));
+
+  box.innerHTML = `
+    <div class="form">
+      ${off ? `<div class="prizes-off-banner">⚠️ The prize system is switched off in <b>Map Settings → Prizes</b>. You can still build prizes here, but visitors won't see them until it's switched back on.</div>` : ""}
+
+      <h2>${esc(r.LABEL || "(untitled prize)")}</h2>
+      <div class="sub">${p.reqs.length} stamp${p.reqs.length===1?"":"s"} required${r.CODE ? " · has a claim code" : ""}</div>
+
+      <div class="field">
+        <label>Prize ID</label>
+        <input type="text" id="f-PRIZE_ID" value="${esc(r.PRIZE_ID||"")}">
+        <div class="hint">Internal reference. Anything short and unique works: FRIEDCHICKEN, HISTORIAN, DOWNTOWN.</div>
+      </div>
+
+      <div class="field">
+        <label>Label (shown to the visitor)</label>
+        <input type="text" id="f-LABEL" value="${esc(r.LABEL||"")}" placeholder="Fried Chicken Crawl">
+      </div>
+
+      <div class="field">
+        <label>Order (top of the list has the lowest number)</label>
+        <input type="number" id="f-ORDER" value="${esc(r.ORDER||"")}" placeholder="1">
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label>Stamps required</label>
+        <div class="hint">The visitor earns the prize when they reach every listed star level in every listed stamp. A stamp can require just 1 star (any progress) or all 3.</div>
+        <div id="reqList">
+          ${p.reqs.length ? p.reqs.map((req, i) => requirementRowHtml(req, i, sortedStamps)).join("") :
+            `<div style="color:#9aa3ad;font-size:13px;padding:8px 0">No stamps required yet. Add at least one.</div>`}
+        </div>
+        <div class="actions" style="margin-top:6px">
+          <button id="reqAdd" type="button" class="small">＋ Add a stamp</button>
+        </div>
+        <div id="reqWarn"></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label>Reward message</label>
+        <textarea id="f-REWARD" placeholder="Show this screen at any participating vendor for a free dessert.">${esc(r.REWARD||"")}</textarea>
+        <div class="hint">Read by the visitor when they claim the prize.</div>
+      </div>
+
+      <div class="field">
+        <label>Claim code (optional)</label>
+        <input type="text" id="f-CODE" value="${esc(r.CODE||"")}" placeholder="FRIED2026 or leave blank">
+        <div class="hint">If set, the visitor sees this code in big letters when they claim the prize. The vendor just looks at the screen. Leave blank for no code.</div>
+      </div>
+
+      <div class="field">
+        <label>How the prize looks in the passport</label>
+        <div class="prize-preview" id="prizePreview">${prizePreviewHtml(r, 0)}</div>
+        <div class="hint">Preview with progress 0. The visitor's real progress will show here.</div>
+      </div>
+
+      <div class="actions">
+        <button id="dupPrize" class="small">Duplicate prize</button>
+        <span class="grow"></span>
+        <button id="delPrize" class="small warn">Delete prize</button>
+      </div>
+    </div>
+  `;
+
+  bindText(box, "f-PRIZE_ID", v => { r.PRIZE_ID = v; renderList(); });
+  bindText(box, "f-LABEL",    v => { r.LABEL = v; box.querySelector("h2").textContent = v || "(untitled prize)"; renderList(); refreshPreview(box, p); });
+  bindText(box, "f-ORDER",    v => { r.ORDER = v; renderList(); });
+  bindText(box, "f-REWARD",   v => { r.REWARD = v; refreshPreview(box, p); });
+  bindText(box, "f-CODE",     v => { r.CODE = v; refreshPreview(box, p); });
+
+  // requirement row handlers
+  box.querySelectorAll(".reqrow").forEach(rowEl => {
+    const i = +rowEl.dataset.i;
+    const stampSel = rowEl.querySelector(".req-stamp");
+    const starSel  = rowEl.querySelector(".req-stars");
+    const rmBtn    = rowEl.querySelector(".req-remove");
+    if (stampSel) stampSel.onchange = () => { p.reqs[i].stamp = stampSel.value; refreshReqs(box, p); };
+    if (starSel)  starSel.onchange  = () => { p.reqs[i].stars = starSel.value; refreshReqs(box, p); };
+    if (rmBtn)    rmBtn.onclick     = () => { p.reqs.splice(i, 1); renderForm(); };
+  });
+
+  $("reqAdd").onclick = () => {
+    const first = sortedStamps[0];
+    if (!first) return toast("Load stamps.csv first — a prize needs at least one stamp to require.");
+    p.reqs.push({ stamp: String(first.row.STAMP_ID||"").trim(), stars: "any" });
+    renderForm();
+  };
+
+  $("dupPrize").onclick = () => {
+    const nr = Object.assign({}, r);
+    nr.PRIZE_ID = (r.PRIZE_ID||"PRIZE") + "-COPY-" + uid().slice(0,3);
+    nr.LABEL = (r.LABEL||"") + " (copy)";
+    const n = { row: nr, reqs: p.reqs.map(x => ({ ...x })) };
+    prizes.push(n);
+    selected = { kind:"prize", ref:n };
+    render();
+    toast("Duplicated as " + nr.PRIZE_ID);
+  };
+
+  $("delPrize").onclick = () => {
+    if (!confirm(`Delete "${r.LABEL||r.PRIZE_ID}"?`)) return;
+    prizes = prizes.filter(x => x !== p);
+    selected = null;
+    render();
+    toast("Deleted prize");
+  };
+}
+
+function requirementRowHtml(req, i, sortedStamps){
+  const stampOpts = sortedStamps.map(s => {
+    const id = String(s.row.STAMP_ID||"").trim();
+    const title = s.row.TITLE || id;
+    return `<option value="${esc(id)}" ${id === req.stamp ? "selected" : ""}>${esc(title)} (${esc(id)})</option>`;
+  }).join("");
+  const starsOpts = [["any","Any progress"],["1","★ 1 star"],["2","★★ 2 stars"],["3","★★★ 3 stars"]]
+    .map(([v, t]) => `<option value="${v}" ${String(req.stars) === v ? "selected" : ""}>${t}</option>`).join("");
+  return `<div class="reqrow" data-i="${i}">
+    <select class="req-stamp">${stampOpts || `<option value="">(no stamps loaded)</option>`}</select>
+    <select class="req-stars">${starsOpts}</select>
+    <button class="small warn req-remove" type="button" title="Remove this requirement">×</button>
+  </div>`;
+}
+
+function refreshReqs(box, p){
+  // update the preview and the validation warning without rebuilding the whole form
+  const prev = box.querySelector("#prizePreview");
+  if (prev) prev.innerHTML = prizePreviewHtml(p.row, 0);
+  const warn = box.querySelector("#reqWarn");
+  if (warn) warn.innerHTML = requirementWarningHtml(p);
+}
+
+function refreshPreview(box, p){
+  const prev = box.querySelector("#prizePreview");
+  if (prev) prev.innerHTML = prizePreviewHtml(p.row, 0);
+}
+
+function requirementWarningHtml(p){
+  const msgs = [];
+  const seen = new Set();
+  p.reqs.forEach((req, i) => {
+    if (!req.stamp) { msgs.push(`Row ${i+1} has no stamp picked.`); return; }
+    if (seen.has(req.stamp)) { msgs.push(`Stamp ${req.stamp} is listed twice — remove one.`); seen.add(req.stamp + ":" + i); return; }
+    seen.add(req.stamp);
+    const s = stamps.find(x => String(x.row.STAMP_ID||"").trim() === req.stamp);
+    if (!s) { msgs.push(`No stamp called ${req.stamp} in stamps.csv.`); return; }
+    const want = req.stars;
+    if (want === "any") {
+      if (!(+s.row.STAR1 > 0)) msgs.push(`"${s.row.TITLE || s.row.STAMP_ID}" has no STAR1, so "any progress" can never trigger.`);
+      return;
+    }
+    const nth = +want;
+    if (nth >= 1 && !(+s.row.STAR1 > 0)) msgs.push(`"${s.row.TITLE || s.row.STAMP_ID}" needs ★ but has no STAR1 set.`);
+    if (nth >= 2 && !(+s.row.STAR2 > 0)) msgs.push(`"${s.row.TITLE || s.row.STAMP_ID}" needs ★★ but has no STAR2 set.`);
+    if (nth >= 3 && !(+s.row.STAR3 > 0)) msgs.push(`"${s.row.TITLE || s.row.STAMP_ID}" needs ★★★ but has no STAR3 set.`);
+  });
+  return msgs.length ? `<div class="warn-inline">${msgs.map(esc).join("<br>")}</div>` : "";
+}
+
+function prizePreviewHtml(r, haveStarsTotal){
+  const needTotal = r._reqsPreview == null ? 0 : r._reqsPreview;
+  const n = needTotal;
+  const pct = 0;
+  return `
+    <h4>${esc(r.LABEL || "(untitled prize)")}</h4>
+    <div class="bar"><i style="width:${pct}%"></i></div>
+    <div class="meta"><b>0 of ${n || "?"}</b> stamps reached — ${esc(r.REWARD || "keep going!")}</div>
+    ${r.CODE ? `<div class="claim">Show this to claim: ${esc(r.CODE)}</div>` : `<div class="claim">Show this to claim</div>`}
+  `;
+}
+
+/* ============================================================
+   Rank helpers  (unchanged)
+   ============================================================ */
+
+function stampIsOff(s){
+  const c = String(s.row.CATEGORY||"").trim().toUpperCase();
+  return !!c && !catRanked(c);
+}
+function stampCatNote(s){
+  const c = String(s.row.CATEGORY||"").trim().toUpperCase();
+  if (!c) return `<div class="hint">With no category, this rank is always on.</div>`;
+  if (!CATEGORIES[c]) return `<div class="warn-inline">There is no category called ${esc(c)}.</div>`;
+  return catRanked(c)
+    ? `<div class="ranknote ok">${esc(catLabel(c))} is set to earn ranks, so visitors see this rank.</div>`
+    : `<div class="ranknote off">${esc(catLabel(c))} is <b>not</b> set to earn ranks, so visitors <b>won't see this rank</b>. Its tasks still show under "More to do". Turn ranking on in the Categories tab.</div>`;
+}
+function starWarnHtml(s){
+  const r = s.row, n = s.tasks.length, out = [];
+  [["★", r.STAR1], ["★★", r.STAR2], ["★★★", r.STAR3]].forEach(([sym, v]) => {
+    const need = parseInt(v, 10);
+    if (need && need > n) out.push(`${sym} needs ${need} tasks, but this rank only has ${n}. Nobody can earn it.`);
+  });
+  const a = +r.STAR1 || 0, b = +r.STAR2 || 0, c = +r.STAR3 || 0;
+  if ((b && a && b <= a) || (c && b && c <= b)) out.push(`The star thresholds should go up: ★ < ★★ < ★★★.`);
+  return out.length ? `<div class="warn-inline">${out.map(esc).join("<br>")}</div>` : "";
+}
+function updateStarWarn(box, s){
+  const el = box.querySelector("#starWarn");
+  if (el) el.innerHTML = starWarnHtml(s);
+}
+function taskRankNote(usedBy){
+  if (!usedBy.length) return `<div class="ranknote off">Not part of any rank, so it shows under "More to do" and earns no stars.</div>`;
+  const live = usedBy.filter(s => !stampIsOff(s));
+  if (!live.length) return `<div class="ranknote off">Every rank this belongs to is switched off, so it shows under "More to do" and earns no stars.</div>`;
+  return `<div class="ranknote ok">Counts toward ${live.map(s => esc(s.row.TITLE || s.row.STAMP_ID)).join(", ")}.</div>`;
+}
+
+/* ============================================================
+   Category form  (unchanged)
+   ============================================================ */
+
+function catUsage(code){
+  const u = code.toUpperCase();
+  return {
+    stamps: stamps.filter(s => String(s.row.CATEGORY||"").trim().toUpperCase() === u).length,
+    tasks: tasks.filter(t => String(t.row.SCOPE||"").toLowerCase() === "category" && String(t.row.TARGET||"").trim().toUpperCase() === u).length,
+    items: allItems().filter(i => i.cat === u).length
+  };
+}
+
+function renderCategoryForm(box, code){
+  const c = CATEGORIES[code];
+  if (!c){ selected = null; renderForm(); return; }
+  const u = catUsage(code);
+  box.innerHTML = `
+    <div class="form">
+      <h2>${esc(c.label)}</h2>
+      <div class="sub">${u.items} item${u.items===1?"":"s"} on the map · ${u.stamps} rank${u.stamps===1?"":"s"} · ${u.tasks} task${u.tasks===1?"":"s"} aimed at it</div>
+
+      <div class="field">
+        <label>Code</label>
+        <input type="text" value="${esc(code)}" readonly style="background:#f6f8fb">
+        <div class="hint">This is what goes in the CATEGORY column of your location files.</div>
+      </div>
+
+      <div class="field">
+        <label>Display name</label>
+        <input type="text" id="c-label" value="${esc(c.label)}">
+      </div>
+
+      <div class="field">
+        <label>Color</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="c-color" value="${esc(c.color)}" style="width:44px;height:34px;padding:0;flex:none">
+          <input type="text" id="c-hex" value="${esc(c.color)}">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Rank system</label>
+        <label style="display:flex;gap:8px;align-items:center;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;color:#333"><input type="checkbox" id="c-ranked" ${c.ranked ? "checked" : ""}> This category can earn passport ranks</label>
+        <div id="c-rankNote" class="hint">${c.ranked ? "Ranks that belong to this category are shown to visitors." : "Places and tasks still work, but no stars or ranks come from this category. You can turn this on later without rebuilding anything."}</div>
+      </div>
+
+      <div class="field">
+        <label>Icon (shown when a place has no photo)</label>
+        <div class="icongrid" id="c-icons">
+          ${Object.entries(ICONS).map(([k, i]) =>
+            `<button type="button" class="ic ${!c.fill && k === c.icon ? "on" : ""}" data-icon="${k}" title="${esc(i.label)}"><img src="${iconUrl(k)}" alt="${esc(i.label)}"></button>`).join("")}${MarkerFill.tileHtml(c)}
+        </div>
+        ${MarkerFill.panelHtml(c)}
+      </div>
+
+      <div class="actions">
+        <span class="grow"></span>
+        <button id="c-del" class="small warn" type="button">Delete category</button>
+      </div>
+    </div>`;
+
+  bindText(box, "c-label", v => { c.label = v; box.querySelector("h2").textContent = v; renderList(); });
+  const colorIn = box.querySelector("#c-color"), hexIn = box.querySelector("#c-hex");
+  colorIn.oninput = () => { c.color = colorIn.value; hexIn.value = c.color; renderList(); };
+  hexIn.oninput = () => { const v = hexIn.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)){ c.color = v; colorIn.value = v; renderList(); } };
+  box.querySelector("#c-ranked").onchange = e => {
+    c.ranked = e.target.checked;
+    box.querySelector("#c-rankNote").textContent = c.ranked ? "Ranks that belong to this category are shown to visitors." : "Places and tasks still work, but no stars or ranks come from this category. You can turn this on later without rebuilding anything.";
+    renderList();
+  };
+  box.querySelectorAll("#c-icons .ic[data-icon]").forEach(b => b.onclick = () => {
+    c.icon = b.dataset.icon;
+    c.fill = "";
+    box.querySelectorAll("#c-icons .ic").forEach(x => x.classList.toggle("on", x === b));
+    renderList();
+  });
+  MarkerFill.wire(box, c, renderList);
+  box.querySelector("#c-del").onclick = () => {
+    const bits = [];
+    if (u.items) bits.push(u.items + " place(s) on the map use it");
+    if (u.stamps) bits.push(u.stamps + " rank(s) belong to it");
+    if (u.tasks) bits.push(u.tasks + " task(s) aim at it");
+    if (!confirm(bits.length ? `${bits.join(", ")}. They will lose this category. Delete ${code}?` : `Delete ${code}?`)) return;
+    delete CATEGORIES[code];
+    selected = null;
+    render();
+    toast("Deleted category " + code);
+  };
+}
+
+function addCategory(){
+  const code = (prompt("Short code for the new category (letters and numbers, e.g. SCHOOL):") || "")
+    .trim().toUpperCase().replace(/[^A-Z0-9_]/g, "");
+  if (!code) return;
+  if (CATEGORIES[code]) return toast(code + " already exists.");
+  const label = (prompt("Display name for " + code + ":", code) || code).trim();
+  CATEGORIES[code] = { label, color:"#888888", icon:"generic", ranked:false };
+  selected = { kind:"category", ref:code };
+  render();
+  toast("Added " + code + ". Pick its color and icon on the right.");
+}
+
+/* ============================================================
+   Add
+   ============================================================ */
+
+function addStamp(){
+  if (!loaded.stamps) return toast("Load stamps.csv first.");
+  const existing = stamps.map(s => String(s.row.STAMP_ID||"").trim()).filter(Boolean);
+  let n = 1, id;
+  do { id = "STAMP-" + String(n).padStart(3,"0"); n++; } while (existing.some(x => key(x)===key(id)));
+
+  const row = { STAMP_ID:id, TITLE:"New Stamp", VEHICLE:"train", CATEGORY:"", STAR1:"2", STAR2:"4", STAR3:"6",
+                RANK1:"", RANK2:"", RANK3:"", GRAND_RANK: $("grandInput").value || "", TASKS:"" };
+  headers.stamp.forEach(h => { if (!(h in row)) row[h] = ""; });
+  const s = { row, tasks: [] };
+  stamps.push(s);
+  selected = { kind:"stamp", ref:s };
+  simProgress = 0;
+  render();
+  toast("Added " + id);
+}
+
+function addTask(){
+  if (!loaded.tasks) return toast("Load tasks.csv first.");
+  const existing = tasks.map(t => String(t.row.TASK_ID||"").trim()).filter(Boolean);
+  let n = 1, id;
+  do { id = "task-" + String(n).padStart(3,"0"); n++; } while (existing.some(x => key(x)===key(id)));
+
+  const row = { TASK_ID:id, LABEL:"New Task", HINT:"", BTN:"", SCOPE:"behavior", TARGET:"", COUNT:"" };
+  headers.task.forEach(h => { if (!(h in row)) row[h] = ""; });
+  const t = { row };
+  tasks.push(t);
+  selected = { kind:"task", ref:t };
+  render();
+  toast("Added " + id);
+}
+
+function addPrize(){
+  if (!loaded.stamps) return toast("Load stamps.csv first — a prize needs stamps to require.");
+  if (!loaded.prizes){
+    // allow starting a brand new prizes.csv without an existing file
+    loaded.prizes = true;
+  }
+  const existing = prizes.map(p => String(p.row.PRIZE_ID||"").trim()).filter(Boolean);
+  let n = 1, id;
+  do { id = "PRIZE-" + String(n).padStart(3,"0"); n++; } while (existing.some(x => key(x)===key(id)));
+
+  const row = { PRIZE_ID:id, LABEL:"New Prize", REQUIREMENTS:"", REWARD:"", CODE:"", ORDER:String(prizes.length + 1) };
+  headers.prize.forEach(h => { if (!(h in row)) row[h] = ""; });
+  const p = { row, reqs: [] };
+  prizes.push(p);
+  selected = { kind:"prize", ref:p };
+  render();
+  toast("Added " + id + " — pick its stamps on the right.");
+}
+
+/* ============================================================
+   Publish
+   ============================================================ */
+
+$("publishBtn").onclick = () => {
+  // ensure TASKS column reflects the current checkbox state
+  stamps.forEach(s => { s.row.TASKS = s.tasks.join("|"); });
+
+  // Grand rank: broadcast the current field value to every stamp
+  const grand = $("grandInput").value;
+  stamps.forEach(s => { s.row.GRAND_RANK = grand; });
+
+  // Prizes: serialize requirements back into the REQUIREMENTS column
+  prizes.forEach(p => { p.row.REQUIREMENTS = serializeRequirements(p.reqs); });
+
+  const stampRows = stamps.map(s => pick(s.row, headers.stamp));
+  const taskRows  = tasks.map(t => pick(t.row, headers.task));
+  const prizeRows = prizes.map(p => pick(p.row, headers.prize));
+
+  const stampsCSV = Papa.unparse({ fields: headers.stamp, data: stampRows });
+  const tasksCSV  = Papa.unparse({ fields: headers.task,  data: taskRows  });
+
+  const catRows = Object.entries(CATEGORIES).map(([CODE, c]) => Object.assign({}, c.extra || {}, { CODE, LABEL:c.label, COLOR:c.color, ICON:c.icon, RANKED:c.ranked ? "yes" : "no", FILL:c.fill || "", FILL_COLOR:c.fill ? c.fillColor : "", FILL_COLOR2:c.fill ? c.fillColor2 : "" }));
+  const catsCSV = Papa.unparse({ fields:["CODE","LABEL","COLOR","ICON","RANKED","FILL","FILL_COLOR","FILL_COLOR2"].concat(catExtraCols), data:catRows });
+
+  download("stamps.csv", stampsCSV);
+  setTimeout(() => download("tasks.csv", tasksCSV), 150);
+  setTimeout(() => download("categories.csv", catsCSV), 300);
+  setTimeout(() => download("prizes.csv", Papa.unparse({ fields: headers.prize, data: prizeRows })), 450);
+
+  toast(`Downloaded stamps.csv (${stamps.length}), tasks.csv (${tasks.length}), categories.csv (${catRows.length}) and prizes.csv (${prizeRows.length})`);
+};
+
+function pick(row, cols){
+  const out = {};
+  for (const c of cols) out[c] = row[c] != null ? row[c] : "";
+  return out;
+}
+
+function download(name, text){
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ============================================================
+   Helpers
+   ============================================================ */
+
+function bindText(scope, id, onInput){
+  const el = scope.querySelector("#" + CSS.escape(id));
+  if (!el) return;
+  el.oninput = () => onInput(el.value);
+}
+
+let toastTimer = 0;
+function toast(msg){
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2600);
+}
+</script>
+<script src="publish.js"></script>
+<script>GHPublish.attach({ buttons: ["publishBtn"] });</script>
+</body>
+</html>

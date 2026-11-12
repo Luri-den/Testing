@@ -1,0 +1,55 @@
+KEY,VALUE
+PLACE,Franklin County
+HEADER,Explore {PLACE}
+TAB_TITLE,Explore {PLACE}
+BAR_COLOR,#800000
+CENTER_LAT,39.420809
+CENTER_LNG,-85.012834
+ZOOM,
+BOUNDS_WEST,-85.75122
+BOUNDS_SOUTH,39.164643
+BOUNDS_EAST,-84.47867
+BOUNDS_NORTH,39.671223
+MIN_ZOOM,
+MAX_ZOOM,
+FIT_TO_MARKERS,yes
+PASSPORT,yes
+PASSPORT_RANKS,yes
+PRIZES,yes
+YEAR_SLIDER,yes
+OVERLAY_SLIDER,yes
+AERIAL_BUTTON,yes
+MAPS_LINK,yes
+LAYOUT_STYLE,band
+EVENT_BUTTON,About
+EVENT_TITLE,What's Going On?
+EVENT_TEXT,"Tap a place. A card slides up from the bottom. Drag the little bar at the top of the card up for a bigger view, or down to dismiss.
+
+Filter by category. Use the pills at the top. Tap to hide or show a category; tap ""Reset"" to bring them all back.
+
+Compare old and new. When an old map is on, drag the ⇆ handle left and right to wipe between then and now.
+
+Share a place. Open a place and tap ""Share this place"" — the link will take your friend straight there.
+
+Save for offline use. Open your passport (🏆 in the top-right) and tap ""Save this map for offline use."" After it finishes, the map, photos, and stories work without a signal. Great for walking tours."
+WELCOME_THEME,fall
+WELCOME_TEXT,Welcome to|{PLACE}
+BAR_STYLE,
+SEARCH_WIDTH,50
+SEARCH_WIDTH_PHONE,50
+BOTTOM_ON,
+PASSPORT_STYLE,ring
+RING_COLOR,#ffff00
+RING_TRACK,#c0c0c0
+RING_TEXT,#800000
+INTRO_STYLE,spin
+INTRO_FEATURES,mixed
+INTRO_CARD,
+FONT_BODY,
+FONT_HEAD,book
+LAYOUT_TOP,"search,event,more,spacer,passport"
+LAYOUT_MORE,"aerial,chips,oldmaps,year"
+LAYOUT_OFF,"tour,newrow"
+LAYOUT_BOTTOM,"near,tours,stories"
+LAYOUT_FLOAT,legend
+ZOOM_POS,top

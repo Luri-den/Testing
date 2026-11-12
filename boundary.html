@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Border or Boundary Editor</title>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script src="editor-common.js"></script>
+<script>Workspace.block('The town outline is shared by every event. Go back to the live site to edit it.');</script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+  :root{
+    --line:#d7dde5; --accent:#2b6cb0; --ink:#1a202c;
+    --bg:#eef1f5; --panel:#fff; --muted:#6b7280;
+    --boundary:#E47303;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font:14px system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}
+
+  #top{position:absolute;z-index:20;top:0;left:0;right:0;height:52px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 12px}
+  #top h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+  #top .grow{flex:1}
+  #top .status{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
+  button{font:inherit;padding:6px 12px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;color:var(--ink)}
+  button:hover{background:#f6f8fb}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.primary:hover{background:#245a94}
+  button.on{background:#e6effa;border-color:#9dbde3}
+  button.warn{background:#fff5f5;border-color:#f3c2c2;color:#a33}
+  button.warn:hover{background:#ffecec}
+
+  #layout{position:absolute;top:52px;left:0;right:0;bottom:0;display:grid;grid-template-columns:240px 1fr}
+
+  #left{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding-bottom:20px}
+  .sec{padding:10px 14px 4px}
+  .sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:8px 0 6px;font-weight:600}
+  .stat{display:flex;justify-content:space-between;padding:6px 14px;font-size:13px;border-bottom:1px solid #eef1f5}
+  .stat b{font-variant-numeric:tabular-nums;font-weight:600}
+  .hint{padding:10px 14px;font-size:11px;line-height:1.55;color:var(--muted)}
+  .hint b{color:#333}
+  .hint kbd{font:11px ui-monospace,Menlo,monospace;background:#f1f3f7;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px}
+
+  #stage{position:relative;min-width:0}
+  #map{position:absolute;inset:0}
+
+  /* vertex handles */
+  .vtx{width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid var(--accent);box-shadow:0 1px 3px #0004;cursor:grab;box-sizing:border-box}
+  .vtx:hover{background:#e6effa;transform:scale(1.15)}
+  .vtx.dragging{cursor:grabbing;background:#cfe0f3}
+  .vtx.first{background:#fff8e0;border-color:#b7791f}
+
+  /* midpoint insert handles */
+  .mid{width:10px;height:10px;border-radius:50%;background:var(--boundary);opacity:.55;cursor:copy;box-sizing:border-box;border:1.5px solid #fff;box-shadow:0 1px 3px #0004}
+  .mid:hover{opacity:1;transform:scale(1.3)}
+
+  #tools{position:absolute;z-index:6;top:10px;left:10px;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 2px 8px #0001;padding:6px;display:flex;gap:6px}
+  #tools select, #tools input {
+  font: inherit; padding: 5px 8px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: #fff; color: var(--ink);
+}
+  
+  #toast{position:fixed;z-index:100;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .18s, transform .18s;pointer-events:none;max-width:80vw;text-align:center}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* preview of raw JSON for debugging / inspection */
+  #peek{position:absolute;z-index:6;right:10px;bottom:10px;max-width:520px;max-height:180px;overflow:auto;background:#ffffffec;border:1px solid var(--line);border-radius:6px;padding:8px 10px;font:11px ui-monospace,Menlo,monospace;color:#374151;white-space:pre-wrap;word-break:break-word;display:none}
+  #peek.on{display:block}
+
+  /* boundary line controls */
+  .linectl{margin:4px 14px 10px;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fafbfc}
+  .lrow{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .llabel{width:62px;font-size:12px;color:var(--muted);flex:none}
+  .swatch{display:flex;align-items:center;gap:8px;cursor:pointer;font:12px ui-monospace,Menlo,monospace;color:var(--ink)}
+  .swatch input[type=color]{width:34px;height:26px;padding:0;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer}
+  .lrow input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+  .lrow output{width:26px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted)}
+  .seg{display:flex;flex:1;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .seg button{flex:1;border:0;border-radius:0;padding:5px 0;font-size:12px;background:#fff;border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:0}
+  .seg button.on{background:var(--accent);color:#fff}
+  #linePreview{display:block;width:100%;height:34px;margin-top:2px;border:1px solid var(--line);border-radius:6px;background:#e9edf2}
+</style>
+</head>
+<body>
+
+<div id="top">
+  <h1>Boundary Editor</h1>
+  <button id="pickFile">Pick border.geojson…</button>
+  <input id="fileInput" type="file" accept=".geojson,.json,application/geo+json,application/json" hidden>
+  <span class="status" id="status">Loading…</span>
+  <span class="grow"></span>
+  <button id="reloadBtn" title="Re-fetch from this folder">↻ Reload</button>
+  <button id="publishBtn" class="primary" disabled>Download updated GeoJSON</button>
+</div>
+
+<div id="layout">
+  <aside id="left">
+    <div class="sec"><h2>Boundary</h2></div>
+    <div class="stat"><span>Name</span><b id="sName">—</b></div>
+    <div class="stat"><span>Type</span><b id="sType">—</b></div>
+    <div class="stat"><span>Features</span><b id="sFeatures">—</b></div>
+    <div class="stat"><span>Ring vertices</span><b id="sVerts">—</b></div>
+    <div class="stat"><span>Precision</span><b id="sPrec">—</b></div>
+
+    <div class="sec"><h2>Edit</h2></div>
+    <div class="hint">
+      <p style="margin:0 0 8px"><b>Drag</b> any white dot to move a vertex.</p>
+      <p style="margin:0 0 8px"><b>Click</b> an orange midpoint to insert a new vertex there.</p>
+      <p style="margin:0 0 8px"><b>Shift-click</b> a vertex to delete it (minimum 3 unique points).</p>
+      <p style="margin:0"><b>Hide/Show</b> toggles the vertex handles so you can see the clean line.</p>
+    </div>
+<div class="sec"><h2>Boundary line</h2></div>
+    <div class="linectl">
+      <div class="lrow">
+        <span class="llabel">Color</span>
+        <label class="swatch" title="Pick a color">
+          <input type="color" id="lineColor" value="#E47303">
+          <span id="lineColorHex">#E47303</span>
+        </label>
+      </div>
+      <div class="lrow">
+        <span class="llabel">Thickness</span>
+        <input type="range" id="lineWidth" min="1" max="12" step="0.5" value="2">
+        <output id="lineWidthOut">2</output>
+      </div>
+      <div class="lrow">
+        <span class="llabel">Style</span>
+        <input type="hidden" id="lineStyle" value="dashed">
+        <div class="seg" id="lineStyleSeg">
+          <button type="button" data-v="solid">Solid</button>
+          <button type="button" data-v="dashed">Dashed</button>
+          <button type="button" data-v="dotted">Dotted</button>
+        </div>
+      </div>
+      <svg id="linePreview" viewBox="0 0 200 34" preserveAspectRatio="none" aria-label="Line preview">
+        <line id="linePreviewLine" x1="8" y1="17" x2="192" y2="17" stroke="#E47303" stroke-width="2"/>
+      </svg>
+    </div>
+    <div class="sec"><h2>Actions</h2></div>
+    <div style="padding:0 14px;display:flex;flex-direction:column;gap:6px">
+      <button id="fitBtn">Fit to Boundary</button>
+      <button id="toggleBtn" class="on">Hide Vertex Handles</button>
+      <button id="peekBtn">Show Raw Coordinates</button>
+      <button id="resetBtn" class="warn">Reset to Loaded File</button>
+    </div>
+
+    <div class="hint" style="margin-top:10px;border-top:1px solid #eef1f5;padding-top:10px">
+      <b>Note:</b> Properties are preserved. Coordinates change, and the line style is saved as <code>stroke</code>, <code>stroke-width</code> and <code>stroke-dasharray</code>.
+    </div>
+  </aside>
+
+  <div id="stage">
+    <div id="map"></div>
+    <div id="tools">
+      <button id="addMode" title="Add vertices by clicking on the map">＋ Draw</button>
+      <button id="deleteMode" class="warn" title="Click a vertex to delete it">− Delete</button>
+      <button id="doneMode" class="on">✓ Select</button>
+      <div id="searchBox" style="display:flex;gap:6px;align-items:center;
+     border-left:1px solid var(--line);padding-left:6px;margin-left:6px">
+  <select id="searchType" title="Boundary type">
+    <option value="PLACE">Place</option>
+    <option value="COUNTY">County</option>
+    <option value="STATE">State</option>
+  </select>
+  <input id="searchName" type="text" placeholder="Name…"
+         style="width:130px" autocomplete="off">
+<select id="searchState" title="State">
+  <option value="">— State —</option>
+  <option value="01">AL</option>
+  <option value="02">AK</option>
+  <option value="04">AZ</option>
+  <option value="05">AR</option>
+  <option value="06">CA</option>
+  <option value="08">CO</option>
+  <option value="09">CT</option>
+  <option value="10">DE</option>
+  <option value="11">DC</option>
+  <option value="12">FL</option>
+  <option value="13">GA</option>
+  <option value="15">HI</option>
+  <option value="16">ID</option>
+  <option value="17">IL</option>
+  <option value="18">IN</option>
+  <option value="19">IA</option>
+  <option value="20">KS</option>
+  <option value="21">KY</option>
+  <option value="22">LA</option>
+  <option value="23">ME</option>
+  <option value="24">MD</option>
+  <option value="25">MA</option>
+  <option value="26">MI</option>
+  <option value="27">MN</option>
+  <option value="28">MS</option>
+  <option value="29">MO</option>
+  <option value="30">MT</option>
+  <option value="31">NE</option>
+  <option value="32">NV</option>
+  <option value="33">NH</option>
+  <option value="34">NJ</option>
+  <option value="35">NM</option>
+  <option value="36">NY</option>
+  <option value="37">NC</option>
+  <option value="38">ND</option>
+  <option value="39">OH</option>
+  <option value="40">OK</option>
+  <option value="41">OR</option>
+  <option value="42">PA</option>
+  <option value="44">RI</option>
+  <option value="45">SC</option>
+  <option value="46">SD</option>
+  <option value="47">TN</option>
+  <option value="48">TX</option>
+  <option value="49">UT</option>
+  <option value="50">VT</option>
+  <option value="51">VA</option>
+  <option value="53">WA</option>
+  <option value="54">WV</option>
+  <option value="55">WI</option>
+  <option value="56">WY</option>
+  <option value="60">AS</option>
+  <option value="66">GU</option>
+  <option value="69">MP</option>
+  <option value="72">PR</option>
+  <option value="78">VI</option>
+  </select>
+  <button id="searchBtn" class="primary">Search</button>
+</div>
+    </div>
+    <div id="peek"></div>
+  </div>
+</div>
+
+  <div id="chooserOverlay" style="display:none;position:fixed;inset:0;
+     background:rgba(0,0,0,0.45);z-index:100;align-items:center;justify-content:center">
+  <div style="background:#fff;max-width:520px;width:calc(100% - 40px);
+       padding:16px;border-radius:8px;box-shadow:0 8px 32px #0003">
+    <h3 style="margin:0 0 10px;font-size:15px">Multiple matches</h3>
+    <div id="chooserList" style="max-height:50vh;overflow:auto"></div>
+    <div style="text-align:right;margin-top:12px">
+      <button id="chooserCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+<script>
+/* ============================================================
+   border — Boundary Editor
+   Edits the coordinates of a single Polygon feature in a
+   FeatureCollection, preserving properties and precision.
+   ============================================================ */
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ---------- State ---------- */
+let original = null;   // the exact parsed file (for reset)
+let doc = null;        // mutable copy: { type:"FeatureCollection", features:[...] }
+let feature = null;    // the Feature we're editing
+let ring = null;       // reference to feature.geometry.coordinates[0]
+let precision = 6;     // detected on load
+let showHandles = true;
+let mode = "select";   // "select" | "add" | "delete"
+let vertexMarkers = []; // maplibre markers for the ring vertices
+let midMarkers = [];    // midpoint insert handles
+let dragging = false;
+
+/* ============================================================
+   Map
+   ============================================================ */
+
+const map = new maplibregl.Map({
+  container: "map",
+  style: {
+    version: 8,
+    sources: {
+      osm: {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }
+    },
+    layers: [{ id:"osm", type:"raster", source:"osm" }]
+  },
+  center: [-98.5795, 39.8283],
+  zoom: 4
+});
+if (window.ETSCommon) ETSCommon.applySiteView(map);
+map.addControl(new maplibregl.NavigationControl({ showCompass:false }), "bottom-right");
+map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+
+/* ============================================================
+   Loading
+   ============================================================ */
+
+$("pickFile").onclick = () => $("fileInput").click();
+$("fileInput").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => ingest(r.result, f.name);
+  r.readAsText(f);
+};
+
+// Auto-load from same folder (GitHub Pages); swallowed on file://
+(async () => {
+  try {
+    const res = await fetch("border.geojson", { cache: "no-store" });
+    if (res.ok) ingest(await res.text(), "border.geojson");
+    else setStatus("Click 'Pick border.geojson…' to begin");
+  } catch (e) {
+    setStatus("Click 'Pick border.geojson…' to begin");
+  }
+})();
+
+$("reloadBtn").onclick = async () => {
+  if (!confirm("Reload border.geojson from the server? Unsaved changes will be lost.")) return;
+  try {
+    const res = await fetch("border.geojson", { cache:"no-store" });
+    if (!res.ok) throw new Error(res.status + " " + res.statusText);
+    ingest(await res.text(), "border.geojson");
+    toast("Reloaded from server");
+  } catch (e) {
+    toast("Reload failed: " + e.message);
+  }
+};
+
+function ingest(text, filename){
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch (e) { toast("Couldn't parse " + filename + ": " + e.message); return; }
+
+  // Normalize to a FeatureCollection with exactly one Polygon feature
+  let fc;
+  if (parsed.type === "FeatureCollection") {
+    fc = JSON.parse(JSON.stringify(parsed));
+  } else if (parsed.type === "Feature") {
+    fc = { type:"FeatureCollection", features:[ JSON.parse(JSON.stringify(parsed)) ] };
+  } else if (parsed.type === "Polygon" || parsed.type === "MultiPolygon") {
+    fc = { type:"FeatureCollection", features:[{
+      type:"Feature", properties:{}, geometry: JSON.parse(JSON.stringify(parsed))
+    }]};
+  } else {
+    toast("Unrecognized GeoJSON: top-level type is " + parsed.type);
+    return;
+  }
+
+  if (!fc.features.length) { toast("FeatureCollection is empty."); return; }
+
+  // find the first Polygon feature
+  const f = fc.features.find(x => x.geometry && x.geometry.type === "Polygon")
+         || fc.features.find(x => x.geometry && x.geometry.type === "MultiPolygon");
+  if (!f) { toast("No Polygon or MultiPolygon feature found."); return; }
+  if (f.geometry.type === "MultiPolygon") {
+    toast("MultiPolygon detected — only the first polygon will be editable for now.");
+  }
+
+  let poly;
+  if (f.geometry.type === "Polygon") {
+    poly = f.geometry.coordinates[0];
+  } else {
+    // MultiPolygon: use the first polygon's outer ring
+    poly = f.geometry.coordinates[0][0];
+  }
+
+  if (!Array.isArray(poly) || poly.length < 4) {
+    toast("Ring has fewer than 4 points — that's not a valid polygon.");
+    return;
+  }
+
+  original = JSON.parse(JSON.stringify(fc));
+  doc = fc;
+  feature = f;
+  ring = poly;
+  precision = detectPrecision(ring);
+
+  // derive the display name/type from properties
+  $("sName").textContent  = f.properties?.NAME || "—";
+  $("sType").textContent  = f.properties?.TYPE || f.properties?.type || "—";
+  $("sFeatures").textContent = String(fc.features.length);
+  $("sVerts").textContent = String(ring.length - 1); // exclude duplicate closing point
+  $("sPrec").textContent  = precision + " decimals";
+
+  $("publishBtn").disabled = false;
+
+  // Camera
+  const bounds = new maplibregl.LngLatBounds();
+  ring.forEach(([lng, lat]) => bounds.extend([lng, lat]));
+  map.fitBounds(bounds, { padding: 60, duration: 0 });
+
+  restoreLineStyle(f.properties);
+  renderAll();
+  setStatus("Loaded " + filename + " · " + (ring.length - 1) + " vertices");
+
+  // nudge: refresh map source after the initial fit
+  setTimeout(() => map.resize(), 0);
+}
+
+function detectPrecision(points){
+  let max = 0;
+  for (const [lng, lat] of points){
+    for (const n of [lng, lat]){
+      const s = String(n);
+      const dot = s.indexOf(".");
+      if (dot >= 0) max = Math.max(max, s.length - dot - 1);
+    }
+    if (max >= 8) break;
+  }
+  return Math.min(Math.max(max, 4), 9); // clamp to a sane range
+}
+
+function setStatus(s){ $("status").textContent = s; }
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+
+function renderAll(){
+  renderBoundary();
+  renderHandles();
+  updateStats();
+}
+
+function updateStats(){
+  if (!ring) return;
+  $("sVerts").textContent = String(ring.length - 1);
+}
+
+function renderBoundary(){
+  if (!doc) return;
+
+  // Replace the source data wholesale so style stays consistent
+  const src = map.getSource("boundary");
+  const data = {
+    type: "FeatureCollection",
+    features: [{
+      type: "Feature",
+      properties: feature.properties || {},
+      geometry: { type: "Polygon", coordinates: [ ring ] }
+    }]
+  };
+
+  if (src) {
+    src.setData(data);
+  } else {
+    map.addSource("boundary", { type: "geojson", data });
+    // underlay fill for readability
+    map.addLayer({
+      id: "boundary-fill",
+      type: "fill",
+      source: "boundary",
+      paint: { "fill-color": "#E47303", "fill-opacity": 0.06 }
+    });
+    map.addLayer({
+      id: "boundary-line",
+      type: "line",
+      source: "boundary",
+      layout: { "line-cap":"butt", "line-join":"round" },
+      paint: { "line-color": "#E47303", "line-width": 2, "line-dasharray":[3,2] }
+    });
+    applyLineStyle();
+  }
+}
+
+function renderHandles(){
+  // tear down
+  vertexMarkers.forEach(m => m.remove()); vertexMarkers = [];
+  midMarkers.forEach(m => m.remove());    midMarkers = [];
+
+  if (!ring || !showHandles) return;
+
+  // vertices (skip the duplicated closing point at the end)
+  const uniqueCount = ring.length - 1;
+  for (let i = 0; i < uniqueCount; i++){
+    const [lng, lat] = ring[i];
+    const el = document.createElement("div");
+    el.className = "vtx" + (i === 0 ? " first" : "");
+    el.dataset.index = String(i);
+    el.title = `Vertex ${i + 1} of ${uniqueCount} · ${lat.toFixed(precision)}, ${lng.toFixed(precision)}`;
+
+    const marker = new maplibregl.Marker({ element: el, draggable: true })
+      .setLngLat([lng, lat])
+      .addTo(map);
+
+    marker.on("dragstart", () => {
+      dragging = true;
+      el.classList.add("dragging");
+    });
+    marker.on("drag", () => {
+      const ll = marker.getLngLat();
+      // update the ring live so the line follows
+      const p = ring[i];
+      p[0] = ll.lng;
+      p[1] = ll.lat;
+      // keep the closing point in sync if we moved index 0
+      if (i === 0) {
+        ring[ring.length - 1] = [p[0], p[1]];
+      }
+      renderBoundary();
+    });
+    marker.on("dragend", () => {
+      dragging = false;
+      el.classList.remove("dragging");
+      // finalize with rounded precision
+      const ll = marker.getLngLat();
+      ring[i] = [ round(ll.lng), round(ll.lat) ];
+      if (i === 0) ring[ring.length - 1] = [ ring[0][0], ring[0][1] ];
+      marker.setLngLat(ring[i]);
+      renderBoundary();
+      renderHandles(); // recompute midpoints
+    });
+
+    el.addEventListener("click", e => {
+      if (mode === "delete") {
+        e.stopPropagation();
+        deleteVertex(i);
+      } else if (e.shiftKey) {
+        e.stopPropagation();
+        deleteVertex(i);
+      }
+    });
+
+    vertexMarkers.push(marker);
+  }
+
+  // midpoints (insert handles) between each pair
+  if (mode !== "delete") {
+    for (let i = 0; i < uniqueCount; i++){
+      const a = ring[i];
+      const b = ring[(i + 1) % uniqueCount];
+      const midLng = (a[0] + b[0]) / 2;
+      const midLat = (a[1] + b[1]) / 2;
+      const el = document.createElement("div");
+      el.className = "mid";
+      el.title = "Click to insert a vertex here";
+      el.addEventListener("click", e => {
+        e.stopPropagation();
+        insertVertex(i, midLng, midLat);
+      });
+      const marker = new maplibregl.Marker({ element: el, anchor:"center" })
+        .setLngLat([midLng, midLat])
+        .addTo(map);
+      midMarkers.push(marker);
+    }
+  }
+}
+
+function round(n){ return +(+n).toFixed(precision); }
+
+
+  
+
+const DASHES = {
+  solid:  null,
+  dashed: [3, 2],
+  dotted: [1, 2]
+};
+
+function updateLinePreview() {
+  const color = $('lineColor').value;
+  const width = Number($('lineWidth').value);
+  const style = $('lineStyle').value;
+  const line  = $('linePreviewLine');
+  line.setAttribute('stroke', color);
+  line.setAttribute('stroke-width', width);
+  const d = DASHES[style];
+  // map dash lengths are multiples of line width, so scale the same way here
+  if (d) line.setAttribute('stroke-dasharray', d.map(n => n * width).join(' '));
+  else   line.removeAttribute('stroke-dasharray');
+  $('lineColorHex').textContent = color.toUpperCase();
+  $('lineWidthOut').textContent = width;
+  document.querySelectorAll('#lineStyleSeg button').forEach(btn =>
+    btn.classList.toggle('on', btn.dataset.v === style));
+}
+
+function applyLineStyle() {
+  updateLinePreview();
+  const layerId = 'boundary-line';
+  if (!map || !map.getLayer(layerId)) return;
+  map.setPaintProperty(layerId, 'line-color', $('lineColor').value);
+  map.setPaintProperty(layerId, 'line-width', Number($('lineWidth').value));
+  map.setPaintProperty(layerId, 'line-dasharray', DASHES[$('lineStyle').value]);
+}
+
+// Read style from a loaded file's properties (leaves the controls alone if the file has none)
+function restoreLineStyle(p) {
+  p = p || {};
+  if (/^#[0-9a-f]{6}$/i.test(p['stroke'] || '')) $('lineColor').value = p['stroke'];
+  const w = Number(p['stroke-width']);
+  if (w > 0) $('lineWidth').value = Math.min(12, Math.max(1, w));
+  if (Object.prototype.hasOwnProperty.call(DASHES, p['stroke-dasharray'])) {
+    $('lineStyle').value = p['stroke-dasharray'];
+  }
+  applyLineStyle();
+}
+
+// Write the current style into the feature's properties (called on download)
+function stampLineStyle(f) {
+  f.properties = f.properties || {};
+  f.properties['stroke'] = $('lineColor').value;
+  f.properties['stroke-width'] = Number($('lineWidth').value);
+  f.properties['stroke-dasharray'] = $('lineStyle').value;   // "solid" | "dashed" | "dotted"
+}
+
+['lineColor', 'lineWidth'].forEach(id => $(id).addEventListener('input', applyLineStyle));
+document.querySelectorAll('#lineStyleSeg button').forEach(btn =>
+  btn.addEventListener('click', () => { $('lineStyle').value = btn.dataset.v; applyLineStyle(); }));
+updateLinePreview();
+
+/* ============================================================
+   Vertex operations
+   ============================================================ */
+
+function insertVertex(edgeIndex, lng, lat){
+  // insert between edgeIndex and edgeIndex+1
+  ring.splice(edgeIndex + 1, 0, [ round(lng), round(lat) ]);
+  // if we just inserted after the last unique vertex (i.e., before the closing point),
+  // that's fine — the closing point stays the same.
+  renderBoundary();
+  renderHandles();
+  updateStats();
+  toast("Inserted vertex after #" + (edgeIndex + 1));
+}
+
+function deleteVertex(i){
+  const uniqueCount = ring.length - 1;
+  if (uniqueCount <= 3){
+    toast("A polygon needs at least 3 unique vertices.");
+    return;
+  }
+  ring.splice(i, 1);
+  // if we deleted the first unique vertex, the closing point (originally == old ring[0])
+  // is now dangling; reset it to the new first point
+  ring[ring.length - 1] = [ ring[0][0], ring[0][1] ];
+  renderBoundary();
+  renderHandles();
+  updateStats();
+  toast("Deleted vertex " + (i + 1));
+}
+
+/* ============================================================
+   Modes / tools
+   ============================================================ */
+
+function setMode(m){
+  mode = m;
+  ["addMode","deleteMode","doneMode"].forEach(id => $(id).classList.remove("on"));
+  $({select:"doneMode",add:"addMode",delete:"deleteMode"}[m]).classList.add("on");
+  map.getContainer().style.cursor =
+    m === "add" ? "crosshair" :
+    m === "delete" ? "not-allowed" : "";
+  renderHandles();
+}
+
+$("addMode").onclick    = () => setMode("add");
+$("deleteMode").onclick = () => setMode("delete");
+$("doneMode").onclick   = () => setMode("select");
+
+map.on("click", e => {
+  if (mode !== "add") return;
+  // find nearest edge and insert there
+  const pt = e.lngLat;
+  const ll = [pt.lng, pt.lat];
+  const uniqueCount = ring.length - 1;
+
+  let bestI = 0, bestD = Infinity;
+  for (let i = 0; i < uniqueCount; i++){
+    const a = ring[i];
+    const b = ring[(i + 1) % uniqueCount];
+    const d = segDist(ll, a, b);
+    if (d < bestD){ bestD = d; bestI = i; }
+  }
+  insertVertex(bestI, pt.lng, pt.lat);
+});
+
+function segDist(p, a, b){
+  const [px, py] = p, [ax, ay] = a, [bx, by] = b;
+  const dx = bx - ax, dy = by - ay;
+  const denom = dx*dx + dy*dy;
+  let t = denom ? ((px-ax)*dx + (py-ay)*dy) / denom : 0;
+  t = Math.max(0, Math.min(1, t));
+  const cx = ax + t*dx, cy = ay + t*dy;
+  return Math.hypot(px - cx, py - cy);
+}
+
+/* ============================================================
+   Buttons: fit, toggle handles, peek, reset
+   ============================================================ */
+
+$("fitBtn").onclick = () => {
+  if (!ring) return;
+  const b = new maplibregl.LngLatBounds();
+  ring.forEach(([lng, lat]) => b.extend([lng, lat]));
+  map.fitBounds(b, { padding: 60 });
+};
+
+$("toggleBtn").onclick = () => {
+  showHandles = !showHandles;
+  $("toggleBtn").textContent = showHandles ? "Hide vertex handles" : "Show vertex handles";
+  $("toggleBtn").classList.toggle("on", showHandles);
+  renderHandles();
+};
+
+$("peekBtn").onclick = () => {
+  const el = $("peek");
+  if (el.classList.toggle("on")) {
+    el.textContent = JSON.stringify(ring, null, 2);
+  }
+};
+
+$("resetBtn").onclick = () => {
+  if (!original) return;
+  if (!confirm("Reset to the loaded file? Unsaved changes will be lost.")) return;
+  ingest(JSON.stringify(original), "border.geojson");
+  toast("Reset to loaded version");
+};
+
+/* ============================================================
+   Publish
+   ============================================================ */
+
+$("publishBtn").onclick = () => {
+  if (!doc || !ring) return;
+
+  // Ensure closure: last point equals first
+  if (ring.length >= 2) {
+    const first = ring[0];
+    const last = ring[ring.length - 1];
+    if (first[0] !== last[0] || first[1] !== last[1]) {
+      ring[ring.length - 1] = [ first[0], first[1] ];
+    }
+  }
+
+  // Write the edited ring back into the feature we loaded
+  if (feature.geometry.type === "Polygon") {
+    feature.geometry.coordinates[0] = ring;
+  } else {
+    // MultiPolygon: only first ring edited (we warned about this)
+    feature.geometry.coordinates[0][0] = ring;
+  }
+
+  // Save the chosen line style into the feature properties
+  stampLineStyle(feature);
+
+  // Serialize with a compact but readable shape
+  const json = JSON.stringify(doc, null, 2);
+
+  const blob = new Blob([json], { type: "application/geo+json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "border.geojson";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+
+  toast("Downloaded border.geojson · " + (ring.length - 1) + " vertices");
+};
+
+/* ============================================================
+   Toast
+   ============================================================ */
+
+let toastTimer = 0;
+function toast(msg){
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2400);
+}
+
+/* ============================================================
+   Search & Import (TIGERweb)
+   ============================================================ */
+
+const SERVICE_MAP = {
+  PLACE:  { service: 'tigerWMS_Current', layer: 28, needsState: true },
+  COUNTY: { service: 'tigerWMS_Current', layer: 82, needsState: true },
+  STATE:  { service: 'tigerWMS_Current', layer: 80, needsState: false }
+};
+
+const countyNameCache = {};   // stateFips -> { countyFips: name }
+
+async function loadCountyNames(stateFips) {
+  if (countyNameCache[stateFips]) return countyNameCache[stateFips];
+  const url = `https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/`
+            + `State_County/MapServer/1/query`
+            + `?where=STATE='${stateFips}'`
+            + `&outFields=NAME,STATE,COUNTY`
+            + `&returnGeometry=false&f=json`;
+        console.log('SEARCH URL:', url);
+  const res = await fetch(url);
+  const data = await res.json();
+  const map = {};
+  (data.features || []).forEach(f => {
+    map[String(f.attributes.COUNTY).padStart(3, '0')] = f.attributes.NAME;
+  });
+  countyNameCache[stateFips] = map;
+  return map;
+}
+
+async function searchTigerweb(type, name, stateFips) {
+  const cfg = SERVICE_MAP[type];
+  const safeName = name.trim().replace(/'/g, "''").toUpperCase();
+  let where = `UPPER(BASENAME) LIKE '%${safeName}%'`;
+  if (cfg.needsState) where += ` AND STATE='${stateFips}'`;
+
+  const url = `https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/`
+            + `${cfg.service}/MapServer/${cfg.layer}/query`
+            + `?where=${encodeURIComponent(where)}`
+            + `&outFields=*&returnGeometry=true&f=geojson`;
+
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'TIGERweb Error');
+  return (data.features || []).filter(f => f.geometry);
+}
+
+function describeFeature(f, stateAbbr, countyMap, stateFips) {
+  const p = f.properties;
+  const bits = [p.NAME];
+  if (stateAbbr) bits.push(stateAbbr);
+  if (p.COUNTY && countyMap) {
+    const cn = countyMap[String(p.COUNTY).padStart(3, '0')];
+    if (cn) {
+      const label = stateFips === '22' ? 'Parish' : 'County';
+      bits.push(`${cn} ${label}`);
+    }
+  }
+  if (p.POP100) bits.push(`pop ${Number(p.POP100).toLocaleString()}`);
+  return bits.join(' · ');
+}
+
+function pickFeature(features, stateAbbr, countyMap, stateFips) {
+  return new Promise(resolve => {
+    const overlay = $('chooserOverlay');
+    const list    = $('chooserList');
+    list.innerHTML = '';
+
+    // Sort by population so the "obvious" answer is first.
+    const sorted = [...features].sort((a, b) =>
+      (Number(b.properties.POP100) || 0) - (Number(a.properties.POP100) || 0));
+
+    sorted.forEach(f => {
+      const row = document.createElement('div');
+      row.textContent = describeFeature(f, stateAbbr, countyMap, stateFips);
+      row.style.cssText = 'padding:10px 12px;cursor:pointer;border-bottom:1px solid #eef1f5;border-radius:4px';
+      row.onmouseenter = () => row.style.background = '#f6f8fb';
+      row.onmouseleave = () => row.style.background = '';
+      row.onclick = () => { cleanup(); resolve(f); };
+      list.appendChild(row);
+    });
+
+    const onKey = e => { if (e.key === 'Escape') { cleanup(); resolve(null); } };
+    function cleanup() {
+      overlay.style.display = 'none';
+      document.removeEventListener('keydown', onKey);
+    }
+    $('chooserCancel').onclick = () => { cleanup(); resolve(null); };
+    document.addEventListener('keydown', onKey);
+    overlay.style.display = 'flex';
+  });
+}
+
+function isDirty() {
+  if (!original || !ring) return false;
+  const orig = original.features[0]?.geometry?.coordinates?.[0]
+            || original.features[0]?.geometry?.coordinates?.[0]?.[0];
+  if (!orig || orig.length !== ring.length) return true;
+  for (let i = 0; i < ring.length; i++) {
+    if (orig[i][0] !== ring[i][0] || orig[i][1] !== ring[i][1]) return true;
+  }
+  return false;
+}
+
+async function doSearch() {
+  const type   = $('searchType').value;
+  const name   = $('searchName').value.trim();
+  const fips   = $('searchState').value;
+  const cfg    = SERVICE_MAP[type];
+
+  if (!name) return toast('Enter a name');
+  if (cfg.needsState && !fips) return toast('Select a state');
+
+  const stateAbbr = fips
+    ? $('searchState').selectedOptions[0].textContent
+    : '';
+
+  if (isDirty() && !confirm('You have unsaved edits. Replace them with the imported boundary?')) {
+    return;
+  }
+
+  setStatus('Searching TIGERweb…');
+  let results;
+  try {
+    results = await searchTigerweb(type, name, fips);
+  } catch (e) {
+    setStatus('');
+    return toast('Search failed: ' + e.message);
+  }
+
+  if (!results.length) {
+    setStatus('');
+    return toast('No match found. Check spelling and state.');
+  }
+
+  let chosen;
+  if (results.length === 1) {
+    chosen = results[0];
+  } else {
+    let countyMap = null;
+    if (cfg.needsState && results.some(f => f.properties.COUNTY)) {
+      try { countyMap = await loadCountyNames(fips); } catch (e) { /* non-fatal */ }
+    }
+    chosen = await pickFeature(results, stateAbbr, countyMap, fips);
+  }
+  if (!chosen) { setStatus(''); return; }
+
+  // Normalize to a single-Polygon FeatureCollection and hand it to ingest().
+  // ingest() already handles Polygon vs MultiPolygon, precision detection,
+  // camera fitting, and re-rendering — so we just synthesize the shape it expects.
+  const fc = {
+    type: 'FeatureCollection',
+    features: [{
+      type: 'Feature',
+      properties: chosen.properties || {},
+      geometry: chosen.geometry   // Polygon or MultiPolygon
+    }]
+  };
+
+  ingest(JSON.stringify(fc), `TIGERweb: ${chosen.properties.NAME || name}`);
+  toast(`Imported ${chosen.properties.NAME || name}`);
+}
+
+$('searchBtn').onclick = doSearch;
+$('searchName').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+});
+  
+/* ============================================================
+   Keyboard: Esc returns to Select; Del removes focused vertex
+   (Del handled via shift-click on the vertex itself for now)
+   ============================================================ */
+
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input,textarea")) return;
+  if (e.key === "Escape") setMode("select");
+  if (e.key === "a") setMode("add");
+  if (e.key === "d") setMode("delete");
+  if (e.key === "s") setMode("select");
+});
+</script>
+<script src="publish.js"></script>
+<script>GHPublish.attach({ buttons: ["publishBtn"] });</script>
+</body>
+</html>

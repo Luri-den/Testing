@@ -1,0 +1,22 @@
+What is different from the ETS-main zip you first sent
+======================================================
+NEW FEATURES
+  Announcements: put a quilt show, a food tour or any happening on the welcome screen with a colored tag.
+    announce.html (the Announcements tab), announcements.js, announcements.csv (starts empty).
+  Calendar: month grid and agenda of announcements and events, with conflict warnings. calendar.html.
+  Tours and trails: a time-aware list (30 min / 1 hour / 2 hours / half day), featured tours, and tours that
+    can be featured by an announcement. tour-info.js. New tours.csv columns: SUMMARY, EFFORT, MINUTES, FEATURED
+    (added the next time you save from the Tours editor).
+  Icon editor: draw and edit icons.js. icon-editor.html (the Icons tab).
+  Smarter data checker: check.html also checks announcements, the new tour columns, tour vehicles, icons.js and
+    overlapping auto-opening events.
+FIXES
+  One list of data files (ets-config.js) instead of five. Saving or publishing an event used to leave prizes.csv and
+    lines.geojson behind. The offline save now includes lines.geojson and border.geojson.
+  index.html used to be an old copy of the map. It now forwards to the live map.
+  sw.js: version bumped, old Demo2.html removed from its list.
+CHANGED FILES (all others are exactly as you sent them)
+  Demo2a.html announce.html announcements.js check.html calendar.html ets-config.js events.html icon-editor.html
+  index.html publish.js schedule.js sw.js tabs.html tour-info.js tours.html workspace.js announcements.csv
+MOVED to archive/ (not deleted)
+  Demo2.html config.html mockup.html list.html "Main Scene.json" and the old index.html (as index-old.html)

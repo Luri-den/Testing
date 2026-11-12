@@ -1,0 +1,3 @@
+PRIZE_ID,LABEL,REQUIRED_STAMPS,REWARD,VENDOR_CODE,REQUIREMENTS,CODE,ORDER
+FRIEDCHICKEN,Fried Chicken Tour,CV-001|CV-014|CV-002,Show this screen to any vendor for a free pat on the head!,,DOWNTOWN:3,,
+HISTORIAN,County Historian,CV-001|CV-002|CV-003|CV-004|CV-005|CV-006,Show this screen at the library for your yearly pin!,,,,

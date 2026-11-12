@@ -1,0 +1,1327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tours Editor</title>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script src="editor-common.js"></script>
+<script>Workspace.install();</script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+  :root{
+    --line:#d7dde5; --accent:#2b6cb0; --ink:#1a202c;
+    --bg:#eef1f5; --panel:#fff; --muted:#6b7280;
+    --tour:#D55E00;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font:14px system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}
+
+  #top{position:absolute;z-index:20;top:0;left:0;right:0;height:52px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 12px}
+  #top h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+  #top .grow{flex:1}
+  #top .status{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
+  #top .warn{color:#a33;font-weight:600}
+  button{font:inherit;padding:6px 12px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;color:var(--ink)}
+  button:hover{background:#f6f8fb}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.primary:hover{background:#245a94}
+  button.on{background:#e6effa;border-color:#9dbde3}
+  button.warn{background:#fff5f5;border-color:#f3c2c2;color:#a33}
+  button.warn:hover{background:#ffecec}
+  button.small{padding:3px 8px;font-size:12px}
+
+  #layout{position:absolute;top:52px;left:0;right:0;bottom:0;display:grid;grid-template-columns:260px 1fr 400px}
+
+  #left{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding-bottom:20px}
+  .sec{padding:10px 14px 4px}
+  .sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:8px 0 6px;font-weight:600;display:flex;align-items:center;justify-content:space-between}
+  .sec h2 button{padding:3px 8px;font-size:11px}
+
+  .tour{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;margin:2px 6px}
+  .tour:hover{background:#f4f7fb}
+  .tour.sel{background:#e6effa;font-weight:600}
+  .tour .sw{width:10px;height:10px;border-radius:50%;flex:none;box-shadow:0 0 0 1px #0002}
+  .tour .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tour .cnt{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+  .hint{padding:10px 14px;font-size:11px;line-height:1.55;color:var(--muted)}
+  .hint b{color:#333}
+
+  #stage{position:relative;min-width:0}
+  #map{position:absolute;inset:0}
+
+  #tools{position:absolute;z-index:6;top:10px;left:10px;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 2px 8px #0001;padding:6px;display:flex;gap:6px;align-items:center}
+  #tools .lbl{font-size:11px;color:var(--muted);padding:0 4px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+
+  /* markers on the map: uniform, dimmed, or highlighted */
+  .mk{width:32px;height:32px;border-radius:50%;border:3px solid #fff;background:#999;box-shadow:0 1px 4px #0005;padding:0;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:bold}
+  .mk img{width:100%;height:100%;object-fit:cover;display:block}
+  .mk.story{background:#D55E00}
+  .mk.spot{background:#333}
+  .mk.parent{background:#E47303}
+  .mk.child{background:#91AF45}
+  .mk.tour-stop{box-shadow:0 0 0 3px #fff,0 0 0 7px var(--tour);z-index:5;border-width:3px;border-color:#fff}
+  .mk.tour-stop.future{opacity:.55;filter:grayscale(.4)}
+  .mk.tour-stop.past{opacity:.85}
+  .mk.tour-start{border:4px solid #fff;box-shadow:0 0 0 4px #fff,0 0 0 8px #2f855a}
+  
+
+  /* ---------- right panel ---------- */
+  #right{background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding-bottom:30px}
+  .empty{padding:24px 16px;color:#9aa3ad;font-size:13px;text-align:center;line-height:1.6}
+  .empty kbd{font:11px ui-monospace,Menlo,monospace;background:#f1f3f7;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px}
+
+  .form{padding:12px}
+  .field{margin-bottom:10px}
+  .field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:600}
+  .field input[type=text],.field input[type=number],.field textarea,.field select{
+    width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff;color:var(--ink)}
+  .field textarea{min-height:70px;resize:vertical;line-height:1.45}
+  .field .sub{font-size:11px;color:var(--muted);margin-top:3px}
+
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+  .catrow{display:flex;align-items:center;gap:8px}
+  .catrow select{flex:1}
+  .catrow .sw{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);flex:none}
+
+  .actions{margin-top:14px;display:flex;gap:6px;flex-wrap:wrap}
+  .actions .grow{flex:1}
+
+  .divider{height:1px;background:var(--line);margin:14px 0}
+
+  /* ---------- stops list ---------- */
+  .stops{display:flex;flex-direction:column;gap:4px}
+  .stop{display:grid;grid-template-columns:24px 1fr 90px 24px;gap:6px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fbfcfe;cursor:grab;font-size:13px}
+  .stop:hover{background:#f4f7fb}
+  .stop.sel{border-color:var(--accent);background:#f0f6fc}
+  .stop.dragging{opacity:.4;cursor:grabbing}
+  .stop.drop-before{box-shadow:0 -3px 0 var(--accent)}
+  .stop.drop-after{box-shadow:0 3px 0 var(--accent)}
+  .stop .step{font:11px ui-monospace,Menlo,monospace;color:var(--muted);text-align:center;background:#fff;border-radius:4px;padding:2px 0;border:1px solid #eef1f5}
+  .stop .title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stop .title small{display:block;color:var(--muted);font-size:11px}
+  .stop .veh{font:11px ui-monospace,Menlo,monospace;text-align:center;color:#4a5568;background:#fff;border:1px solid #eef1f5;border-radius:4px;padding:3px 0}
+  .stop .mini{border:none;background:transparent;padding:2px;cursor:pointer;color:#a33;font-size:14px;line-height:1}
+  .stop.orphan{border-color:#f3c2c2;background:#fff8f8}
+  .stop.orphan .title{color:#a33}
+  .vtx{width:12px;height:12px;background:#fff;border:2px solid #000;cursor:move}
+  .mid{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.7);border:1px solid #000;cursor:copy}
+  #drawBtn.on{background:#D55E00;color:#fff}
+  .stop .add{display:block;width:100%;text-align:center;border:1px dashed var(--line);border-radius:6px;background:#fff;padding:8px;color:var(--muted);cursor:pointer;font-size:12px}
+  .stop .add:hover{color:var(--ink);border-color:#9dbde3;background:#f6f8fb}
+
+  /* per-stop edit form */
+  .stop-edit{background:#f0f6fc;border:1px solid #9dbde3;border-radius:8px;padding:10px;margin-top:6px}
+  .stop-edit .field{margin-bottom:8px}
+
+  /* ---------- preview playback bar ---------- */
+  #playbar{position:absolute;z-index:8;left:50%;transform:translateX(-50%);bottom:16px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 4px 16px #0002;padding:8px 12px;display:none;align-items:center;gap:10px;min-width:340px}
+  #playbar.on{display:flex}
+  #playbar button{padding:4px 10px;font-size:13px}
+  #playbar .prog{flex:1;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  #playbar .prog b{color:var(--ink)}
+
+  #toast{position:fixed;z-index:100;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .18s, transform .18s;pointer-events:none;max-width:80vw;text-align:center}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left{z-index:6}
+</style>
+</head>
+<body>
+
+<div id="top">
+  <h1>Tours</h1>
+  <button id="pickTours">Pick tours.csv…</button>
+  <input id="fileTours" type="file" accept=".csv,text/csv" hidden>
+  <button id="pickStops">Pick tourstops.csv…</button>
+  <input id="fileStops" type="file" accept=".csv,text/csv" hidden>
+  <span class="status" id="status">Loading…</span>
+  <span class="grow"></span>
+  <button id="reloadBtn" title="Re-fetch all five files">↻ Reload</button>
+  <button id="publishBtn" class="primary" disabled>Download updated CSVs</button>
+</div>
+
+<div id="layout">
+  <aside id="left">
+    <div class="sec">
+      <h2>Tours and Trails <button id="addTour" type="button">＋ Tour</button> <button id="addTrail" type="button">＋ Trail</button> <button id="addLine" type="button">＋ Line</button></h2>
+    </div>
+    <div id="tourList"></div>
+
+    <div class="sec"><h2>Loaded data</h2></div>
+    <div class="hint" id="loadSummary">Waiting for files…</div>
+
+    <div class="sec"><h2>Legend</h2></div>
+    <div class="hint">
+      <b>● Parent</b> location &nbsp; <b>● Child</b> location<br>
+      <b>● Story</b> &nbsp; <b>● Photo spot</b><br><br>
+      Tour stops get a bold ring and a numbered order. Click any stop marker to jump to it in the list.
+    </div>
+  </aside>
+
+  <div id="stage">
+    <div id="map"></div>
+    <div id="tools">
+      <span class="lbl">Tour</span>
+      <button id="drawBtn" disabled>✎ Draw Route</button>
+      <button id="adoptBtn" hidden></button>
+      <button id="previewBtn" disabled>▶ Preview</button>
+      <button id="undoBtn" disabled>↶ Undo Point</button>
+      <button id="clearRouteBtn" disabled>Clear Route</button>
+      <button id="aerialBtn">Aerial View</button>
+      <button id="clearBtn" disabled>Deselect</button>
+    </div>
+    <div id="playbar">
+      <button id="playStop">⏸</button>
+      <span class="prog">Playing stop <b id="playIdx">1</b> of <b id="playTot">1</b></span>
+      <button id="playClose">✕ Close</button>
+    </div>
+  </div>
+
+  <aside id="right">
+    <div id="form"><div class="empty">No tour selected.<br><br>Choose one on the left, or click <kbd>＋ New</kbd>.</div></div>
+  </aside>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="lines-style.js"></script>
+<script src="tour-info.js"></script>
+
+<script>
+/* ============================================================
+   Tours Editor
+   Edits tours.csv and tourstops.csv, referencing items from
+   locations.csv, childmarkers.csv, and spots.csv.
+   ============================================================ */
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const key = s => String(s||"").trim().toLowerCase();
+const uid = () => Math.random().toString(36).slice(2,8);
+
+const CATEGORIES = {
+  CIV:   { label:"Civic",          color:"#E2E1E0" },
+  COMM:  { label:"Commercial",     color:"#E47303" },
+  RES:   { label:"Residential",    color:"#BDD76B" },
+  IND:   { label:"Industry",       color:"#AF350A" },
+  RAIL:  { label:"Rail",           color:"#8B6F47" },  // ← your choice
+  CANAL: { label:"Canal",          color:"#4A7C8C" }   // ← your choice
+};
+const DEFAULT_CAT = "CIV";
+
+/* Column orders observed in your files */
+const MODES = [   // how people travel a tour or trail
+  ["walk", "Walk", "a short, easy outing on level, paved or well-kept ground. About a mile or two, under an hour."],
+  ["hike", "Hike", "a longer or rougher outing on natural ground such as dirt, gravel, roots or hills. Sturdy shoes are a good idea."],
+  ["bike", "Bike", "by bicycle on roads, trails or both. Usually several miles or more."],
+  ["drive", "Drive", "by car, with stops along public roads. Any vehicle will do."],
+  ["virtual", "Virtual", "from anywhere, on screen. For places that are hard to visit, closed or far away, or as an introduction before a visit."]
+];
+const TOUR_COLS  = ["TOUR_ID","TITLE","INTRO","CATEGORY","ROUTE","TYPE","MODES","LENGTH_MI","SUMMARY","EFFORT","MINUTES","FEATURED"];
+const STOP_COLS  = ["TOUR_ID","STEP","ITEM_ID","NOTE","VEHICLE"];
+
+/* Vehicles available on the live site */
+const VEHICLES = ["TRAIN","CAR","BOAT","WALK","BIKE"];
+
+/* ---------- State ---------- */
+let tours = [];         // {row, stops:[stopRow...]}
+let items = [];         // everything referenceable: {id, name, ll, kind, source}
+let headers = { tour: TOUR_COLS.slice(), stop: STOP_COLS.slice() };
+let loaded = { tours:false, stops:false, spots:false, loc:false, child:false };
+let selectedTour = null;  // ref to the tour object
+let selectedStop = null;  // ref to a stop row
+let draggingStop = null;
+let playback = null;      // {tour, idx, paused, cancel}
+
+/* ---------- Map ---------- */
+const map = new maplibregl.Map({
+  container: "map",
+  style: {
+    version: 8,
+    sources: {
+      osm: {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      },
+      aerial: { type:"raster", tiles:["https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}"], tileSize:256, maxzoom:16, attribution:"Imagery: USGS The National Map / USDA NAIP" },
+      indiana: { type:"raster", tiles:["https://di-ingov.img.arcgis.com/arcgis/rest/services/DynamicWebMercator/Indiana_Current_Imagery/ImageServer/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=jpgpng&f=image"], tileSize:256, maxzoom:20, attribution:"Imagery: Indiana Geographic Information Office (IGIO)" }
+    },
+    layers: [
+      { id:"osm", type:"raster", source:"osm" },
+      { id:"aerial", type:"raster", source:"aerial", layout:{ visibility:"none" } },
+      { id:"indiana", type:"raster", source:"indiana", layout:{ visibility:"none" } }
+    ]
+  },
+  center: [-98.5795, 39.8283],
+  zoom: 4
+});
+if (window.ETSCommon) ETSCommon.applySiteView(map);
+map.addControl(new maplibregl.NavigationControl({ showCompass:false }), "bottom-right");
+map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+
+/* Marker storage — key by item.id so we don't duplicate */
+let markerIndex = new Map(); // id → {marker, el}
+
+/* ============================================================
+   Vehicle SVGs (lifted from Demo2.html)
+   ============================================================ */
+
+const VEHICLE_SVG = {
+  WALK: `<svg viewBox="12 0 36 30" width="60" height="30" aria-hidden="true">
+    <circle cx="30" cy="6" r="3.6" fill="#3a3a3a"/>
+    <rect x="24.5" y="10" width="5" height="8" rx="1.5" fill="#E47303"/>
+    <g stroke="#3a3a3a" stroke-width="3" stroke-linecap="round" fill="none"><path d="M30 10 L29 19"/><path d="M30 12 L36 17"/><path d="M29 19 L35 27"/><path d="M29 19 L23 27"/></g>
+  </svg>`,
+  BIKE: `<svg viewBox="6 0 48 30" width="60" height="30" aria-hidden="true">
+    <g fill="none" stroke="#1c1c1c" stroke-width="2"><circle cx="14" cy="22" r="6"/><circle cx="46" cy="22" r="6"/></g>
+    <g fill="none" stroke="#8b1a1a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 22 L22 13 L38 13 L28 22 Z"/><path d="M38 13 L46 22"/><path d="M38 13 L40 10 L43 10"/><path d="M22 13 L21 10"/></g>
+    <rect x="18.5" y="8.5" width="5.5" height="2" rx="1" fill="#3a3a3a"/>
+    <g stroke="#3a3a3a" stroke-width="2.6" stroke-linecap="round" fill="none"><path d="M23 9 L30 5"/><path d="M30 5 L40 10"/><path d="M24 10 L29 20"/></g>
+    <circle cx="32" cy="1.9" r="2.3" fill="#3a3a3a"/>
+  </svg>`,
+  TRAIN: `<svg viewBox="0 0 60 30" width="60" height="30" aria-hidden="true">
+      <rect x="6" y="8" width="34" height="12" fill="#3a3a3a" rx="2"/>
+      <rect x="34" y="4" width="16" height="16" fill="#3a3a3a" rx="2"/>
+      <rect x="36" y="7" width="6" height="5" fill="#f5e6c8"/>
+      <rect x="44" y="7" width="4" height="5" fill="#f5e6c8"/>
+      <rect x="4" y="18" width="4" height="5" fill="#3a3a3a"/>
+      <circle cx="14" cy="22" r="4" fill="#1c1c1c"/>
+      <circle cx="24" cy="22" r="4" fill="#1c1c1c"/>
+      <circle cx="34" cy="22" r="4" fill="#1c1c1c"/>
+      <circle cx="44" cy="22" r="3" fill="#1c1c1c"/>
+      <rect x="16" y="2" width="4" height="6" fill="#3a3a3a"/>
+      <rect x="6" y="11" width="30" height="2" fill="#E47303"/>
+    </svg>`,
+  BOAT: `<svg viewBox="0 0 60 30" width="60" height="30" aria-hidden="true">
+      <path d="M4 20 L10 16 L50 16 L56 20 L56 24 L4 24 Z" fill="#5a3a1a"/>
+      <rect x="14" y="10" width="30" height="6" fill="#8a5a2a"/>
+      <rect x="18" y="12" width="6" height="4" fill="#f5e6c8"/>
+      <rect x="30" y="12" width="6" height="4" fill="#f5e6c8"/>
+      <rect x="4" y="8" width="4" height="8" fill="#3a3a3a"/>
+      <path d="M6 10 Q 20 4 40 8" stroke="#3a3a3a" stroke-width="1.5" fill="none"/>
+      <path d="M6 16 Q 20 20 40 16" stroke="#E47303" stroke-width="1.5" fill="none"/>
+    </svg>`,
+  CAR: `<svg viewBox="0 0 60 30" width="60" height="30" aria-hidden="true">
+      <path d="M6 18 L14 12 L44 12 L54 18 L54 24 L6 24 Z" fill="#8b1a1a"/>
+      <rect x="16" y="9" width="24" height="6" fill="#8b1a1a" rx="2"/>
+      <rect x="18" y="10" width="8" height="4" fill="#f5e6c8"/>
+      <rect x="30" y="10" width="8" height="4" fill="#f5e6c8"/>
+      <circle cx="16" cy="24" r="4" fill="#1c1c1c"/>
+      <circle cx="44" cy="24" r="4" fill="#1c1c1c"/>
+      <rect x="6" y="18" width="48" height="1.5" fill="#E47303"/>
+    </svg>`
+};
+
+/* ============================================================
+   Loading
+   ============================================================ */
+
+$("pickTours").onclick = () => $("fileTours").click();
+$("pickStops").onclick = () => $("fileStops").click();
+$("fileTours").onchange = e => readCSV(e.target.files[0], "tours");
+$("fileStops").onchange = e => readCSV(e.target.files[0], "stops");
+
+function readCSV(file, kind){
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => ingestCSV(r.result, kind, file.name);
+  r.readAsText(file);
+}
+
+/* Auto-load all five from same folder; keep going if any fail */
+(async () => {
+  const specs = [
+    ["tours.csv",          "tours"],
+    ["tourstops.csv",      "stops"],
+    ["spots.csv",          "spots"],
+    ["locations.csv",      "loc"],
+    ["childmarkers.csv",   "child"]
+  ];
+  const results = await Promise.all(specs.map(([file]) =>
+    fetch(file, { cache:"no-store" }).then(r => r.ok ? r.text() : null).catch(() => null)
+  ));
+  results.forEach((text, i) => {
+    const [file, kind] = specs[i];
+    if (text == null){ console.info("Skipped " + file); return; }
+    ingestCSV(text, kind, file);
+  });
+
+  const have = Object.values(loaded).filter(Boolean).length;
+  if (have === 0) setStatus("Click 'Pick tours.csv…' to begin");
+  else setStatus("Loaded " + have + " of 5 files");
+})();
+
+$("reloadBtn").onclick = async () => {
+  if (!confirm("Reload all five CSVs from the server? Unsaved changes will be lost.")) return;
+  try {
+    const specs = [
+      ["tours.csv","tours"], ["tourstops.csv","stops"], ["spots.csv","spots"],
+      ["locations.csv","loc"], ["childmarkers.csv","child"]
+    ];
+    const results = await Promise.all(specs.map(([file]) =>
+      fetch(file, { cache:"no-store" }).then(r => r.ok ? r.text() : null).catch(() => null)
+    ));
+    resetAll();
+    results.forEach((text, i) => {
+      if (text == null) return;
+      ingestCSV(text, specs[i][1], specs[i][0]);
+    });
+    selectedTour = null; selectedStop = null;
+    render();
+    toast("Reloaded from server");
+  } catch (e) {
+    toast("Reload failed: " + e.message);
+  }
+};
+
+function resetAll(){
+  tours = []; items = [];
+  markerIndex.forEach(o => o.marker.remove()); markerIndex.clear();
+  loaded = { tours:false, stops:false, spots:false, loc:false, child:false };
+}
+
+function ingestCSV(text, kind, filename){
+  const parsed = Papa.parse(text, { header:true, skipEmptyLines:"greedy" });
+  if (parsed.errors && parsed.errors.length){
+    const hard = parsed.errors.filter(e => !/TooFewFields|TooManyFields/.test(e.code));
+    if (hard.length) console.warn("CSV warnings for " + filename, hard);
+  }
+  const rows = parsed.data.filter(r => Object.values(r).some(v => String(v||"").trim() !== ""));
+
+  if (kind === "tours"){
+    headers.tour = parsed.meta.fields?.length ? parsed.meta.fields.slice() : TOUR_COLS.slice();
+    for (const c of TOUR_COLS) if (!headers.tour.includes(c)) headers.tour.push(c);
+    tours = rows.map(r => ({ row: r, stops: [] }));
+    loaded.tours = true;
+  }
+  else if (kind === "stops"){
+    headers.stop = parsed.meta.fields?.length ? parsed.meta.fields.slice() : STOP_COLS.slice();
+    for (const c of STOP_COLS) if (!headers.stop.includes(c)) headers.stop.push(c);
+    // stops attach to tours after both are loaded
+    window._pendingStops = rows;
+    loaded.stops = true;
+    attachStops();
+  }
+  else if (kind === "spots"){
+    rows.forEach(r => {
+      const id = String(r.SPOT_ID||"").trim();
+      if (!id) return;
+      const lat = parseFloat(r.LAT), lng = parseFloat(r.LONG);
+      items.push({
+        id, name: r.TITLE || id,
+        ll: (isNaN(lat)||isNaN(lng)) ? null : [lng, lat],
+        kind: key(r.KIND) === "story" ? "story" : "spot",
+        source: "spots"
+      });
+    });
+    loaded.spots = true;
+  }
+  else if (kind === "loc"){
+    rows.forEach(r => {
+      const id = String(r.ID||"").trim();
+      if (!id) return;
+      const lat = parseFloat(r.LAT), lng = parseFloat(r.LONG);
+      items.push({
+        id, name: r.NAME || id,
+        ll: (isNaN(lat)||isNaN(lng)) ? null : [lng, lat],
+        kind: "parent", source: "locations"
+      });
+    });
+    loaded.loc = true;
+  }
+  else if (kind === "child"){
+    rows.forEach(r => {
+      const id = String(r.CHILD_ID || r.CHILD_IS || "").trim();
+      if (!id) return;
+      const lat = parseFloat(r.LAT), lng = parseFloat(r.LONG);
+      items.push({
+        id, name: r.NAME || id,
+        ll: (isNaN(lat)||isNaN(lng)) ? null : [lng, lat],
+        kind: "child", source: "childmarkers"
+      });
+    });
+    loaded.child = true;
+  }
+
+  if (kind === "stops" || kind === "tours") attachStops();
+
+  render();
+  $("publishBtn").disabled = !(loaded.tours && loaded.stops);
+  updateLoadSummary();
+}
+
+function attachStops(){
+  if (!loaded.tours || !window._pendingStops) return;
+  tours.forEach(t => t.stops = []);
+  for (const r of window._pendingStops){
+    const tid = String(r.TOUR_ID||"").trim();
+    const t = tours.find(x => key(x.row.TOUR_ID) === key(tid));
+    if (t) t.stops.push(r);
+    else console.warn("Orphan tourstop: TOUR_ID=" + tid + " has no matching tour");
+  }
+  tours.forEach(t => t.stops.sort((a,b) => (parseFloat(a.STEP)||0) - (parseFloat(b.STEP)||0)));
+}
+
+function updateLoadSummary(){
+  const bits = [];
+  if (loaded.tours) bits.push(`tours (${tours.length})`);
+  if (loaded.stops) bits.push(`stops (${tours.reduce((n,t)=>n+t.stops.length,0)})`);
+  if (loaded.spots) bits.push(`spots (${items.filter(i=>i.source==="spots").length})`);
+  if (loaded.loc)   bits.push(`locations (${items.filter(i=>i.source==="locations").length})`);
+  if (loaded.child) bits.push(`children (${items.filter(i=>i.source==="childmarkers").length})`);
+  $("loadSummary").innerHTML = bits.length ? bits.join("<br>") : "Waiting for files…";
+}
+
+function setStatus(s){ $("status").textContent = s; }
+
+/* ============================================================
+   Items lookup
+   ============================================================ */
+
+function findItem(id){
+  const k = key(id);
+  return items.find(i => key(i.id) === k) || null;
+}
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+
+function render(){
+  if (!selectedTour && drawMode) setDrawMode(false);
+  renderMapMarkers();
+  renderTourList();
+  renderTourLine();
+  renderForm();
+  renderLines(); drawRouteMarks(); updateAdopt();
+  updateLoadSummary();
+}
+
+function renderMapMarkers(){
+  // tear down old markers that are no longer in items
+  const currentIds = new Set(items.map(i => i.id));
+  for (const [id, o] of markerIndex){
+    if (!currentIds.has(id)){ o.marker.remove(); markerIndex.delete(id); }
+  }
+  // add/update markers for items
+  for (const item of items){
+    if (!item.ll) continue;
+    const stopIndex = selectedTour ? selectedTour.stops.findIndex(s => key(s.ITEM_ID) === key(item.id)) : -1;
+    const inTour = stopIndex >= 0;
+    const isStart = inTour && stopIndex === 0;
+    const isFuture = playback && inTour && stopIndex > playback.idx;
+    const isPast   = playback && inTour && stopIndex < playback.idx;
+
+    // reuse or create marker
+    let entry = markerIndex.get(item.id);
+    if (!entry){
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "mk " + item.kind;
+      el.title = item.name;
+      const marker = new maplibregl.Marker({ element: el }).setLngLat(item.ll).addTo(map);
+      entry = { marker, el };
+      markerIndex.set(item.id, entry);
+      el.addEventListener("click", e => {
+        e.stopPropagation();
+        if (drawMode && selectedTour && item.ll){ addStopFromMarker(item); return; }
+        if (selectedTour){
+          const idx = selectedTour.stops.findIndex(s => key(s.ITEM_ID) === key(item.id));
+          if (idx >= 0){ selectedStop = selectedTour.stops[idx]; renderForm(); return; }
+        }
+        toast(item.name);
+      });
+    } else {
+      entry.marker.setLngLat(item.ll);
+    }
+    // style state
+    const el = entry.el;
+    // keep MapLibre's own classes (maplibregl-marker is what positions the marker on the map)
+    el.className = "mk " + item.kind + " " + [...el.classList].filter(c => c.startsWith("maplibregl-")).join(" ");
+    if (inTour){
+      el.classList.add("tour-stop");
+      if (isStart) el.classList.add("tour-start");
+      if (isFuture) el.classList.add("future");
+      if (isPast) el.classList.add("past");
+      el.title = `${stopIndex + 1}. ${item.name}`;
+    } else {
+      el.title = item.name;
+    }
+    // outline in the color of the route it belongs to (the open tour wins; other routes show a thinner ring)
+    const owner = inTour ? selectedTour : tours.find(t => t.stops.some(s => key(s.ITEM_ID) === key(item.id)));
+    el.style.boxShadow = owner ? (inTour ? "0 0 0 3px #fff, 0 0 0 7px " : "0 0 0 2px #fff, 0 0 0 5px ") + routeColor(owner) : "";
+    // no thumbnails for tours; use a colored dot with kind styling
+    if (!el.querySelector("span")){
+      const s = document.createElement("span");
+      s.textContent = item.kind === "parent" ? "P" :
+                      item.kind === "child" ? "C" :
+                      item.kind === "story" ? "★" : "◉";
+      s.style.cssText = "font-size:14px;line-height:1;color:#fff";
+      el.appendChild(s);
+    }
+  }
+}
+
+function renderTourList(){
+  const list = $("tourList");
+  list.innerHTML = "";
+  if (!tours.length){
+    list.innerHTML = `<div class="hint">No tours loaded.</div>`;
+    return;
+  }
+  for (const t of tours){
+    const row = document.createElement("div");
+    row.className = "tour" + (selectedTour === t ? " sel" : "");
+    const cat = String(t.row.CATEGORY||"").trim().toUpperCase();
+    const color = CATEGORIES[cat]?.color || "#E47303";
+    row.innerHTML =
+      `<span class="sw" style="background:${ownLine(t) ? routeColor(t) : color}"></span>` +
+      `<span class="name">${esc(t.row.TITLE || t.row.TOUR_ID || "(unnamed)")}</span>` +
+      `<span class="cnt">${String(t.row.TYPE||"").toLowerCase() === "line" ? "line" : String(t.row.TYPE||"").toLowerCase() === "trail" ? "trail " + t.stops.length : t.stops.length}</span>`;
+    row.onclick = () => { selectedTour = t; selectedStop = null; render(); };
+    list.appendChild(row);
+  }
+}
+
+/* ---------- tour line on the map ---------- */
+
+function renderTourLine(){
+  const src = map.getSource("tour-line");
+  if (!selectedTour || selectedTour.stops.length < 2 || routeIds(selectedTour).length){   // a drawn route replaces the straight dashed line
+    if (src) src.setData({ type:"Feature", geometry:{ type:"LineString", coordinates: [] } });
+    else {
+      map.addSource("tour-line", { type:"geojson", data:{ type:"Feature", geometry:{ type:"LineString", coordinates: [] } } });
+      map.addLayer({
+        id:"tour-line", type:"line", source:"tour-line",
+        layout:{ "line-cap":"round","line-join":"round" },
+        paint:{ "line-color":"#D55E00","line-width":4,"line-opacity":0.75,"line-dasharray":[2,1.5] }
+      });
+    }
+    return;
+  }
+  const coords = selectedTour.stops.map(s => {
+    const it = findItem(s.ITEM_ID);
+    return it && it.ll ? it.ll : null;
+  }).filter(Boolean);
+
+  const data = { type:"Feature", geometry:{ type:"LineString", coordinates: coords } };
+  if (src) src.setData(data);
+  else {
+    map.addSource("tour-line", { type:"geojson", data });
+    map.addLayer({
+      id:"tour-line", type:"line", source:"tour-line",
+      layout:{ "line-cap":"round","line-join":"round" },
+      paint:{ "line-color":"#D55E00","line-width":4,"line-opacity":0.75,"line-dasharray":[2,1.5] }
+    });
+  }
+}
+
+/* ============================================================
+   Right panel — tour form
+   ============================================================ */
+
+function renderForm(){
+  const box = $("form");
+  if (!selectedTour){
+    box.innerHTML = `<div class="empty">No tour selected.<br><br>Choose one on the left, or click <kbd>＋ New</kbd>.</div>`;
+    return;
+  }
+  const r = selectedTour.row;
+  const cat = String(r.CATEGORY||"").trim().toUpperCase() || DEFAULT_CAT;
+
+  box.innerHTML = `
+    <div class="form">
+      <div class="field">
+        <label>TOUR_ID</label>
+        <input type="text" id="f-TOUR_ID" value="${esc(r.TOUR_ID||"")}">
+        <div class="sub">Changing this breaks references from tourstops.csv.</div>
+      </div>
+      <div class="field">
+        <label>Title</label>
+        <input type="text" id="f-TITLE" value="${esc(r.TITLE||"")}">
+      </div>
+      <div class="field">
+        <label>Intro</label>
+        <textarea id="f-INTRO">${esc(r.INTRO||"")}</textarea>
+      </div>
+      <div class="field">
+        <label>Short description (for the visitor's tour list)</label>
+        <input type="text" id="f-SUMMARY" value="${esc(r.SUMMARY||"")}">
+        <div class="sub">One line. Leave blank to use the intro.</div>
+      </div>
+      <div class="field">
+        <label>Effort</label>
+        <select id="f-EFFORT">${["", "Easy", "Moderate", "Strenuous"].map(v => `<option value="${v}" ${String(r.EFFORT||"")===v?"selected":""}>${v || "(not set)"}</option>`).join("")}</select>
+      </div>
+      <div class="field">
+        <label>How long it takes (minutes)</label>
+        <input type="number" id="f-MINUTES" min="1" value="${esc(r.MINUTES||"")}">
+        <div class="sub" id="minHint"></div>
+      </div>
+      <div class="field">
+        <label style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="f-FEATURED" ${/^(y|yes|true|1)$/i.test(String(r.FEATURED||"").trim())?"checked":""}> Feature this on the welcome screen and in the Events panel</label>
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <div class="catrow">
+          <select id="f-CATEGORY">
+            ${Object.entries(CATEGORIES).map(([k,v]) =>
+              `<option value="${k}" ${k===cat?"selected":""}>${k} — ${esc(v.label)}</option>`).join("")}
+          </select>
+          <span class="sw" id="catSw" style="background:${CATEGORIES[cat]?.color||'#E47303'}"></span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Type</label>
+        <select id="f-TYPE"><option value="tour" ${String(r.TYPE||"tour").toLowerCase()==="tour"?"selected":""}>Tour: ordered stops on your places and spots</option><option value="trail" ${String(r.TYPE||"").toLowerCase()==="trail"?"selected":""}>Trail: join anywhere, stops are optional</option><option value="line" ${String(r.TYPE||"").toLowerCase()==="line"?"selected":""}>Map Line: drawn on the map only, not listed for visitors</option></select>
+        <div class="sub">A tour follows numbered stops that sit on your places and spots, and starts on a marker. A trail is a route people can join anywhere, and its stops are optional. A map line (a canal, an old railroad) is just drawn on the map.</div>
+      </div>
+      <div class="field">
+        <label>How People Travel It</label>
+        <div id="modeBox">${MODES.map(([k,t,d]) => `<label style="display:block;font-weight:normal;text-transform:none;letter-spacing:0;font-size:13px;margin:3px 0;color:var(--ink)"><input type="checkbox" data-mode="${k}" ${String(r.MODES||"").toLowerCase().split(/[|;,]/).map(s=>s.trim()).includes(k)?"checked":""}> <b>${t}</b>: ${d}</label>`).join("")}</div>
+        <div class="sub">Tick every way it can be done.</div>
+      </div>
+
+      <div class="field">
+        <label>Route (Lines the Tour Follows)</label>
+        <div class="sub" id="routeInfo"></div>
+        <div id="routeStyle"></div>
+        <div id="routeBox"><div class="sub">Loading lines…</div></div>
+        <div class="sub">Tick the lines from Lines and Trails that this tour travels along. The vehicle follows them between stops. To change a line, open <a href="lines.html" target="_blank">Lines and Trails</a>, edit it there and publish. This tour picks up the new shape on its own.</div>
+      </div>
+
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label>Stops (${selectedTour.stops.length})</label>
+        <div class="stops" id="stopList">
+          ${selectedTour.stops.map((s, i) => stopRowHtml(s, i)).join("")}
+          <div class="stop add" id="addStopRow">＋ Add stop</div>
+        </div>
+      </div>
+
+      ${selectedStop ? stopEditHtml(selectedStop, selectedTour.stops.indexOf(selectedStop)) : ""}
+
+      <div class="actions">
+        <button id="dupTour" class="small">Duplicate tour</button>
+        <span class="grow"></span>
+        <button id="delTour" class="small warn">Delete tour</button>
+      </div>
+    </div>
+  `;
+
+  // basic field wiring
+  bindText(box, "f-TOUR_ID",  v => { r.TOUR_ID = v; renderTourList(); });
+  bindText(box, "f-TITLE",    v => { r.TITLE = v; renderTourList(); });
+  bindText(box, "f-INTRO",    v => { r.INTRO = v; });
+  bindText(box, "f-SUMMARY",  v => { r.SUMMARY = v; });
+  bindText(box, "f-MINUTES",  v => { r.MINUTES = v; minHint(); });
+  box.querySelector("#f-EFFORT").onchange = e => { r.EFFORT = e.target.value; };
+  box.querySelector("#f-FEATURED").onchange = e => { r.FEATURED = e.target.checked ? "yes" : ""; };
+  function minHint() {   // what visitors will see when this is left blank
+    const est = TourInfo.minutes({ type: r.TYPE, modes: r.MODES, length: parseFloat(r.LENGTH_MI) || 0, stops: selectedTour ? selectedTour.stops : [] });
+    box.querySelector("#minHint").textContent = r.MINUTES ? "Visitors will see " + TourInfo.duration(+r.MINUTES) + "." : (est ? "Left blank, visitors will see about " + TourInfo.duration(est) + ", worked out from the route length and how people travel it." : "Left blank, visitors will see no time. Add a route and a way to travel, or type minutes.");
+  }
+  minHint();
+  routePicker(box, r);
+  updateRouteInfo();
+  routeStyle(box, selectedTour);
+  box.querySelector("#f-TYPE").onchange = e => { r.TYPE = e.target.value; };
+  box.querySelectorAll("#modeBox input[data-mode]").forEach(cb => cb.onchange = () => {
+    r.MODES = [...box.querySelectorAll("#modeBox input[data-mode]")].filter(x => x.checked).map(x => x.dataset.mode).join("|");
+  });
+  box.querySelector("#f-CATEGORY").onchange = e => {
+    r.CATEGORY = e.target.value;
+    box.querySelector("#catSw").style.background = CATEGORIES[r.CATEGORY]?.color || "#E47303";
+    renderTourList();
+  };
+
+  box.querySelector("#dupTour").onclick = () => {
+    const nr = Object.assign({}, r);
+    nr.TOUR_ID = r.TOUR_ID + "-copy-" + uid().slice(0,4);
+    nr.TITLE = (r.TITLE||"") + " (copy)";
+    const n = { row: nr, stops: [] };
+    tours.push(n);
+    selectedTour = n;
+    render();
+    toast("Duplicated as " + nr.TOUR_ID);
+  };
+
+  box.querySelector("#delTour").onclick = () => {
+    if (!confirm(`Delete "${r.TITLE||r.TOUR_ID}" and its ${selectedTour.stops.length} stops?`)) return;
+    tours = tours.filter(x => x !== selectedTour);
+    selectedTour = null; selectedStop = null;
+    render();
+  };
+
+  // stop list wiring
+  box.querySelectorAll(".stop[data-idx]").forEach(el => {
+    const idx = +el.dataset.idx;
+    const stop = selectedTour.stops[idx];
+
+    el.addEventListener("click", e => {
+      if (e.target.closest("[data-remove]")) return;
+      selectedStop = stop;
+      renderForm();
+    });
+
+    const removeBtn = el.querySelector("[data-remove]");
+    if (removeBtn){
+      removeBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        selectedTour.stops.splice(idx, 1);
+        renumber(selectedTour);
+        selectedStop = null;
+        render();
+      });
+    }
+
+    el.addEventListener("dragstart", e => {
+      draggingStop = { tour: selectedTour, from: idx };
+      el.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    el.addEventListener("dragend", () => {
+      el.classList.remove("dragging");
+      document.querySelectorAll(".stop").forEach(x => x.classList.remove("drop-before","drop-after"));
+      draggingStop = null;
+    });
+    el.addEventListener("dragover", e => {
+      if (!draggingStop || draggingStop.tour !== selectedTour) return;
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      el.classList.toggle("drop-before", before);
+      el.classList.toggle("drop-after", !before);
+    });
+    el.addEventListener("dragleave", () => {
+      el.classList.remove("drop-before","drop-after");
+    });
+    el.addEventListener("drop", e => {
+      e.preventDefault();
+      if (!draggingStop || draggingStop.tour !== selectedTour) return;
+      const rect = el.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      let to = before ? idx : idx + 1;
+      const from = draggingStop.from;
+      const [moved] = selectedTour.stops.splice(from, 1);
+      if (from < to) to--;
+      selectedTour.stops.splice(to, 0, moved);
+      renumber(selectedTour);
+      render();
+    });
+  });
+
+  const addBtn = box.querySelector("#addStopRow");
+  if (addBtn){
+    addBtn.addEventListener("click", () => {
+      const row = {
+        TOUR_ID: r.TOUR_ID,
+        STEP: String(selectedTour.stops.length + 1),
+        ITEM_ID: "",
+        NOTE: "",
+        VEHICLE: "CAR"
+      };
+      headers.stop.forEach(h => { if (!(h in row)) row[h] = ""; });
+      selectedTour.stops.push(row);
+      selectedStop = row;
+      render();
+    });
+  }
+
+  // stop edit form
+  if (selectedStop){
+    const idx = selectedTour.stops.indexOf(selectedStop);
+    const sBox = box.querySelector(".stop-edit");
+    if (sBox){
+      const itemField = sBox.querySelector("#s-ITEM_ID");
+      if (itemField) itemField.onchange = e => { selectedStop.ITEM_ID = e.target.value; render(); };
+      const veh = sBox.querySelector("#s-VEHICLE");
+      if (veh) veh.onchange = e => { selectedStop.VEHICLE = e.target.value; renderForm(); };
+      bindText(sBox, "s-NOTE", v => { selectedStop.NOTE = v; });
+    }
+  }
+}
+
+function stopRowHtml(s, i){
+  const item = findItem(s.ITEM_ID);
+  const orphan = s.ITEM_ID && !item;
+  const color = orphan ? "#a33" : "#4a5568";
+  return `
+    <div class="stop ${orphan?"orphan":""} ${selectedStop===s?"sel":""}" data-idx="${i}" draggable="true">
+      <span class="step">${i+1}</span>
+      <span class="title">${esc(item ? item.name : (s.ITEM_ID || "(empty)"))}<small>${esc(item ? item.id : (orphan ? "unmatched ITEM_ID" : "not set"))}</small></span>
+      <span class="veh" style="color:${color}">${esc(s.VEHICLE||"—")}</span>
+      <button class="mini" data-remove title="Remove this stop">✕</button>
+    </div>
+  `;
+}
+
+function stopEditHtml(s, idx){
+  const itemFieldId = "s-ITEM_ID";
+  const current = s.ITEM_ID || "";
+  // group items by source for readability
+  const grouped = {
+    "Locations": items.filter(i => i.source === "locations"),
+    "Children":  items.filter(i => i.source === "childmarkers"),
+    "Spots & Stories": items.filter(i => i.source === "spots")
+  };
+  return `
+    <div class="stop-edit">
+      <div style="font-weight:600;font-size:12px;color:#4a5568;margin-bottom:6px">Stop ${idx+1} of ${selectedTour.stops.length}</div>
+      <div class="field">
+        <label>Item (points to a location, child, or spot/story)</label>
+        <select id="${itemFieldId}">
+          <option value="">— choose —</option>
+          ${Object.entries(grouped).map(([label, list]) => {
+            if (!list.length) return "";
+            return `<optgroup label="${label}">
+              ${list.map(i => `<option value="${esc(i.id)}" ${key(i.id)===key(current)?"selected":""}>${esc(i.id)} — ${esc(i.name)}</option>`).join("")}
+            </optgroup>`;
+          }).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Note (narration, shown under the title)</label>
+        <input type="text" id="s-NOTE" value="${esc(s.NOTE||"")}">
+      </div>
+      <div class="field">
+        <label>Vehicle for the leg <em>arriving at</em> this stop</label>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+          ${VEHICLES.map(v => `
+            <label style="display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid ${s.VEHICLE===v?'#9dbde3':'#eef1f5'};border-radius:6px;padding:6px 8px;cursor:pointer;background:${s.VEHICLE===v?'#e6effa':'#fff'};flex:1">
+              <input type="radio" name="veh" value="${v}" ${s.VEHICLE===v?"checked":""} style="display:none" onchange="document.getElementById('s-VEHICLE').value='${v}';document.getElementById('s-VEHICLE').dispatchEvent(new Event('change'))">
+              <span style="pointer-events:none">${VEHICLE_SVG[v]}</span>
+              <b style="font-size:10px;color:#4a5568;text-transform:uppercase;letter-spacing:.05em">${v}</b>
+            </label>
+          `).join("")}
+          <select id="s-VEHICLE" style="display:none">
+            ${VEHICLES.map(v => `<option value="${v}" ${s.VEHICLE===v?"selected":""}>${v}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renumber(t){
+  t.stops.forEach((s, i) => { s.STEP = String(i + 1); });
+}
+
+let LINES_P = null;   // lines.geojson, read once
+function routePicker(box, r) {
+  const holder = box.querySelector("#routeBox"); if (!holder) return;
+  linesReady.then(() => linesDoc).then(g => {
+    const lines = ((g && g.features) || []).filter(f => f.geometry && f.geometry.coordinates.length >= 2 && f.properties.ID !== ownId(selectedTour));
+    if (!lines.length) { holder.innerHTML = '<div class="sub">No other lines to pick. Press Draw Route above the map to draw this tour\'s own route, or add shared lines in Lines and Trails.</div>'; return; }
+    const want = () => String(r.ROUTE || "").split(/[|;,]/).map(s => s.trim()).filter(Boolean);
+    holder.innerHTML = "";
+    lines.forEach(f => {
+      const p = f.properties || {}, id = String(p.ID || ""), lab = document.createElement("label");
+      lab.style.cssText = "display:block;font-weight:normal;margin:3px 0";
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = want().includes(id);
+      cb.onchange = () => { const ids = want().filter(x => x !== id); if (cb.checked) ids.push(id); r.ROUTE = ids.join("|"); renderTourLine(); updateRouteInfo(); };
+      lab.append(cb, " " + (p.NAME || id) + " (" + (p.STYLE || "solid") + ")");
+      holder.append(lab);
+    });
+  });
+}
+function bindText(scope, id, onInput){
+  const el = scope.querySelector("#" + CSS.escape(id));
+  if (!el) return;
+  el.oninput = () => onInput(el.value);
+}
+
+/* ============================================================
+   Add tour
+   ============================================================ */
+
+function newRoute(type){   // "tour" starts on a marker; "trail" can start anywhere. Either way you go straight into drawing.
+  if (!loaded.tours) return toast("Load tours.csv first.");
+  const prefix = type === "trail" ? "TRAIL-" : type === "line" ? "LINE-" : "TOUR-";
+  const existing = tours.map(t => String(t.row.TOUR_ID||"").trim()).filter(Boolean);
+  let n = 1, id;
+  do { id = prefix + String(n).padStart(3,"0"); n++; } while (existing.some(x => key(x) === key(id)));
+
+  const row = { TOUR_ID:id, TITLE:type === "trail" ? "New Trail" : type === "line" ? "New Map Line" : "New Tour", INTRO:"", CATEGORY: DEFAULT_CAT, TYPE:type };
+  headers.tour.forEach(h => { if (!(h in row)) row[h] = ""; });
+
+  const t = { row, stops: [] };
+  tours.push(t);
+  selectedTour = t;
+  selectedStop = null;
+  render();
+  setDrawMode(true);
+}
+$("addTour").onclick = () => newRoute("tour");
+$("addTrail").onclick = () => newRoute("trail");
+$("addLine").onclick = () => newRoute("line");
+
+/* ============================================================
+   Preview playback
+   ============================================================ */
+
+/* ============================================================
+   Routes: lines drawn for a tour (or picked from Lines and Trails)
+   ============================================================ */
+let linesDoc = { type:"FeatureCollection", features:[] }, linesDirty = false, drawMode = false, routeMarks = [];
+const linesReady = fetch("lines.geojson", { cache:"no-store" }).then(r => r.ok ? r.json() : null)
+  .then(g => { if (g && g.features) linesDoc = g; linesDoc.features.forEach(f => { f.properties = f.properties || {}; }); }).catch(() => {});
+const SPEEDS = { walk:3, hike:2, bike:10, drive:30 };   // miles per hour, for the time estimates
+const ownId = t => "R-" + t.row.TOUR_ID;
+const routeColor = t => (ownLine(t) && ownLine(t).properties.COLOR) || (CATEGORIES[String(t.row.CATEGORY || "").trim().toUpperCase()] || {}).color || "#D55E00";
+const ownLine = t => linesDoc.features.find(f => f.properties.ID === ownId(t));
+const routeIds = t => String(t.row.ROUTE || "").split(/[|;,]/).map(s => s.trim()).filter(Boolean);
+const cleanLines = () => ({ type:"FeatureCollection", features:linesDoc.features.filter(f => f.geometry && f.geometry.coordinates.length >= 2) });
+function routeCoords(t){ return routeIds(t).map(id => linesDoc.features.find(f => f.properties.ID === id)).filter(f => f && f.geometry.coordinates.length >= 2).map(f => f.geometry.coordinates); }
+function ensureOwn(t){
+  let f = ownLine(t);
+  if (!f){ f = { type:"Feature", properties:{ ID:ownId(t), NAME:t.row.TITLE || t.row.TOUR_ID, STYLE:"solid", COLOR:"#D55E00", WIDTH:4, OPACITY:1, TOUR_ID:t.row.TOUR_ID }, geometry:{ type:"LineString", coordinates:[] } }; linesDoc.features.push(f); }
+  return f;
+}
+function looseLines(){   // lines from the old Lines and Trails editor that no tour or trail owns
+  const used = new Set(); tours.forEach(t => routeIds(t).forEach(id => used.add(id)));
+  return linesDoc.features.filter(f => f.geometry && f.geometry.coordinates.length >= 2 && !used.has(f.properties.ID) && !tours.some(t => ownId(t) === f.properties.ID));   // includes lines left behind by a deleted tour
+}
+function updateAdopt(){
+  const b = document.getElementById("adoptBtn"); if (!b) return;
+  const n = looseLines().length; b.hidden = !n; b.textContent = "Bring In " + n + " Old Line" + (n === 1 ? "" : "s");
+}
+document.getElementById("adoptBtn").onclick = () => {
+  const loose = looseLines(); if (!loose.length) return;
+  loose.forEach(f => {
+    const taken = tours.map(t => String(t.row.TOUR_ID || "")); let n = 1, id;
+    do { id = "LINE-" + String(n++).padStart(3, "0"); } while (taken.some(x => key(x) === key(id)));
+    const row = { TOUR_ID:id, TITLE:f.properties.NAME || "Map Line", INTRO:"", CATEGORY:DEFAULT_CAT, TYPE:"line", ROUTE:"R-" + id };
+    headers.tour.forEach(h => { if (!(h in row)) row[h] = ""; });
+    f.properties.ID = "R-" + id; f.properties.TOUR_ID = id;
+    tours.push({ row, stops:[] });
+  });
+  linesDirty = true; $("publishBtn").disabled = false; renderLines(); render(); toast(loose.length + " old line(s) are now Map Lines in this list.");
+};
+function renderLines(){ const s = map.getSource("lines"); if (s) s.setData(cleanLines()); }
+function touchLines(){   // the tour's own line changed: keep its ROUTE link in step and redraw everything that shows it
+  linesDirty = true;
+  const t = selectedTour, f = ownLine(t), ids = routeIds(t).filter(x => x !== ownId(t));
+  if (f && f.geometry.coordinates.length >= 2) ids.push(ownId(t));
+  t.row.ROUTE = ids.join("|");
+  renderLines(); renderTourLine(); drawRouteMarks(); updateRouteInfo(); updateToolButtons(); $("publishBtn").disabled = false;
+  if (!document.querySelector("#routeStyle input")) routeStyle(document.getElementById("form"), t);
+}
+function lineMiles(c){ let m = 0; for (let i = 0; i < c.length - 1; i++){ const k = Math.cos(c[i][1] * Math.PI / 180); m += Math.hypot((c[i+1][0] - c[i][0]) * k, c[i+1][1] - c[i][1]) * 69.17; } return m; }
+function fmtMin(m){ m = Math.max(1, Math.round(m)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60 ? (m % 60) + " min" : ""); }
+function updateRouteInfo(){
+  const box = document.getElementById("routeInfo"); if (!box || !selectedTour) return;
+  const t = selectedTour, miles = routeCoords(t).reduce((a, c) => a + lineMiles(c), 0);
+  if (!miles){ box.textContent = "No route yet. Press Draw Route above the map, or tick a line below."; t.row.LENGTH_MI = ""; return; }
+  t.row.LENGTH_MI = (Math.round(miles * 10) / 10).toString();
+  const modes = String(t.row.MODES || "").toLowerCase().split(/[|;,]/).map(s => s.trim()).filter(m => SPEEDS[m]);
+  box.textContent = "About " + t.row.LENGTH_MI + " miles" + (modes.length ? ": " + modes.map(m => m + " " + fmtMin(miles / SPEEDS[m] * 60)).join(", ") : "") + ".";
+}
+const ROUTE_DEFAULTS = { solid:{ OPACITY:1, WIDTH:4 }, dashed:{ OPACITY:1, WIDTH:4 }, rail:{ OPACITY:0.25, WIDTH:16 } };
+function routeStyle(box, t){   // line style, color and thickness for this tour's own route, right in the tour panel
+  const holder = box.querySelector("#routeStyle"); if (!holder) return;
+  const f = ownLine(t); holder.textContent = "";
+  if (!f || f.geometry.coordinates.length < 2) return;
+  const p = f.properties, put = (k, v) => { p[k] = v; linesDirty = true; $("publishBtn").disabled = false; renderLines(); renderMapMarkers(); };
+  const add = (label, input) => { const l = document.createElement("label"); l.textContent = label; holder.append(l, input); };
+  const sel = document.createElement("select");
+  [["solid", "Solid Line"], ["dashed", "Dashed Line"], ["rail", "Rail (Two Lines With a Band)"]].forEach(([v, n]) => { const o = document.createElement("option"); o.value = v; o.textContent = n; o.selected = (p.STYLE || "solid") === v; sel.append(o); });
+  sel.onchange = () => { Object.assign(p, ROUTE_DEFAULTS[sel.value]); put("STYLE", sel.value); routeStyle(box, t); };
+  add("Route Line Style", sel);
+  const col = document.createElement("input"); col.type = "color"; col.value = p.COLOR || "#D55E00"; col.oninput = () => put("COLOR", col.value); add("Route Color (Also Outlines Its Stops)", col);
+  const w = document.createElement("input"); w.type = "range"; w.min = 1; w.max = 40; w.value = p.WIDTH || 4; w.oninput = () => put("WIDTH", +w.value); add(p.STYLE === "rail" ? "Width of the Whole Trail" : "Thickness", w);
+  const o = document.createElement("input"); o.type = "range"; o.min = 0.05; o.max = 1; o.step = 0.05; o.value = p.OPACITY == null ? 1 : p.OPACITY; o.oninput = () => put("OPACITY", +o.value); add(p.STYLE === "rail" ? "Opacity of the Band" : "Opacity", o);
+}
+function drawRouteMarks(){   // dragging handles for the tour's own line while Draw Route is on
+  routeMarks.forEach(m => m.remove()); routeMarks = [];
+  if (!drawMode || !selectedTour) return;
+  const f = ownLine(selectedTour); if (!f) return;
+  const c = f.geometry.coordinates, atItem = p => items.some(i => i.ll && Math.abs(i.ll[0] - p[0]) < 1e-6 && Math.abs(i.ll[1] - p[1]) < 1e-6);
+  const mk = (pos, cls, drag, dbl, click) => {
+    const e = document.createElement("div"); e.className = cls;
+    e.addEventListener("dblclick", ev => { ev.stopPropagation(); if (dbl) dbl(); });
+    e.addEventListener("click", ev => { ev.stopPropagation(); if (click) click(); });
+    const m = new maplibregl.Marker({ element:e, draggable:!!drag }).setLngLat(pos).addTo(map);
+    if (drag) m.on("dragend", () => { const p = m.getLngLat(); drag([+p.lng.toFixed(6), +p.lat.toFixed(6)]); });
+    routeMarks.push(m);
+  };
+  c.forEach((p, i) => { if (!atItem(p)) mk(p, "vtx", q => { c[i] = q; touchLines(); }, () => { c.splice(i, 1); touchLines(); }); });
+  for (let i = 0; i < c.length - 1; i++){ const mid = [(c[i][0] + c[i+1][0]) / 2, (c[i][1] + c[i+1][1]) / 2]; mk(mid, "mid", null, null, () => { c.splice(i + 1, 0, mid); touchLines(); }); }
+}
+function defaultVehicle(t){   // the first mode ticked decides: walk or hike = walker, bike = bicycle, drive = car
+  const m = String(t.row.MODES || "").toLowerCase().split(/[|;,]/).map(s => s.trim());
+  for (const k of ["walk", "hike", "bike", "drive"]) if (m.includes(k)) return { walk:"WALK", hike:"WALK", bike:"BIKE", drive:"CAR" }[k];
+  return "CAR";
+}
+function addStopFromMarker(item){   // Draw Route is on and a marker was clicked: it becomes a stop and the line passes through it
+  const t = selectedTour;
+  if (!t.stops.some(s => key(s.ITEM_ID) === key(item.id))){
+    const prev = t.stops[t.stops.length - 1], row = { TOUR_ID:t.row.TOUR_ID, STEP:String(t.stops.length + 1), ITEM_ID:item.id, NOTE:"", VEHICLE:(prev && prev.VEHICLE) || defaultVehicle(t) };
+    headers.stop.forEach(h => { if (!(h in row)) row[h] = ""; });
+    t.stops.push(row); selectedStop = row;
+  }
+  ensureOwn(t).geometry.coordinates.push(item.ll.slice());
+  touchLines(); render();
+}
+map.on("load", async () => {
+  await linesReady;
+  map.addSource("lines", { type:"geojson", data:cleanLines() });
+  ETSLines.add(map, "lines");
+  renderTourLine();
+});
+map.on("click", e => {
+  if (e.originalEvent.target.closest(".maplibregl-marker")) return;
+  if (!drawMode) {   // not drawing: clicking a route on the map opens its tour, trail or line
+    const b = [[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]];
+    const hit = map.queryRenderedFeatures(b, { layers:ETSLines.layers("lines").filter(l => map.getLayer(l)) })[0];
+    if (hit){
+      const id = hit.properties.ID, t = tours.find(x => ownId(x) === id) || tours.find(x => routeIds(x).includes(id));
+      if (t){ selectedTour = t; selectedStop = null; render(); toast("Opened: " + (t.row.TITLE || t.row.TOUR_ID)); }
+    }
+    return;
+  }
+  if (!selectedTour) return;   // Draw Route: clicking empty ground adds a point to the tour's line
+  if (String(selectedTour.row.TYPE || "tour").toLowerCase() === "tour" && !selectedTour.stops.length){ toast("A tour starts on a marker. Click a marker first."); return; }
+  ensureOwn(selectedTour).geometry.coordinates.push([+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)]);
+  touchLines();
+});
+function setDrawMode(on){
+  drawMode = !!on && !!selectedTour;
+  const b = $("drawBtn"); b.textContent = drawMode ? "✔ Done Drawing" : "✎ Draw Route"; b.classList.toggle("on", drawMode);
+  map.getCanvas().style.cursor = drawMode ? "crosshair" : "";
+  if (drawMode) toast(String(selectedTour.row.TYPE || "tour").toLowerCase() === "tour" ? "Click the starting marker, then click the map to draw. Click a marker to add it as a stop." : "Click the map to draw. Double-click the last point or press Done Drawing when you finish.");
+  drawRouteMarks();
+}
+$("drawBtn").onclick = () => setDrawMode(!drawMode);
+$("undoBtn").onclick = () => { const f = selectedTour && ownLine(selectedTour); if (f && f.geometry.coordinates.length){ f.geometry.coordinates.pop(); touchLines(); } };
+$("clearRouteBtn").onclick = () => {
+  const f = selectedTour && ownLine(selectedTour);
+  if (f && f.geometry.coordinates.length && confirm("Clear this route's line? The stops stay.")){ f.geometry.coordinates = []; touchLines(); }
+};
+$("aerialBtn").onclick = () => {
+  const on = map.getLayoutProperty("aerial", "visibility") === "none";
+  ["aerial", "indiana"].forEach(l => map.setLayoutProperty(l, "visibility", on ? "visible" : "none"));
+  $("aerialBtn").textContent = on ? "Street Map" : "Aerial View";
+};
+
+/* Preview / path helpers (the same ones the live page uses) */
+function nearOnLine(line, p){
+  const k = Math.cos(p[1] * Math.PI / 180); let best = null;
+  for (let i = 0; i < line.length - 1; i++){
+    const a = line[i], b = line[i + 1], dx = (b[0] - a[0]) * k, dy = b[1] - a[1], L = dx * dx + dy * dy;
+    const t = L ? Math.max(0, Math.min(1, ((p[0] - a[0]) * k * dx + (p[1] - a[1]) * dy) / L)) : 0;
+    const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t, d = Math.hypot((p[0] - x) * k, p[1] - y) * 111320;
+    if (!best || d < best.d) best = { i, t, d, pt:[x, y] };
+  }
+  return best;
+}
+function legPath(lines, from, to){
+  let best = null;
+  const tol = lines.length === 1 ? Infinity : 600;   // a tour with one route always follows it, even if a stop sits a little off the line
+  lines.forEach(l => { const a = nearOnLine(l, from), b = nearOnLine(l, to); if (a.d < tol && b.d < tol && (!best || a.d + b.d < best.s)) best = { l, a, b, s:a.d + b.d }; });
+  if (!best) return null;
+  const fwd = best.a.i < best.b.i || (best.a.i === best.b.i && best.a.t <= best.b.t), s = fwd ? best.a : best.b, e = fwd ? best.b : best.a;
+  const path = [s.pt].concat(best.l.slice(s.i + 1, e.i + 1), [e.pt]);
+  return fwd ? path : path.reverse();
+}
+function pathInfo(path){
+  const k = Math.cos(path[0][1] * Math.PI / 180), seg = []; let total = 0;
+  for (let i = 0; i < path.length - 1; i++){ const d = Math.hypot((path[i+1][0] - path[i][0]) * k, path[i+1][1] - path[i][1]) * 111320; seg.push(d); total += d; }
+  return { path, seg, total };
+}
+function alongPath(P, t){
+  let want = t * P.total;
+  for (let i = 0; i < P.seg.length; i++){
+    if (want <= P.seg[i] || i === P.seg.length - 1){ const f = P.seg[i] ? Math.min(1, want / P.seg[i]) : 0, a = P.path[i], b = P.path[i + 1]; return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]; }
+    want -= P.seg[i];
+  }
+  return P.path[P.path.length - 1];
+}
+
+function travelTo(fromLl, toLl, vehicleKey, path){
+  return new Promise(resolve => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches || !vehicleKey){
+      map.easeTo({ center: toLl, duration: 400 });
+      setTimeout(resolve, 400);
+      return;
+    }
+    const v = VEHICLE_SVG[vehicleKey] ? vehicleKey : "TRAIN";
+    const wrap = document.createElement("div");
+    wrap.className = "travel-clip " + v.toLowerCase();
+    wrap.innerHTML = `
+      <div class="scene">
+        <div class="env" style="position:absolute;left:0;right:0;bottom:0;height:14px;background-repeat:repeat-x;background-size:60px 14px"></div>
+        <div class="vehicle" style="position:absolute;left:50%;bottom:10px;transform:translateX(-50%)">${VEHICLE_SVG[v]}</div>
+      </div>`;
+    Object.assign(wrap.style, { width:"88px", height:"56px", overflow:"hidden", pointerEvents:"none" });
+
+    const marker = new maplibregl.Marker({ element: wrap, anchor:"center" })
+      .setLngLat(fromLl).addTo(map);
+
+    const midZoom = Math.max(map.getZoom() - 0.3, 14.5);
+    map.jumpTo({ center: fromLl, zoom: midZoom });
+
+    const t0 = performance.now();
+    const P = path && path.length > 1 ? pathInfo(path) : null;   // follow the drawn route if there is one
+    const DURATION = P ? Math.min(4000, Math.max(1100, P.total * 3)) : 1100;
+
+    function frame(now){
+      const t = Math.min((now - t0) / DURATION, 1);
+      const pos = P ? alongPath(P, t) : [fromLl[0] + (toLl[0] - fromLl[0]) * t, fromLl[1] + (toLl[1] - fromLl[1]) * t];
+      const lng = pos[0], lat = pos[1];
+      marker.setLngLat([lng, lat]);
+      map.jumpTo({ center:[lng, lat] });
+
+      if (t < 1) requestAnimationFrame(frame);
+      else {
+        marker.remove();
+        map.easeTo({ center: toLl, zoom: 17, duration: 500 });
+        setTimeout(resolve, 500);
+      }
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+$("previewBtn").onclick = async () => {
+  if (!selectedTour || selectedTour.stops.length < 2){
+    toast("A tour needs at least 2 stops with coordinates.");
+    return;
+  }
+  if (playback){ toast("Preview already running."); return; }
+
+  const validStops = selectedTour.stops.filter(s => {
+    const it = findItem(s.ITEM_ID);
+    return it && it.ll;
+  });
+  if (validStops.length < 2){
+    toast("Not enough stops with valid coordinates.");
+    return;
+  }
+
+  playback = { tour: selectedTour, idx: 0, cancel: false };
+  $("playbar").classList.add("on");
+  $("playTot").textContent = String(validStops.length);
+  $("playIdx").textContent = "1";
+
+  // jump to first stop
+  map.easeTo({ center: validStops[0].ll ?? findItem(validStops[0].ITEM_ID).ll, zoom: 16 });
+  await sleep(600);
+
+  for (let i = 1; i < validStops.length; i++){
+    if (playback.cancel) break;
+    const fromIt = findItem(validStops[i-1].ITEM_ID);
+    const toIt   = findItem(validStops[i].ITEM_ID);
+    playback.idx = i;
+    $("playIdx").textContent = String(i + 1);
+    renderMapMarkers();
+    await travelTo(fromIt.ll, toIt.ll, validStops[i].VEHICLE || "CAR", legPath(routeCoords(selectedTour), fromIt.ll, toIt.ll));
+    if (playback.cancel) break;
+  }
+
+  // cleanup
+  $("playbar").classList.remove("on");
+  playback = null;
+  render();
+};
+
+$("clearBtn").onclick = () => {
+  selectedTour = null; selectedStop = null;
+  render();
+};
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+$("playClose").onclick = () => { if (playback) playback.cancel = true; };
+
+/* ============================================================
+   Publish
+   ============================================================ */
+
+$("publishBtn").onclick = () => {
+  // renumber every tour's stops to be safe
+  tours.forEach(t => renumber(t));
+
+  // Tours
+  const tourRows = tours.map(t => pick(t.row, headers.tour));
+  const toursCSV = Papa.unparse({ fields: headers.tour, data: tourRows });
+  download("tours.csv", toursCSV);
+
+  // Tourstops — flatten
+  const allStops = [];
+  for (const t of tours){
+    for (const s of t.stops){
+      // ensure TOUR_ID matches the tour even if user changed it
+      s.TOUR_ID = t.row.TOUR_ID;
+      allStops.push(pick(s, headers.stop));
+    }
+  }
+  const stopsCSV = Papa.unparse({ fields: headers.stop, data: allStops });
+  setTimeout(() => download("tourstops.csv", stopsCSV), 200);
+
+  if (linesDirty) setTimeout(() => download("lines.geojson", JSON.stringify(cleanLines(), null, 1)), 400);
+  toast(`Downloaded tours.csv (${tours.length}) and tourstops.csv (${allStops.length})` + (linesDirty ? " and lines.geojson" : ""));
+};
+
+function pick(row, cols){
+  const out = {};
+  for (const c of cols) out[c] = row[c] != null ? row[c] : "";
+  return out;
+}
+
+function download(name, text){
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ============================================================
+   Preview / clear button state
+   ============================================================ */
+
+function updateToolButtons(){
+  const has = selectedTour && selectedTour.stops.length >= 2 && !playback;
+  $("previewBtn").disabled = !has;
+  $("clearBtn").disabled = !selectedTour;
+  $("drawBtn").disabled = !selectedTour;
+  const own = selectedTour && ownLine(selectedTour), has2 = !!(own && own.geometry.coordinates.length);
+  $("undoBtn").disabled = !has2; $("clearRouteBtn").disabled = !has2;
+}
+
+/* Patch render to also update tool button state */
+const _origRender = render;
+render = function(){ _origRender.apply(this, arguments); updateToolButtons(); };
+
+/* ============================================================
+   Toast
+   ============================================================ */
+
+let toastTimer = 0;
+function toast(msg){
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2600);
+}
+</script>
+<script src="publish.js"></script>
+<script>GHPublish.attach({ buttons: ["publishBtn"] });</script>
+</body>
+</html>

@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Map Overlay Editor</title>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script src="editor-common.js"></script>
+<script>Workspace.block('The old-map overlays are shared by every event. Go back to the live site to edit them.');</script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+  :root{
+    --line:#d7dde5; --accent:#2b6cb0; --ink:#1a202c;
+    --bg:#eef1f5; --panel:#fff; --muted:#6b7280;
+    --ov:#8b1a1a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font:14px system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}
+
+  #top{position:absolute;z-index:20;top:0;left:0;right:0;height:52px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 12px}
+  #top h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+  #top .grow{flex:1}
+  #top .status{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
+  button{font:inherit;padding:6px 12px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;color:var(--ink)}
+  button:hover{background:#f6f8fb}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.primary:hover{background:#245a94}
+  button.warn{background:#fff5f5;border-color:#f3c2c2;color:#a33}
+  button.warn:hover{background:#ffecec}
+  button.small{padding:3px 8px;font-size:12px}
+  button.on{background:#e6effa;border-color:#9dbde3}
+
+  #layout{position:absolute;top:52px;left:0;right:0;bottom:0;display:grid;grid-template-columns:240px 1fr 320px}
+
+  #left{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding-bottom:20px}
+  .sec{padding:10px 14px 4px}
+  .sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:8px 0 6px;font-weight:600;display:flex;align-items:center;justify-content:space-between}
+  .sec h2 button{padding:3px 8px;font-size:11px}
+
+  .ov-row{display:flex;align-items:center;gap:8px;padding:8px 10px;margin:2px 6px;border-radius:6px;cursor:pointer;font-size:13px}
+  .ov-row:hover{background:#f4f7fb}
+  .ov-row.sel{background:#e6effa;font-weight:600}
+  .ov-row .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ov-row .meta{font-size:11px;color:var(--muted)}
+
+  .hint{padding:10px 14px;font-size:11px;line-height:1.55;color:var(--muted)}
+  .hint b{color:#333}
+  .hint kbd{font:11px ui-monospace,Menlo,monospace;background:#f1f3f7;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px}
+
+  #stage{position:relative;min-width:0}
+  #map{position:absolute;inset:0}
+
+  /* corner / edge / rotate handles */
+  .hnd{width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--accent);box-shadow:0 1px 4px #0005;cursor:grab;box-sizing:border-box}
+  .hnd:hover{background:#e6effa;transform:scale(1.12)}
+  .hnd.dragging{background:#cfe0f3;cursor:grabbing}
+  .hnd.edge{width:14px;height:14px;background:var(--ov);border-color:#fff;border-width:2.5px;border-radius:4px}
+  .hnd.edge:hover{background:#b03030}
+  .hnd.rotate{width:22px;height:22px;background:var(--accent);border-color:#fff;border-width:3px;cursor:grab}
+  .hnd.rotate:hover{background:#245a94;transform:scale(1.1)}
+
+  #tools{position:absolute;z-index:6;top:10px;left:10px;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 2px 8px #0001;padding:6px;display:flex;gap:6px;align-items:center}
+  #tools .lbl{font-size:11px;color:var(--muted);padding:0 6px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+
+  /* ---------- right panel ---------- */
+  #right{background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding-bottom:30px}
+  .empty{padding:24px 16px;color:#9aa3ad;font-size:13px;text-align:center;line-height:1.6}
+  .empty kbd{font:11px ui-monospace,Menlo,monospace;background:#f1f3f7;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px}
+
+  .form{padding:12px}
+  .field{margin-bottom:10px}
+  .field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:600}
+  .field input[type=text],.field textarea,.field select{
+    width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff;color:var(--ink)}
+  .field .sub{font-size:11px;color:var(--muted);margin-top:3px}
+
+  .preview{border:1px solid var(--line);border-radius:8px;background:#f1f3f7;padding:8px;margin-bottom:10px}
+  .preview img{display:block;max-width:100%;max-height:180px;margin:0 auto;border-radius:4px}
+
+  .coord{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:center;font-size:12px;margin:4px 0}
+  .coord b{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+  .coord input{padding:4px 6px;font:12px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:4px;width:100%}
+  .coord input:focus{outline:2px solid #cfe0f3;border-color:#9dbde3}
+
+  .divider{height:1px;background:var(--line);margin:14px 0}
+
+  .actions{margin-top:14px;display:flex;gap:6px;flex-wrap:wrap}
+  .actions .grow{flex:1}
+
+  #toast{position:fixed;z-index:100;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .18s, transform .18s;pointer-events:none;max-width:80vw;text-align:center}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left{z-index:6}
+</style>
+</head>
+<body>
+
+<div id="top">
+  <h1>Map Overlay Editor</h1>
+  <button id="pickFile">Pick overlays.json…</button>
+  <input id="fileInput" type="file" accept=".json,application/json" hidden>
+  <span class="status" id="status">Loading…</span>
+  <span class="grow"></span>
+  <button id="reloadBtn" title="Re-fetch from this folder">↻ Reload</button>
+  <button id="publishBtn" class="primary" disabled>Download overlays.json</button>
+</div>
+
+<div id="layout">
+  <aside id="left">
+    <div class="sec">
+      <h2>Overlays <button id="addOverlay" type="button">＋ New</button></h2>
+    </div>
+    <div id="ovList"></div>
+
+    <div class="sec"><h2>Tips</h2></div>
+    <div class="hint">
+      <p style="margin:0 0 6px"><b>Corners</b> (white) drag to shape.</p>
+      <p style="margin:0 0 6px"><b>Edges</b> (dark) drag to skew that side.</p>
+      <p style="margin:0 0 6px"><b>Rotate</b> (blue, above) drag to spin around the center.</p>
+      <p style="margin:0 0 6px"><b>Shift-drag</b> a corner for uniform scaling.</p>
+      <p style="margin:0 0 6px"><b>Arrow keys</b> nudge the selected handle (hold Shift for 10× step).</p>
+      <p style="margin:0"><b>Backspace</b> resets the selected corner.</p>
+      <p style="margin:6px 0 0">Lower the opacity slider to see the modern streets underneath while aligning.</p>
+    </div>
+  </aside>
+
+  <div id="stage">
+    <div id="map"></div>
+    <div id="tools">
+      <span class="lbl">Opacity</span>
+      <input id="op" type="range" min="0" max="100" value="70" style="width:140px">
+      <span id="opv" style="font-size:12px;color:#6b7280;min-width:34px;text-align:right">70%</span>
+      <button id="fitBtn" class="small">Fit image</button>
+      <button id="resetBtn" class="small warn">Reset</button>
+      <button id="hideBtn" class="small">Hide image</button>
+    </div>
+  </div>
+
+  <aside id="right">
+    <div id="form"><div class="empty">No overlay selected.<br><br>Pick one on the left, or click <kbd>＋ New</kbd>.</div></div>
+  </aside>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+<script>
+/* ============================================================
+  Map Overlay Editor
+   Aligns historical map images to real-world coordinates by
+   dragging the four corners of a quad on a MapLibre map.
+   ============================================================ */
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => Math.random().toString(36).slice(2,6);
+
+/* ---------- State ---------- */
+
+let overlays = [];         // [{name, url, coords:[[lng,lat] x 4]}]
+let selected = null;       // the overlay currently being edited
+let originalCoords = null; // for reset
+let hidden = false;
+
+let cornerMarkers = [];    // 4 maplibre markers for corners
+let edgeMarkers = [];      // 4 maplibre markers for edge midpoints
+let rotateMarker = null;
+let handleEls = [];        // for arrow-key nudging
+let activeHandle = null;   // {type:"corner"|"edge"|"rotate", idx, el}
+
+/* ---------- Map ---------- */
+
+const map = new maplibregl.Map({
+  container: "map",
+  style: {
+    version: 8,
+    sources: {
+      osm: {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }
+    },
+    layers: [{ id:"osm", type:"raster", source:"osm" }]
+  },
+  center: [-98.5795, 39.8283],
+  zoom: 4
+});
+if (window.ETSCommon) ETSCommon.applySiteView(map);
+map.addControl(new maplibregl.NavigationControl({ showCompass:false }), "bottom-right");
+map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+
+/* ============================================================
+   Loading
+   ============================================================ */
+
+$("pickFile").onclick = () => $("fileInput").click();
+$("fileInput").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => ingest(r.result, f.name);
+  r.readAsText(f);
+};
+
+(async () => {
+  try {
+    const res = await fetch("overlays.json", { cache:"no-store" });
+    if (res.ok) ingest(await res.text(), "overlays.json");
+    else setStatus("Click 'Pick overlays.json…' to begin");
+  } catch (e) {
+    setStatus("Click 'Pick overlays.json…' to begin");
+  }
+})();
+
+$("reloadBtn").onclick = async () => {
+  if (!confirm("Reload overlays.json from the server? Unsaved changes will be lost.")) return;
+  try {
+    const res = await fetch("overlays.json", { cache:"no-store" });
+    if (!res.ok) throw new Error(res.status + " " + res.statusText);
+    ingest(await res.text(), "overlays.json");
+    toast("Reloaded from server");
+  } catch (e) {
+    toast("Reload failed: " + e.message);
+  }
+};
+
+function ingest(text, filename){
+  let data;
+  try { data = JSON.parse(text); }
+  catch (e) { toast("Couldn't parse " + filename + ": " + e.message); return; }
+
+  // Accept three shapes:
+  // 1. Full array: [ {name, url, coords}, ... ]
+  // 2. Object with overlays: { overlays: [...] }
+  // 3. Single object: { name, url, coords }
+  let arr;
+  if (Array.isArray(data)) arr = data;
+  else if (data && Array.isArray(data.overlays)) arr = data.overlays;
+  else if (data && data.name && data.url && data.coords) arr = [data];
+  else { toast("Unrecognized format. Expected an array or {overlays:[...]}."); return; }
+
+  overlays = arr.map(o => ({
+    name: String(o.name || "Untitled"),
+    url: String(o.url || ""),
+    coords: normalizeCoords(o.coords)
+  })).filter(o => o.coords);
+
+  if (!overlays.length){ toast("No valid overlays found."); return; }
+
+  selected = overlays[0];
+  originalCoords = JSON.parse(JSON.stringify(selected.coords));
+  hidden = false;
+  $("publishBtn").disabled = false;
+  setStatus("Loaded " + filename + " · " + overlays.length + " overlay" + (overlays.length>1?"s":""));
+  render();
+  fitOverlay();
+}
+
+// ensure [ [lng,lat], [lng,lat], [lng,lat], [lng,lat] ]
+function normalizeCoords(c){
+  if (!Array.isArray(c) || c.length !== 4) return null;
+  const out = [];
+  for (const p of c){
+    if (!Array.isArray(p) || p.length < 2) return null;
+    const lng = parseFloat(p[0]), lat = parseFloat(p[1]);
+    if (isNaN(lng) || isNaN(lat)) return null;
+    out.push([lng, lat]);
+  }
+  return out;
+}
+
+function setStatus(s){ $("status").textContent = s; }
+
+/* ============================================================
+   Overlay image layer
+   ============================================================ */
+
+let srcReady = false;
+
+function ensureSource(){
+  if (!selected || !selected.coords) return;
+  const url = selected.url;
+  const coords = selected.coords;
+  const existing = map.getSource("ov");
+
+  // If the URL changed, we need to remove and re-add
+  if (existing && existing._url !== url){
+    if (map.getLayer("ov-layer")) map.removeLayer("ov-layer");
+    if (map.getSource("ov")) map.removeSource("ov");
+    srcReady = false;
+  }
+
+  if (!map.getSource("ov")){
+    map.addSource("ov", { type:"image", url, coordinates: coords });
+    map.addLayer({
+      id: "ov-layer",
+      type: "raster",
+      source: "ov",
+      paint: { "raster-opacity": hidden ? 0 : (+$("op").value / 100) }
+    });
+    map.getSource("ov")._url = url;
+    srcReady = true;
+  } else {
+    map.getSource("ov").setCoordinates(coords);
+    map.setPaintProperty("ov-layer", "raster-opacity", hidden ? 0 : (+$("op").value / 100));
+  }
+}
+
+function removeSource(){
+  if (map.getLayer("ov-layer")) map.removeLayer("ov-layer");
+  if (map.getSource("ov")) map.removeSource("ov");
+  srcReady = false;
+}
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+
+function render(){
+  renderList();
+  renderOverlay();
+  renderForm();
+  renderHandles();
+}
+
+function renderList(){
+  const list = $("ovList");
+  list.innerHTML = "";
+  if (!overlays.length){
+    list.innerHTML = `<div class="hint">No overlays loaded.</div>`;
+    return;
+  }
+  overlays.forEach((o, i) => {
+    const row = document.createElement("div");
+    row.className = "ov-row" + (selected === o ? " sel" : "");
+    row.innerHTML =
+      `<span class="name">${esc(o.name)}</span>` +
+      `<span class="meta">${esc(o.url.split("/").pop() || "")}</span>`;
+    row.onclick = () => {
+      if (selected !== o && selected){
+        // save current edits back (they already are, since we mutate in place)
+      }
+      selected = o;
+      originalCoords = JSON.parse(JSON.stringify(o.coords));
+      hidden = false;
+      removeSource();
+      render();
+      fitOverlay();
+    };
+    list.appendChild(row);
+  });
+}
+
+function renderOverlay(){
+  if (!selected || hidden){ removeSource(); return; }
+  ensureSource();
+}
+
+function renderHandles(){
+  // tear down
+  cornerMarkers.forEach(m => m.remove()); cornerMarkers = [];
+  edgeMarkers.forEach(m => m.remove());   edgeMarkers = [];
+  if (rotateMarker){ rotateMarker.remove(); rotateMarker = null; }
+  handleEls = [];
+
+  if (!selected || !selected.coords || hidden) return;
+
+  // corner handles (0-3)
+  for (let i = 0; i < 4; i++){
+    const el = document.createElement("div");
+    el.className = "hnd";
+    el.title = ["Top-left","Top-right","Bottom-right","Bottom-left"][i];
+    el.addEventListener("mousedown", () => setActive({type:"corner", idx:i, el}));
+    const marker = new maplibregl.Marker({ element: el, draggable: true })
+      .setLngLat(selected.coords[i]).addTo(map);
+
+    marker.on("dragstart", () => { el.classList.add("dragging"); setActive({type:"corner", idx:i, el}); });
+    marker.on("drag", () => {
+      const ll = marker.getLngLat();
+      selected.coords[i] = [ll.lng, ll.lat];
+      if (srcReady) map.getSource("ov").setCoordinates(selected.coords);
+      updateFormCoords();
+    });
+    marker.on("dragend", () => {
+      el.classList.remove("dragging");
+      selected.coords[i] = roundLL(selected.coords[i]);
+      marker.setLngLat(selected.coords[i]);
+      if (srcReady) map.getSource("ov").setCoordinates(selected.coords);
+      renderHandles();
+      updateFormCoords();
+    });
+    cornerMarkers.push(marker);
+    handleEls.push(el);
+  }
+
+  // edge midpoints (4): between corners 0-1, 1-2, 2-3, 3-0
+  const mids = [
+    mid(selected.coords[0], selected.coords[1]),
+    mid(selected.coords[1], selected.coords[2]),
+    mid(selected.coords[2], selected.coords[3]),
+    mid(selected.coords[3], selected.coords[0])
+  ];
+  for (let i = 0; i < 4; i++){
+    const el = document.createElement("div");
+    el.className = "hnd edge";
+    el.title = "Drag to skew this edge";
+    el.addEventListener("mousedown", () => setActive({type:"edge", idx:i, el}));
+    const marker = new maplibregl.Marker({ element: el, draggable: true })
+      .setLngLat(mids[i]).addTo(map);
+
+    marker.on("dragstart", () => { el.classList.add("dragging"); setActive({type:"edge", idx:i, el}); });
+    marker.on("drag", () => {
+      const ll = marker.getLngLat();
+      // move both corners of this edge by the same delta as the midpoint moved
+      const a = i, b = (i + 1) % 4;
+      const oldMid = mid(selected.coords[a], selected.coords[b]);
+      const dx = ll.lng - oldMid[0];
+      const dy = ll.lat - oldMid[1];
+      // we also need the offset from the very first drag position; simpler: track baseline
+      // use current positions + delta from midpoint's last position
+      selected.coords[a] = [selected.coords[a][0] + dx, selected.coords[a][1] + dy];
+      selected.coords[b] = [selected.coords[b][0] + dx, selected.coords[b][1] + dy];
+      // move marker back to true midpoint so it stays centered
+      const newMid = mid(selected.coords[a], selected.coords[b]);
+      marker.setLngLat(newMid);
+      if (srcReady) map.getSource("ov").setCoordinates(selected.coords);
+      updateFormCoords();
+    });
+    marker.on("dragend", () => {
+      el.classList.remove("dragging");
+      // snap everything to precision
+      for (let k = 0; k < 4; k++) selected.coords[k] = roundLL(selected.coords[k]);
+      if (srcReady) map.getSource("ov").setCoordinates(selected.coords);
+      renderHandles();
+      updateFormCoords();
+    });
+    edgeMarkers.push(marker);
+    handleEls.push(el);
+  }
+
+  // rotate handle above midpoint of top edge
+  const topMid = mid(selected.coords[0], selected.coords[1]);
+  const center = centroid(selected.coords);
+  const angle = Math.atan2(topMid[1] - center[1], topMid[0] - center[0]);
+  const rotRadius = 0.0009; // degrees-ish
+  const rotPos = [
+    topMid[0] + Math.cos(angle) * rotRadius * 1.2,
+    topMid[1] + Math.sin(angle) * rotRadius * 1.2
+  ];
+
+  const rotEl = document.createElement("div");
+  rotEl.className = "hnd rotate";
+  rotEl.title = "Drag to rotate";
+  const rotMarker = new maplibregl.Marker({ element: rotEl, draggable: true })
+    .setLngLat(rotPos).addTo(map);
+
+  rotMarker.on("dragstart", () => { rotEl.classList.add("dragging"); setActive({type:"rotate", el:rotEl}); });
+  rotMarker.on("drag", () => {
+    const ll = rotMarker.getLngLat();
+    const nowAngle = Math.atan2(ll.lat - center[1], ll.lng - center[0]);
+    const delta = nowAngle - angle;
+    const cos = Math.cos(delta), sin = Math.sin(delta);
+    for (let i = 0; i < 4; i++){
+      const dx = selected.coords[i][0] - center[0];
+      const dy = selected.coords[i][1] - center[1];
+      selected.coords[i] = [
+        center[0] + dx * cos - dy * sin,
+        center[1] + dx * sin + dy * cos
+      ];
+    }
+    if (srcReady) map.getSource("ov").setCoordinates(selected.coords);
+    // refresh corner/edge handle positions too
+    cornerMarkers.forEach((m, i) => m.setLngLat(selected.coords[i]));
+    const mids2 = [
+      mid(selected.coords[0], selected.coords[1]),
+      mid(selected.coords[1], selected.coords[2]),
+      mid(selected.coords[2], selected.coords[3]),
+      mid(selected.coords[3], selected.coords[0])
+    ];
+    edgeMarkers.forEach((m, i) => m.setLngLat(mids2[i]));
+    // reposition rotate handle
+    const tm = mids2[0];
+    const a2 = Math.atan2(tm[1] - center[1], tm[0] - center[0]);
+    rotMarker.setLngLat([tm[0] + Math.cos(a2) * rotRadius * 1.2, tm[1] + Math.sin(a2) * rotRadius * 1.2]);
+    updateFormCoords();
+  });
+  rotMarker.on("dragend", () => {
+    rotEl.classList.remove("dragging");
+    for (let k = 0; k < 4; k++) selected.coords[k] = roundLL(selected.coords[k]);
+    if (srcReady) map.getSource("ov").setCoordinates(selected.coords);
+    renderHandles();
+    updateFormCoords();
+  });
+  rotateMarker = rotMarker;
+  handleEls.push(rotEl);
+}
+
+function mid(a, b){ return [(a[0]+b[0])/2, (a[1]+b[1])/2]; }
+function centroid(pts){
+  return [
+    pts.reduce((s,p)=>s+p[0],0)/pts.length,
+    pts.reduce((s,p)=>s+p[1],0)/pts.length
+  ];
+}
+function roundLL(p){ return [ +(+p[0]).toFixed(7), +(+p[1]).toFixed(7) ]; }
+
+/* ---------- handle focus for keyboard nudging ---------- */
+
+function setActive(h){
+  if (activeHandle && activeHandle.el) activeHandle.el.style.outline = "";
+  activeHandle = h;
+  if (h && h.el) h.el.style.outline = "2px solid #ff9800";
+}
+
+document.addEventListener("keydown", e => {
+  if (!selected || !activeHandle) return;
+  if (e.target.matches("input,textarea,select")) return;
+
+  const step = e.shiftKey ? 0.001 : 0.0001;
+
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown"){
+    e.preventDefault();
+    const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+    const dy = e.key === "ArrowDown" ? -step : e.key === "ArrowUp" ? step : 0;
+
+    if (activeHandle.type === "corner"){
+      const i = activeHandle.idx;
+      selected.coords[i] = [selected.coords[i][0] + dx, selected.coords[i][1] + dy];
+      if (cornerMarkers[i]) cornerMarkers[i].setLngLat(selected.coords[i]);
+    } else if (activeHandle.type === "edge"){
+      const a = activeHandle.idx, b = (a + 1) % 4;
+      selected.coords[a] = [selected.coords[a][0] + dx, selected.coords[a][1] + dy];
+      selected.coords[b] = [selected.coords[b][0] + dx, selected.coords[b][1] + dy];
+      if (cornerMarkers[a]) cornerMarkers[a].setLngLat(selected.coords[a]);
+      if (cornerMarkers[b]) cornerMarkers[b].setLngLat(selected.coords[b]);
+    } else if (activeHandle.type === "rotate"){
+      const center = centroid(selected.coords);
+      const ang = step * 4; // rougher per-key rotation
+      const cos = Math.cos(ang), sin = Math.sin(ang);
+      for (let i = 0; i < 4; i++){
+        const ddx = selected.coords[i][0] - center[0];
+        const ddy = selected.coords[i][1] - center[1];
+        selected.coords[i] = [center[0] + ddx * cos - ddy * sin, center[1] + ddx * sin + ddy * cos];
+        if (cornerMarkers[i]) cornerMarkers[i].setLngLat(selected.coords[i]);
+      }
+    }
+    if (srcReady) map.getSource("ov").setCoordinates(selected.coords);
+    updateFormCoords();
+    return;
+  }
+
+  if (e.key === "Backspace" || e.key === "Delete"){
+    if (activeHandle.type === "corner" && originalCoords){
+      const i = activeHandle.idx;
+      selected.coords[i] = [ originalCoords[i][0], originalCoords[i][1] ];
+      if (cornerMarkers[i]) cornerMarkers[i].setLngLat(selected.coords[i]);
+      if (srcReady) map.getSource("ov").setCoordinates(selected.coords);
+      renderHandles();
+      updateFormCoords();
+      e.preventDefault();
+    }
+  }
+});
+
+/* ============================================================
+   Form
+   ============================================================ */
+
+function renderForm(){
+  const box = $("form");
+  if (!selected){
+    box.innerHTML = `<div class="empty">No overlay selected.<br><br>Pick one on the left, or click <kbd>＋ New</kbd>.</div>`;
+    return;
+  }
+  const o = selected;
+  box.innerHTML = `
+    <div class="form">
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="f-name" value="${esc(o.name)}">
+      </div>
+      <div class="field">
+        <label>Image URL (relative to site root)</label>
+        <input type="text" id="f-url" value="${esc(o.url)}">
+        <div class="sub">e.g. <code>1901-map.jpg</code></div>
+      </div>
+
+      <div class="preview">
+        <img src="${esc(o.url)}" alt="" onerror="this.style.opacity='0.3';this.title='Image not found'">
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field" style="margin-bottom:4px">
+        <label>Coordinates (lng, lat)</label>
+        <div class="coord"><b>TL</b>
+          <input type="text" data-i="0" data-c="0" value="${o.coords[0][0]}">
+          <input type="text" data-i="0" data-c="1" value="${o.coords[0][1]}">
+        </div>
+        <div class="coord"><b>TR</b>
+          <input type="text" data-i="1" data-c="0" value="${o.coords[1][0]}">
+          <input type="text" data-i="1" data-c="1" value="${o.coords[1][1]}">
+        </div>
+        <div class="coord"><b>BR</b>
+          <input type="text" data-i="2" data-c="0" value="${o.coords[2][0]}">
+          <input type="text" data-i="2" data-c="1" value="${o.coords[2][1]}">
+        </div>
+        <div class="coord"><b>BL</b>
+          <input type="text" data-i="3" data-c="0" value="${o.coords[3][0]}">
+          <input type="text" data-i="3" data-c="1" value="${o.coords[3][1]}">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="dupOverlay" class="small">Duplicate</button>
+        <span class="grow"></span>
+        <button id="delOverlay" class="small warn">Delete overlay</button>
+      </div>
+    </div>
+  `;
+
+  $("f-name").oninput = e => { o.name = e.target.value; renderList(); };
+  $("f-url").oninput = e => {
+    o.url = e.target.value;
+    removeSource();
+    renderOverlay();
+    renderHandles();
+    // update preview src
+    const im = box.querySelector(".preview img");
+    if (im){ im.src = o.url; im.style.opacity = ""; }
+  };
+
+  box.querySelectorAll(".coord input").forEach(inp => {
+    inp.oninput = () => {
+      const i = +inp.dataset.i, c = +inp.dataset.c;
+      const v = parseFloat(inp.value);
+      if (isNaN(v)) return;
+      o.coords[i][c] = v;
+      if (cornerMarkers[i]) cornerMarkers[i].setLngLat(o.coords[i]);
+      if (srcReady) map.getSource("ov").setCoordinates(o.coords);
+      // refresh edge handles on the fly
+      if (edgeMarkers.length === 4){
+        const mids = [
+          mid(o.coords[0], o.coords[1]),
+          mid(o.coords[1], o.coords[2]),
+          mid(o.coords[2], o.coords[3]),
+          mid(o.coords[3], o.coords[0])
+        ];
+        edgeMarkers.forEach((m, k) => m.setLngLat(mids[k]));
+      }
+    };
+  });
+
+  $("dupOverlay").onclick = () => {
+    const copy = {
+      name: o.name + " (copy)",
+      url: o.url,
+      coords: JSON.parse(JSON.stringify(o.coords))
+    };
+    overlays.push(copy);
+    selected = copy;
+    originalCoords = JSON.parse(JSON.stringify(copy.coords));
+    removeSource();
+    render();
+    toast("Duplicated as " + copy.name);
+  };
+
+  $("delOverlay").onclick = () => {
+    if (!confirm(`Delete "${o.name}"?`)) return;
+    overlays = overlays.filter(x => x !== o);
+    selected = overlays[0] || null;
+    originalCoords = selected ? JSON.parse(JSON.stringify(selected.coords)) : null;
+    removeSource();
+    render();
+    if (selected) fitOverlay();
+    toast("Deleted overlay");
+  };
+}
+
+function updateFormCoords(){
+  const box = $("form");
+  if (!box || !selected) return;
+  box.querySelectorAll(".coord input").forEach(inp => {
+    const i = +inp.dataset.i, c = +inp.dataset.c;
+    if (document.activeElement !== inp){
+      inp.value = selected.coords[i][c];
+    }
+  });
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+
+$("op").oninput = e => {
+  $("opv").textContent = e.target.value + "%";
+  if (map.getLayer("ov-layer")){
+    map.setPaintProperty("ov-layer", "raster-opacity", hidden ? 0 : (+e.target.value / 100));
+  }
+};
+
+$("fitBtn").onclick = () => fitOverlay();
+
+$("resetBtn").onclick = () => {
+  if (!selected || !originalCoords) return;
+  if (!confirm("Reset corners to the loaded values?")) return;
+  selected.coords = JSON.parse(JSON.stringify(originalCoords));
+  if (srcReady) map.getSource("ov").setCoordinates(selected.coords);
+  render();
+  fitOverlay();
+  toast("Reset to loaded coordinates");
+};
+
+$("hideBtn").onclick = () => {
+  hidden = !hidden;
+  $("hideBtn").textContent = hidden ? "Show image" : "Hide image";
+  $("hideBtn").classList.toggle("on", hidden);
+  if (hidden) removeSource();
+  else renderOverlay();
+  renderHandles();
+};
+
+$("addOverlay").onclick = () => {
+  const o = {
+    name: "New Overlay",
+    url: "",
+    coords: (() => { const b = map.getBounds(), dx = (b.getEast() - b.getWest()) * 0.25, dy = (b.getNorth() - b.getSouth()) * 0.25; return [[b.getWest() + dx, b.getNorth() - dy], [b.getEast() - dx, b.getNorth() - dy], [b.getEast() - dx, b.getSouth() + dy], [b.getWest() + dx, b.getSouth() + dy]]; })()
+  };
+  overlays.push(o);
+  $("publishBtn").disabled = false;
+  selected = o;
+  originalCoords = JSON.parse(JSON.stringify(o.coords));
+  removeSource();
+  render();
+  toast("Added overlay — paste an image URL");
+};
+
+function fitOverlay(){
+  if (!selected) return;
+  const b = new maplibregl.LngLatBounds();
+  selected.coords.forEach(p => b.extend(p));
+  map.fitBounds(b, { padding: 80, duration: 0 });
+}
+
+/* ============================================================
+   Publish
+   ============================================================ */
+
+$("publishBtn").onclick = () => {
+  // Clean output: strip any internal-only fields
+  const out = overlays.map(o => ({
+    name: o.name,
+    url: o.url,
+    coords: o.coords.map(p => [ +p[0].toFixed(7), +p[1].toFixed(7) ])
+  }));
+
+  const json = JSON.stringify(out, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "overlays.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+
+  toast(`Downloaded overlays.json · ${overlays.length} overlay${overlays.length>1?"s":""}`);
+};
+
+/* ============================================================
+   Toast
+   ============================================================ */
+
+let toastTimer = 0;
+function toast(msg){
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2400);
+}
+</script>
+<script src="publish.js"></script>
+<script>
+GHPublish.attach({
+  buttons: ["publishBtn"],
+  // overlay map images live in the top folder with overlays.json, not in photos/
+  route: name => name
+});
+</script>
+</body>
+</html>

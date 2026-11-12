@@ -82,7 +82,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const PALETTE = ["#C2185B", "#E47303", "#0072B2", "#009E73", "#7B5EA7", "#B3261E", "#8B6F47", "#4A7C8C"];
 
-let ITEMS = [], SEL = -1, PLACES = [], loaded = false;
+let ITEMS = [], SEL = -1, PLACES = [], TOURS = [], loaded = false;
 
 function setStatus(t) { $("status").textContent = t || ""; }
 
@@ -93,7 +93,8 @@ async function getCsv(name) {
 }
 async function init() {
   if (!window.Papa) { setStatus("The page could not load its spreadsheet reader. Check your internet connection and reload."); return; }
-  const [ann, locs, kids] = await Promise.all([getCsv(ETS_CONFIG.ANNOUNCEMENTS_FILE), getCsv("locations.csv"), getCsv("childmarkers.csv")]);
+  const [ann, locs, kids, tours] = await Promise.all([getCsv(ETS_CONFIG.ANNOUNCEMENTS_FILE), getCsv("locations.csv"), getCsv("childmarkers.csv"), getCsv("tours.csv")]);
+  TOURS = tours.filter(r => String(r.TYPE || "tour").toLowerCase() !== "line" && String(r.TOUR_ID || "").trim()).map(r => ({ id: String(r.TOUR_ID).trim(), title: String(r.TITLE || r.TOUR_ID).trim(), type: String(r.TYPE || "tour").toLowerCase() }));
   ITEMS = ann.map(Announcements.fromRow).filter(a => a.name || a.id);
   PLACES = locs.map(r => ({ id: String(r.ID || "").trim(), name: String(r.NAME || "").trim(), sub: "" }))
     .concat(kids.map(r => ({ id: String(r.CHILD_ID || "").trim(), name: String(r.NAME || "").trim(), sub: "part of " + String(r.PARENT_ID || "").trim() })))
@@ -102,7 +103,19 @@ async function init() {
   if (!ann.length) setStatus("No announcements yet (announcements.csv was not found or is empty). Click \"+ New announcement\" to make the first one.");
   $("dlBtn").disabled = false;
   select(ITEMS.length ? 0 : -1);
+  if (pending) handle(pending);
+  else if (location.hash.length > 1) handle({ type: "ets-select", id: decodeURIComponent(location.hash.slice(1)) });
 }
+
+/* the Calendar (and the hub) can ask this page to open one announcement, or to start a new one on a day */
+let pending = null;
+function handle(msg) {
+  if (!msg) return;
+  if (!loaded) { pending = msg; return; }
+  if (msg.type === "ets-select") { const i = ITEMS.findIndex(a => a.id === msg.id); if (i >= 0) select(i); }
+  else if (msg.type === "ets-new") { ITEMS.push(blank(msg.date)); select(ITEMS.length - 1); onEditMarker(); }
+}
+window.addEventListener("message", e => { if (e.origin === location.origin) handle(e.data); });
 
 /* ---------- helpers ---------- */
 function nextId() {
@@ -111,8 +124,9 @@ function nextId() {
 }
 const pad = n => String(n).padStart(2, "0");
 function localStamp(d, h, m) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(h) + ":" + pad(m); }
-function blank() {
-  const d = new Date(); d.setDate(d.getDate() + 7);
+function blank(dateStr) {
+  let d = new Date(); d.setDate(d.getDate() + 7);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || ""); if (m) d = new Date(+m[1], +m[2] - 1, +m[3]);   // the Calendar can start one on a chosen day
   return { id: nextId(), name: "New announcement", tag: "", color: PALETTE[ITEMS.length % PALETTE.length], blurb: "", venues: [], link: "", linkText: "", enabled: true, kind: "announcement",
     schedule: { repeat: "once", tz: Announcements.DEFAULT_TZ, start: localStamp(d, 10, 0), end: localStamp(d, 16, 0), soonDays: 14 } };
 }
@@ -159,6 +173,10 @@ function buildForm(a) {
       gone.map(v => '<label class="gone"><input type="checkbox" class="vn" value="' + esc(v) + '" checked> ' + esc(v) + " (not found in your places)</label>").join("") +
       PLACES.map(p => '<label data-t="' + esc((p.id + " " + p.name + " " + p.sub).toLowerCase()) + '"><input type="checkbox" class="vn" value="' + esc(p.id) + '"' + (venueIds.has(p.id) ? " checked" : "") + "> " + esc(p.name || p.id) + ' <small style="color:#777">' + esc(p.id) + (p.sub ? ", " + esc(p.sub) : "") + "</small></label>").join("") +
     "</div>" +
+    '<label for="f_tour">Feature a tour or trail (optional)</label><select id="f_tour"><option value="">(none)</option>' +
+      TOURS.map(t => '<option value="' + esc(t.id) + '"' + (a.tourId === t.id ? " selected" : "") + ">" + esc(t.title) + " (" + (t.type === "trail" ? "trail" : "tour") + ")</option>").join("") +
+      (a.tourId && !TOURS.some(t => t.id === a.tourId) ? '<option value="' + esc(a.tourId) + '" selected>' + esc(a.tourId) + " (not found)</option>" : "") + "</select>" +
+    '<div class="hint">Visitors get a "Start the tour" button on the welcome screen and in the Events panel.</div>' +
     '<div class="row"><div><label for="f_link">Web page (optional)</label><input type="url" id="f_link" value="' + esc(a.link) + '" placeholder="https://..."></div>' +
     '<div><label for="f_linktext">Button words</label><input type="text" id="f_linktext" value="' + esc(a.linkText) + '" placeholder="Learn more"></div></div>' +
 
@@ -201,6 +219,7 @@ function readForm(a) {
   a.blurb = $("f_blurb").value.trim();
   a.enabled = $("f_enabled").checked;
   a.venues = [...$("form").querySelectorAll(".vn:checked")].map(x => x.value);
+  a.tourId = $("f_tour").value;
   a.link = $("f_link").value.trim();
   a.linkText = $("f_linktext").value.trim();
   const rep = $("f_repeat").value, s = { repeat: rep, tz: $("f_tz").value };
@@ -219,6 +238,7 @@ function problems(a) {
   p.push.apply(p, EventSchedule.validate(a.schedule));
   const known = new Set(PLACES.map(x => x.id));
   a.venues.filter(v => !known.has(v)).forEach(v => p.push('The place "' + v + '" is not in your places list. Untick it.'));
+  if (a.tourId && !TOURS.some(t => t.id === a.tourId)) p.push('The tour "' + a.tourId + '" is not in tours.csv. Pick another or choose (none).');
   if (a.link && !/^https?:\/\//i.test(a.link)) p.push("The web page should start with http:// or https://");
   if (ITEMS.filter(x => x.id === a.id).length > 1) p.push("Another announcement has the same ID (" + a.id + ").");
   return p;
@@ -234,7 +254,8 @@ function preview() {
   const tagBg = a.color, tagFg = Announcements.readable(a.color);
   const live = st.state === "now";
   const line = [EventSchedule.statusText(st), names[0] ? "at " + names[0] : ""].filter(Boolean).join(" \u00b7 ");
-  const go = names.length ? "See it on the map" : (a.link ? (a.linkText || "Learn more") : "");
+  const tr = TOURS.find(t => t.id === a.tourId);
+  const go = tr ? (tr.type === "trail" ? "Start the trail" : "Start the tour") : names.length ? "See it on the map" : (a.link ? (a.linkText || "Learn more") : "");
   $("pv").style.setProperty("--c", a.color);
   $("pv").innerHTML = '<span class="tag" style="background:' + esc(tagBg) + ";color:" + esc(tagFg) + '">' + (live ? "\u25CF " : "") + esc(a.tag || a.name || "Tag") + "</span>" +
     "<h3>" + esc(a.name || "Name") + "</h3><p>" + esc(a.blurb.length > 170 ? a.blurb.slice(0, 167) + "..." : a.blurb) + "</p><small>" + esc(line) + "</small>" + (go ? '<span class="gobtn">' + esc(go) + "</span>" : "");

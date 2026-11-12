@@ -769,6 +769,7 @@ html.sq #tools.open #toolsMore{border-radius:6px}
 <script src="ets-config.js"></script>
 <script src="schedule.js"></script>
 <script src="announcements.js"></script>
+<script src="tour-info.js"></script>
 <script src="marker-fill.js"></script>
 <script src="spot-markers.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -962,6 +963,7 @@ function startWelcome(featuredId){
     ANN_READY.then(() => { if (!stopped) nextSite(); });
   }
 
+  const rotation = () => ANN.concat(window.ETSTours ? ETSTours.featured() : []);   // what's on, then featured tours
   const annFor = id => ANN.find(a => a.venues.some(v => key(v) === key(id))) || null;   // an announcement that happens at this place
   const venueOf = a => { for (const v of a.venues) { const it = findItem(v); if (it) return it; } return null; };
   function setTag(a) {
@@ -998,8 +1000,9 @@ function startWelcome(featuredId){
     if (blurb.length > 170) blurb = blurb.slice(0, 167) + "...";
     document.getElementById("wsName").textContent = a.name;
     document.getElementById("wsText").textContent = blurb;
-    document.getElementById("wsIn").textContent = [EventSchedule.statusText(a.st), it ? "at " + it.name : ""].filter(Boolean).join(" \u00b7 ");
-    goBtn.textContent = it ? "See it on the map" : (a.link ? (a.linkText || "Learn more") : "Close");
+    document.getElementById("wsIn").textContent = [a.meta || EventSchedule.statusText(a.st), it ? "at " + it.name : ""].filter(Boolean).join(" \u00b7 ");
+    const tour = a.tourId && window.ETSTours ? ETSTours.get(a.tourId) : null;
+    goBtn.textContent = tour ? (!tour.stops.length ? "Show the route" : tour.type === "trail" ? "Start the trail" : "Start the tour") : it ? "See it on the map" : (a.link ? (a.linkText || "Learn more") : "Close");
     if (tgt) tgt.el.classList.add("spot");
     siteBox.classList.remove("in"); void siteBox.offsetWidth; siteBox.classList.add("in");   // after "nophoto", so the pointer measures the final position
     point(tgt, a.color);
@@ -1010,7 +1013,8 @@ function startWelcome(featuredId){
     if (stopped) return;
     document.querySelectorAll(".pin.spot").forEach(e => e.classList.remove("spot"));
     const featuredFirst = featuredId && !featuredShown;         // a QR visitor's own place always comes first
-    if (ANN.length && !featuredFirst && slideN++ % 2 === 0) { showAnnouncement(ANN[annIdx++ % ANN.length]); return; }   // what's on, then a place, then what's on...
+    const rot = rotation();
+    if (rot.length && !featuredFirst && slideN++ % 2 === 0) { showAnnouncement(rot[annIdx++ % rot.length]); return; }   // what's on, then a place, then what's on...
     const pool = places.concat(kids).filter(i => PHOTO_SRC[i.id]);
     if (!pool.length) { if (++tries > 20) finish(); else siteTimer = setTimeout(nextSite, 600); return; }
 
@@ -1051,6 +1055,8 @@ function startWelcome(featuredId){
 
   function goToFeatured() {
     const ann = currentAnn;
+    const tour = ann && ann.tourId && window.ETSTours ? ETSTours.get(ann.tourId) : null;
+    if (tour) { finish(); setTimeout(() => ETSTours.start(tour.id), WELCOME_TRANSITION_TIME); return; }   // a featured tour: the button starts it
     if (!currentItem) {
       if (!ann) return;                                         // a "what's on" slide with no place on the map
       if (ann.link) { if (ann.kind === "event") location.href = location.pathname + ann.link; else window.open(ann.link, "_blank", "noopener"); }
@@ -2028,6 +2034,23 @@ $("res").onclick = e => {
 #tourCard img{max-height:150px;max-width:100%;border-radius:8px;display:block;margin-bottom:6px;cursor:zoom-in}
 #tourCard h2{margin:4px 0}
 #tourCard small{display:block;color:#555}
+#tourCard.list{max-height:64vh}
+.tcHead{display:flex;justify-content:space-between;align-items:center}
+.tcHead h2{margin:0}
+.tcClose{border:0;background:#eee;border-radius:50%;width:32px;height:32px;font-size:20px;line-height:1;cursor:pointer}
+.tcChips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.tcChip{border:1px solid #bbb;background:#fff;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+.tcChip.on{background:#222;color:#fff;border-color:#222}
+#tourCard .tcSec{margin:12px 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#666}
+.tc{border:1px solid #ddd;border-left:6px solid #bbb;border-radius:8px;padding:8px 10px;margin:6px 0;background:#fff}
+.tc.feat{border-left-color:#E47303;background:#fffaf2}
+.tcTop{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.tcKind{font-size:11px;background:#eee;border-radius:999px;padding:1px 8px;color:#444}
+#tourCard .tcMeta{display:block;color:#555;margin-top:2px}
+.tc p{margin:6px 0;font-size:14px;line-height:1.35}
+.tcGo{background:#E47303;color:#fff;border:0;border-radius:4px;padding:8px 12px;font-size:14px;cursor:pointer;margin-top:2px}
+.tcTag{display:inline-block;margin:0 0 4px;padding:2px 9px;border-radius:999px;font:700 11px/1.4 system-ui,Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase}
+.tcNone{color:#666}
 </style>`);
 
   const icon = (kind, c) => kind === "story"
@@ -2037,6 +2060,7 @@ $("res").onclick = e => {
   let items = [];
   let showAll = false;
   let tours = [];
+  let timeLimit = 0;   // the visitor's "how much time do I have" choice, in minutes (0 = any)
   let T = null;
   let ti = 0;
   let ring = null;
@@ -2123,6 +2147,7 @@ $("res").onclick = e => {
     const st = T.stops[n];
     const it = byId(st.ITEM_ID);
     const card = $("tourCard");
+    card.classList.remove("list");
     let name = "Missing item: " + st.ITEM_ID;
     let when = "", text = "", credit = "", ll = null, img = null;
     if (it && it.r) {
@@ -2193,12 +2218,20 @@ $("res").onclick = e => {
     }
   }
 
+  const tourAnn = t => ANN.find(a => a.tourId && key(a.tourId) === key(t.id)) || null;   // an announcement that is on now (or soon) and features this tour
   function listTours() {
     const card = $("tourCard");
-    card.innerHTML = `<h2>Tours</h2>` +
-      tours.map((t,i) => `<button class="kid" data-t="${i}"><b>${esc(t.title)}</b><br><small>${esc(tourBadge(t))}: ${esc(t.intro)} (${t.stops.length} stops)</small></button>`).join("") +
-      `<button class="kid" data-g="x">Close</button>`;
+    card.classList.add("list");
+    card.innerHTML = TourInfo.listHtml(tours, { limit: timeLimit, esc, announce: tourAnn, readable: Announcements.readable });
     card.hidden = false;
+  }
+  function startTour(i) {
+    T = tours[i];
+    lineVisibility(String(T.route || "").split(/[|;,]/).map(s => s.trim()).filter(Boolean));
+    const coords = T.stops.map(st => { const it = byId(st.ITEM_ID); return it && it.ll ? it.ll : null; }).filter(Boolean);
+    if (routeLines(T.route).length) clearTourLine(); else setTourLine(coords);   // a drawn route replaces the straight dashed line
+    if (!T.stops.length) { showRoute(T); return; }
+    go(0);
   }
 
   document.body.insertAdjacentHTML("beforeend",
@@ -2241,6 +2274,7 @@ $("res").onclick = e => {
     const pts = [].concat.apply([], routeLines(T.route));
     if (pts.length) { const b = new maplibregl.LngLatBounds(); pts.forEach(p => b.extend(p)); map.fitBounds(b, { padding: 80, maxZoom: 16 }); }
     const card = $("tourCard");
+    card.classList.remove("list");
     card.innerHTML = "<b>" + esc(T.title) + "</b><br><small>" + esc(tourBadge(T)) + "</small><p>" + esc(T.intro) + "</p><button type=\"button\" data-g=\"x\">Close</button>";
     card.hidden = false;
   }
@@ -2248,13 +2282,10 @@ $("res").onclick = e => {
   $("tourCard").onclick = async e => {
     const t = e.target.closest("[data-t]");
     const g = e.target.closest("[data-g]");
+    const chip = e.target.closest("[data-chip]");
+    if (chip) { timeLimit = +chip.dataset.chip || 0; listTours(); return; }
     if (t) {
-      T = tours[+t.dataset.t];
-      lineVisibility(String(T.route || "").split(/[|;,]/).map(s => s.trim()).filter(Boolean));
-      const coords = T.stops.map(st => { const it = byId(st.ITEM_ID); return it && it.ll ? it.ll : null; }).filter(Boolean);
-      if (routeLines(T.route).length) clearTourLine(); else setTourLine(coords);   // a drawn route replaces the straight dashed line
-      if (!T.stops.length) { showRoute(T); return; }
-      go(0);
+      startTour(+t.dataset.t);
     } else if (g && !g.disabled) {
       if (g.dataset.g === "x") {
         $("tourCard").hidden = true;
@@ -2305,9 +2336,11 @@ $("res").onclick = e => {
       if (!id) return;
       if (String(r.TYPE || "").toLowerCase() === "line") { String(r.ROUTE || "").split(/[|;,]/).map(s => s.trim()).filter(Boolean).forEach(x => mapLineIds.add(x)); return; }   // map lines are drawn, not listed as tours
       const stops = TS.filter(x => key(x.TOUR_ID) === key(id)).sort((a,b) => parseFloat(a.STEP) - parseFloat(b.STEP));
-      tours.push({ id, title: r.TITLE || id, intro: r.INTRO || "", category: r.CATEGORY || null, route: r.ROUTE || "", type: String(r.TYPE || "tour").toLowerCase(), modes: r.MODES || "", length: parseFloat(r.LENGTH_MI) || 0, stops });
+      tours.push({ id, title: r.TITLE || id, intro: r.INTRO || "", category: r.CATEGORY || null, route: r.ROUTE || "", type: String(r.TYPE || "tour").toLowerCase(), modes: r.MODES || "", length: parseFloat(r.LENGTH_MI) || 0, stops,
+        summary: String(r.SUMMARY || "").trim(), effort: String(r.EFFORT || "").trim(), minutes: String(r.MINUTES || "").trim(), featured: /^(y|yes|true|1)$/i.test(String(r.FEATURED || "").trim()) });
     });
     $("tours").hidden = !tours.length;
+    try { refreshEventButton(); } catch (e) {}   // featured tours count as "things to do"
     lineVisibility([]);
     vis();
     map.on("zoomend", vis);
@@ -2353,6 +2386,16 @@ $("res").onclick = e => {
     map.flyTo({ center: it.ll, zoom: Math.max(map.getZoom(), it.parent ? 17 : 16) });
     pulse(it);
     return true;
+  };
+
+  /* The welcome screen and the Events panel reach tours through this. */
+  const asEntry = t => ({ id: "tour:" + t.id, kind: "tour", tourId: t.id, name: t.title, tag: TourInfo.kindWord(t), color: "#E47303",
+    blurb: t.summary || t.intro || "", meta: TourInfo.meta(t), venues: [], link: "", linkText: "", enabled: true, st: { state: "none" } });
+  window.ETSTours = {
+    get: id => tours.find(t => key(t.id) === key(id)) || null,
+    start: id => { const i = tours.findIndex(t => key(t.id) === key(id)); if (i < 0) return false; startTour(i); return true; },
+    // tours marked Featured, leaving out any that an announcement already features
+    featured: () => tours.filter(t => t.featured && !ANN.some(a => a.tourId && key(a.tourId) === key(t.id))).map(asEntry)
   };
 })();
 
@@ -3087,10 +3130,22 @@ $("aerialBtn").onclick = () => setAerial($("aerialBtn").getAttribute("aria-press
 const evStatus = ev => (window.EventSchedule && ev.schedule) ? EventSchedule.status(ev.schedule) : null;
 function renderWhatsOn(box){                                    // the announcements, above the list of events
   const items = window.Announcements ? Announcements.withStatus(ANN_ALL.filter(a => a.kind === "announcement")) : [];
-  if (!items.length) return;
-  const h = document.createElement("h3");
-  h.textContent = "What\u2019s on";
-  box.appendChild(h);
+  const things = window.ETSTours ? ETSTours.featured() : [];
+  if (!items.length && !things.length) return;
+  const startBtn = (parent, id) => {
+    const tour = window.ETSTours ? ETSTours.get(id) : null;
+    if (!tour) return;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = !tour.stops.length ? "Show the route" : tour.type === "trail" ? "Start the trail" : "Start the tour";
+    b.onclick = () => { closeEventPanel(); ETSTours.start(tour.id); };
+    parent.appendChild(b);
+  };
+  if (items.length) {
+    const h = document.createElement("h3");
+    h.textContent = "What\u2019s on";
+    box.appendChild(h);
+  }
   items.forEach(a => {
     const d = document.createElement("div");
     d.className = "ann-item";
@@ -3106,6 +3161,7 @@ function renderWhatsOn(box){                                    // the announcem
     s.textContent = EventSchedule.statusText(a.st);
     d.append(tag, t, s);
     if (a.blurb) { const p = document.createElement("p"); p.textContent = a.blurb; d.appendChild(p); }
+    if (a.tourId) startBtn(d, a.tourId);
     const venue = a.venues.map(findItem).find(Boolean);
     if (venue) {
       const b = document.createElement("button");
@@ -3123,6 +3179,29 @@ function renderWhatsOn(box){                                    // the announcem
     }
     box.appendChild(d);
   });
+  if (things.length) {
+    const h = document.createElement("h3");
+    h.textContent = "Things to do";
+    box.appendChild(h);
+    things.forEach(a => {
+      const d = document.createElement("div");
+      d.className = "ann-item";
+      d.style.setProperty("--c", a.color);
+      const tag = document.createElement("span");
+      tag.className = "ann-tag";
+      tag.textContent = a.tag;
+      tag.style.background = a.color;
+      tag.style.color = Announcements.readable(a.color);
+      const t = document.createElement("b");
+      t.textContent = a.name;
+      const s = document.createElement("small");
+      s.textContent = a.meta;
+      d.append(tag, t, s);
+      if (a.blurb) { const p = document.createElement("p"); p.textContent = a.blurb; d.appendChild(p); }
+      startBtn(d, a.tourId);
+      box.appendChild(d);
+    });
+  }
 }
 function renderEventSwitcher(){
   const box = $("ev-switch");
@@ -3163,7 +3242,8 @@ function refreshEventButton(){
   const own = !!(SITE.event.title || SITE.event.text);
   const pub = EVENTS_INDEX.filter(e => e.public !== false);
   const notices = ANN_ALL.filter(a => a.kind === "announcement");
-  if (!own && !pub.length && !notices.length) return;
+  const things = window.ETSTours ? ETSTours.featured() : [];
+  if (!own && !pub.length && !notices.length && !things.length) return;
   const liveNow = pub.some(e => { const s = evStatus(e); return s && s.state === "now" && e.slug !== EVENT_SLUG; }) || ANN.some(a => a.kind === "announcement" && a.st.state === "now");
   $("eventBtn").textContent = liveNow ? "Happening Now" : (own ? SITE.event.button : "Events");
   $("eventBtn").classList.toggle("now", liveNow);

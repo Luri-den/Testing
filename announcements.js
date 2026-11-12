@@ -9,6 +9,7 @@
      COLOR       the tag's color, like #C2185B
      BLURB       a sentence or two for the welcome screen and the Events panel
      VENUE_IDS   place IDs where it happens, separated by |   (the welcome screen points at the first one)
+     TOUR_ID     a tour or trail (from tours.csv) to feature: its button becomes "Start the tour"
      LINK, LINK_TEXT   an optional web page and the words on its button
      ENABLED     yes or no (no hides it without deleting it)
      REPEAT      once | yearly | monthly | weekly
@@ -23,7 +24,7 @@
   "use strict";
   const DEFAULT_TZ = "America/Indiana/Indianapolis";
   const DEFAULT_COLOR = "#D55E00";
-  const COLUMNS = ["ANN_ID", "NAME", "TAG", "COLOR", "BLURB", "VENUE_IDS", "LINK", "LINK_TEXT", "ENABLED",
+  const COLUMNS = ["ANN_ID", "NAME", "TAG", "COLOR", "BLURB", "VENUE_IDS", "TOUR_ID", "LINK", "LINK_TEXT", "ENABLED",
     "REPEAT", "TZ", "START", "END", "START_DAY", "END_DAY", "DAYS", "START_TIME", "END_TIME", "SOON_DAYS"];
 
   const str = v => String(v == null ? "" : v).trim();
@@ -69,14 +70,14 @@
     const name = str(r.NAME);
     return {
       id: str(r.ANN_ID), name, tag: str(r.TAG) || name, color: goodColor(r.COLOR), blurb: str(r.BLURB),
-      venues: list(r.VENUE_IDS), link: str(r.LINK), linkText: str(r.LINK_TEXT), enabled: yes(r.ENABLED),
+      venues: list(r.VENUE_IDS), tourId: str(r.TOUR_ID), link: str(r.LINK), linkText: str(r.LINK_TEXT), enabled: yes(r.ENABLED),
       schedule: scheduleFromRow(r), kind: "announcement"
     };
   }
   function toRow(a) {
     return Object.assign({
       ANN_ID: a.id, NAME: a.name, TAG: a.tag === a.name ? "" : (a.tag || ""), COLOR: a.color, BLURB: a.blurb,
-      VENUE_IDS: (a.venues || []).join("|"), LINK: a.link || "", LINK_TEXT: a.linkText || "", ENABLED: a.enabled ? "yes" : "no"
+      VENUE_IDS: (a.venues || []).join("|"), TOUR_ID: a.tourId || "", LINK: a.link || "", LINK_TEXT: a.linkText || "", ENABLED: a.enabled ? "yes" : "no"
     }, scheduleToFields(a.schedule));
   }
 
@@ -94,7 +95,7 @@
   function fromEventsIndex(index, currentSlug, color) {
     return (Array.isArray(index) ? index : []).filter(e => e && e.schedule && e.public !== false && e.slug !== currentSlug).map(e => ({
       id: "event:" + e.slug, name: e.name || e.slug, tag: e.name || e.slug, color: goodColor(color), blurb: e.note || "",
-      venues: [], link: "?event=" + encodeURIComponent(e.slug), linkText: "Open this event's map", enabled: true,
+      venues: [], tourId: "", link: "?event=" + encodeURIComponent(e.slug), linkText: "Open this event's map", enabled: true,
       schedule: e.schedule, kind: "event"
     }));
   }

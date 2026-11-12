@@ -1,0 +1,1731 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Places Editor</title>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script src="editor-common.js"></script>
+<script>Workspace.install();</script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+  :root{
+    --bar:#E47303; --line:#d7dde5; --accent:#2b6cb0; --ink:#1a202c;
+    --bg:#eef1f5; --panel:#fff; --muted:#6b7280;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font:14px system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}
+
+  /* ---------- top bar ---------- */
+  #top{position:absolute;z-index:20;top:0;left:0;right:0;height:52px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 12px}
+  #top h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+  #top .grow{flex:1}
+  #top .status{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+  button{font:inherit;padding:6px 12px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;color:var(--ink)}
+  button:hover{background:#f6f8fb}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.primary:hover{background:#245a94}
+  button.warn{background:#fff5f5;border-color:#f3c2c2;color:#a33}
+  button.warn:hover{background:#ffecec}
+  button.small{padding:3px 8px;font-size:12px}
+
+  /* ---------- layout ---------- */
+  #layout{position:absolute;top:52px;left:0;right:0;bottom:0;display:grid;grid-template-columns:210px 1fr 340px}
+
+  /* ---------- left palette ---------- */
+  #left{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding-bottom:20px}
+  .sec{padding:10px 12px 4px}
+  .sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:8px 0 6px;font-weight:600}
+  .palette{display:flex;flex-direction:column;gap:6px;padding:0 12px}
+  .chip{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px;background:#fbfcfe;cursor:grab;user-select:none;font-size:13px}
+  .chip:active{cursor:grabbing}
+  .chip .sw{width:16px;height:16px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);flex:none}
+  .chip.parent .sw{width:20px;height:20px}
+  .chip .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chip .cnt{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+  .list{padding:0 6px}
+  .row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px}
+  .row:hover{background:#f4f7fb}
+  .row.sel{background:#e6effa}
+  .row .dot{width:10px;height:10px;border-radius:50%;flex:none;box-shadow:0 0 0 1px #0002}
+  .row .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .id{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+  .row .mini{border:none;background:transparent;padding:2px 4px;font-size:12px;color:#4a5568;cursor:pointer}
+  .row .mini:hover{color:#000}
+  .row.child{padding-left:20px;font-size:12px}
+
+  .hint{padding:10px 14px;font-size:11px;line-height:1.5;color:var(--muted)}
+  .hint b{color:#333}
+.cicon{width:20px;height:20px;object-fit:contain;flex:none}
+.icongrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.icongrid .ic{padding:4px;border:2px solid var(--line);border-radius:8px;background:#fffdf6}
+.icongrid .ic img{width:100%;aspect-ratio:1;object-fit:contain;display:block}
+.icongrid .ic.on{border-color:var(--accent);background:#e6effa}
+.pin img.is-default{object-fit:contain;padding:18%;background:#fffdf6;box-sizing:border-box}
+  
+  /* ---------- stage ---------- */
+  #stage{position:relative;min-width:0}
+  #map{position:absolute;inset:0}
+  #dropzone{position:absolute;inset:0;pointer-events:none;z-index:5}
+  #dropzone.on{pointer-events:auto}
+
+  /* pins, mirroring the live site */
+  .pin{width:44px;height:44px;border-radius:50%;border:3px solid var(--c,#E47303);background:#E47303;box-shadow:0 0 0 2px #fff,0 1px 4px #0007;padding:0;overflow:hidden;cursor:pointer}
+  .pin img{width:100%;height:100%;object-fit:cover;display:block}
+  .pin.parent{width:58px;height:58px;border:4px solid var(--c,#E47303);box-shadow:0 0 0 2px #fff,0 1px 5px #0008}
+  .pin.sel{border-color:#ff9800;box-shadow:0 0 0 3px #fff,0 0 0 6px #ff980055,0 1px 5px #0008}
+  .pin.nophoto{background:repeating-linear-gradient(45deg,var(--c,#E47303),var(--c,#E47303) 6px,#ffffff33 6px,#ffffff33 12px)}
+  .pin.dragging{cursor:grabbing}
+
+  /* ---------- right panel ---------- */
+  #right{background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding-bottom:30px}
+  .empty{padding:24px 16px;color:#9aa3ad;font-size:13px;text-align:center;line-height:1.6}
+  .empty kbd{font:11px ui-monospace,Menlo,monospace;background:#f1f3f7;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px}
+
+  .form{padding:12px}
+  .form .badge{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:2px 6px;border-radius:999px;background:#eef3fb;color:#2b6cb0;margin-bottom:8px}
+  .form .badge.child{background:#f0fff0;color:#2f855a}
+  .form .badge.container{background:#fff7e6;color:#b7791f;margin-left:6px}
+
+  .field{margin-bottom:10px}
+  .field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:600}
+  .field input[type=text],.field input[type=number],.field textarea,.field select{
+    width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff;color:var(--ink)}
+  .field textarea{min-height:100px;resize:vertical;line-height:1.45}
+  .field input:focus,.field textarea:focus,.field select:focus{outline:2px solid #cfe0f3;border-color:#9dbde3}
+  .field .sub{font-size:11px;color:var(--muted);margin-top:3px}
+  .field .ro{background:#f6f8fb;color:#4a5568;font:12px ui-monospace,Menlo,monospace}
+
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+  .catrow{display:flex;align-items:center;gap:8px}
+  .catrow select{flex:1}
+  .catrow .sw{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);flex:none}
+
+  .photo{margin-top:6px;display:flex;gap:10px;align-items:flex-start}
+  .photo .photos{width:80px;height:80px;border-radius:8px;background:#f1f3f7;border:1px solid var(--line);object-fit:cover;flex:none;display:block}
+  .photo .photos.missing{display:flex;align-items:center;justify-content:center;font-size:11px;color:#9aa3ad;text-align:center;padding:6px}
+  .photo .meta{flex:1;font-size:12px;color:var(--muted);line-height:1.5;min-width:0}
+  .photo .meta code{font:11px ui-monospace,Menlo,monospace;color:#4a5568;background:#f1f3f7;padding:1px 4px;border-radius:3px;word-break:break-all}
+  .photo .meta .actions{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+
+  .actions{margin-top:14px;display:flex;gap:6px;flex-wrap:wrap}
+  .actions .grow{flex:1}
+
+  .divider{height:1px;background:var(--line);margin:14px 0}
+
+  /* ---------- staged files bar ---------- */
+  #staged{position:absolute;z-index:15;left:210px;right:340px;bottom:0;background:#fffef6;border-top:1px solid #f0e0b0;padding:6px 12px;font-size:12px;display:none;align-items:center;gap:10px}
+  #staged.on{display:flex}
+  #staged .files{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#7a5c00}
+  #staged .files code{font:11px ui-monospace,Menlo,monospace}
+
+  /* ---------- toast ---------- */
+  #toast{position:fixed;z-index:100;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .18s, transform .18s;pointer-events:none;max-width:80vw;text-align:center}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ---------- map tweaks ---------- */
+  .maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left{z-index:6}
+.shapegrid{display:flex;flex-wrap:wrap;gap:6px}
+.sh{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:11px}
+.sh.on{outline:2px solid #E47303}
+</style>
+</head>
+<body>
+
+<div id="top">
+  <h1>Places Editor</h1>
+  <button id="loadLocations">Load locations.csv…</button>
+  <input id="fileLocations" type="file" accept=".csv,text/csv" hidden>
+  <button id="loadChildren">Load childmarkers.csv…</button>
+  <input id="fileChildren" type="file" accept=".csv,text/csv" hidden>
+  <button id="loadPhotos">Load photos.csv…</button>
+  <input id="filePhotos" type="file" accept=".csv,text/csv" hidden>
+  <label style="display:inline-flex;gap:5px;align-items:center;font-size:13px"><input type="checkbox" id="showLinks" checked> Show parent/child lines</label>
+  <span class="status" id="status">Load both CSVs to begin</span>
+  <span class="grow"></span>
+  <button id="reloadBoth" title="Re-pick both files">Reload…</button>
+  <button id="reloadCSVs" title="Re-fetch from this folder">↻ Reload</button>
+<button id="publishBtn" class="primary" disabled>Download updated CSVs</button>
+</div>
+
+<div id="layout">
+  <aside id="left">
+    <div class="sec">
+  <h2>Categories <span id="catCount" style="color:#9aa3ad"></span></h2>
+</div>
+<div class="list" id="catList"></div>
+<div class="palette" style="margin-top:6px">
+  <button class="small" id="addCat" type="button">＋ Add Category</button>
+  <button class="small" id="loadCats" type="button">Load categories.csv…</button>
+  <input id="fileCats" type="file" accept=".csv,text/csv" hidden>
+</div>
+<div class="sec">
+  <h2>Marker shapes <span id="shapeCount" style="color:#9aa3ad"></span></h2>
+</div>
+<div class="list" id="shapeList"></div>
+<div class="palette" style="margin-top:6px">
+  <button class="small" id="addShape" type="button">＋ Add Shape</button>
+  <button class="small" id="loadShapes" type="button">Load shapes.csv…</button>
+  <input id="fileShapes" type="file" accept=".csv,text/csv" hidden>
+</div>
+    <div class="sec">
+      <h2>Add</h2>
+      <div class="palette">
+        <div class="chip parent" draggable="true" data-add="parent">
+          <span class="sw" style="background:#E47303"></span>
+          <span class="lbl">New Parent</span>
+        </div>
+        <div class="chip" draggable="true" data-add="child">
+          <span class="sw" style="background:#91AF45"></span>
+          <span class="lbl">New Child</span>
+        </div>
+      </div>
+      <div class="hint">Drag onto the map. A child needs a parent! The editor picks the nearest one, but you can change it in the form.</div>
+    </div>
+
+    <div class="sec">
+      <h2>Parents <span id="parentCount" style="color:#9aa3ad"></span></h2>
+    </div>
+    <div class="list" id="parentList"></div>
+
+    <div class="sec">
+      <h2>Children <span id="childCount" style="color:#9aa3ad"></span></h2>
+    </div>
+    <div class="list" id="childList"></div>
+  </aside>
+
+  <div id="stage">
+    <div id="map"></div>
+    <div id="dropzone"></div>
+  </div>
+
+  <aside id="right">
+    <div id="form"><div class="empty">Nothing selected.<br><br>Click a pin, or drag <kbd>New Parent</kbd> / <kbd>New Child</kbd> onto the map.</div></div>
+  </aside>
+</div>
+
+<div id="staged">
+  <span>📎 Staged photos:</span>
+  <span class="files" id="stagedFiles"></span>
+  <button class="small" id="downloadPhotos">Download all</button>
+  <button class="small warn" id="clearStaged">Clear</button>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="icons.js"></script>
+<script src="marker-shapes.js"></script>
+<script src="marker-fill.js"></script>
+<script src="photo-resize.js"></script>
+<script src="photo-thumb.js"></script>
+<script>window.PhotoThumb = window.PhotoThumb || { entry: async () => null, addButton() {} };</script>
+  <script src="publish.js"></script>
+<script>
+/* ============================================================
+   CSV Editor (Slice 1: places)
+   ============================================================ */
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const key = s => String(s||"").trim().toLowerCase();
+const uid = () => Math.random().toString(36).slice(2,8);
+
+  /* ---------- Auto-load from the same folder (GitHub Pages) ---------- */
+(async () => {
+  try {
+        const [locRes, chiRes, catRes] = await Promise.all([
+      fetch("locations.csv",     { cache: "no-store" }).catch(() => null),
+      fetch("childmarkers.csv",  { cache: "no-store" }).catch(() => null),
+      fetch("categories.csv",    { cache: "no-store" }).catch(() => null)
+    ]);
+    if (catRes && catRes.ok) ingestCats(Papa.parse(await catRes.text(), { header:true, skipEmptyLines:"greedy" }));
+    if (locRes && locRes.ok) {
+      const text = await locRes.text();
+      ingest(Papa.parse(text, { header:true, skipEmptyLines:"greedy" }), "loc", "locations.csv");
+    }
+    if (chiRes && chiRes.ok) {
+      const text = await chiRes.text();
+      ingest(Papa.parse(text, { header:true, skipEmptyLines:"greedy" }), "child", "childmarkers.csv");
+    }
+  } catch (e) {
+    console.info("Auto-load skipped (probably file://):", e.message);
+  }
+})();
+
+const isYes = v => ["yes", "true", "1", "y"].includes(String(v || "").trim().toLowerCase());
+
+/* Category colors — mirrors SITE.colors in Demo2.html */
+let CATEGORIES = {
+  CIV:      { label:"Civic",       color:"#E2E1E0", icon:"courthouse", ranked:false },
+  COMM:     { label:"Commercial",  color:"#E47303", icon:"store",      ranked:false },
+  RES:      { label:"Residential", color:"#BDD76B", icon:"house",      ranked:false },
+  IND:      { label:"Industrial",  color:"#AF350A", icon:"factory",    ranked:true },
+  RAIL:     { label:"Rail",        color:"#8B6F47", icon:"train",      ranked:true },
+  CANAL:    { label:"Canal",       color:"#4A7C8C", icon:"boat",       ranked:true },
+  DOWNTOWN: { label:"Downtown",    color:"#7B5EA7", icon:"hotel",      ranked:true }
+};
+const iconKeyFor = cat => {
+  const c = CATEGORIES[String(cat || "").trim().toUpperCase() || DEFAULT_CAT];
+  return (c && c.icon) || "generic";
+};
+function pinColor(cat){
+  const c = CATEGORIES[String(cat||"").trim().toUpperCase()];
+  const d = CATEGORIES[DEFAULT_CAT];
+  return c ? c.color : (d ? d.color : "#E47303");
+}
+const DEFAULT_CAT = "COMM";
+
+/* Preserve exact header order from the source files */
+window.PhotoResize = window.PhotoResize || {   // stand-in so uploads still work if photo-resize.js was not uploaded
+  process: async f => ({ blob: f, ext: ((String(f.name || "").split(".").pop() || "jpg").toLowerCase()), resized: false, why: "off" }),
+  describe: () => "download when you publish", controlHtml: () => "", wire(){}, settings: () => ({ on: false })
+};
+window.MarkerFill = window.MarkerFill || {   // stand-in so the editor still works if marker-fill.js was not uploaded
+  PATTERNS: [], cleanPattern: () => "", defaults: () => ({}), url: () => "", fromRow: () => null, normalize: c => c, tileHtml: () => "", panelHtml: () => "", wire(){}
+};
+window.MarkerShapes = window.MarkerShapes || {   // stand-in so the editor still works if marker-shapes.js was not uploaded
+  BUILTIN: { circle: { label: "Circle", clip: "" } }, TEMPLATES: {}, clipFor: () => "", apply(){}, parseRows: () => ({}), parsePoints: () => null,
+  pointsToClip: () => "", list: () => [{ code: "circle", label: "Circle", clip: "", custom: false }], slug: s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-")
+};
+let customShapes = {};     // code -> { label, points:[[x,y],...] }  (shapes.csv)
+let shapesLoaded = false;
+const CHECKIN_OPTS = v => [["", "Just open it (default)"], ["gps", "Be near it (GPS)"], ["qr", "Scan its QR sign"], ["either", "Scan or be near"], ["both", "Scan while standing there"], ["none", "No stamp"]]
+  .map(([k, t]) => `<option value="${k}" ${String(v || "") === k ? "selected" : ""}>${t}</option>`).join("");
+const LOC_COLS  = ["ID","NAME","EST.","LAT","LONG","DETAILS","BLURB","CATEGORY","MAJOR","RADIUS","CHECKIN","PHOTO"];
+const CHILD_COLS= ["CHILD_ID","PARENT_ID","NAME","HIST_NAMES","ADDRESS","DETAILS","BLURB","LAT","LONG","CONNECTION","CATEGORY","MAJOR","RADIUS","CHECKIN","PHOTO"];
+
+/* ---------- State ---------- */
+let parents = [];      // {row, ll, marker, el, kids:[]}
+let children = [];     // {row, ll, marker, el, parent}
+let headers = { loc: LOC_COLS.slice(), child: CHILD_COLS.slice() };
+let loaded = { loc: false, child: false };
+let selected = null;   // {kind:"parent"|"child", ref}
+let stagedPhotos = []; // {name, blob}
+
+/* ---------- Map ---------- */
+const map = new maplibregl.Map({
+  container: "map",
+  style: {
+    version: 8,
+    sources: {
+      osm: {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }
+    },
+    layers: [{ id:"osm", type:"raster", source:"osm" }]
+  },
+  center: [-98.5795, 39.8283],
+  zoom: 4
+});
+if (window.ETSCommon) ETSCommon.applySiteView(map);
+map.addControl(new maplibregl.NavigationControl({ showCompass:false }), "bottom-right");
+map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+
+/* ---------- Parent to child lines ---------- */
+function updateLinks(){
+  const src = map.getSource && map.getSource("links");
+  if (!src) return;
+  const features = [];
+  children.forEach(c => {
+    if (c.parent && c.parent.ll && c.ll) {
+      features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [c.parent.ll, c.ll] } });
+    }
+  });
+  src.setData({ type: "FeatureCollection", features });
+}
+map.on("load", () => {
+  map.addSource("links", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  map.addLayer({ id: "links-casing", type: "line", source: "links", layout: { "line-cap": "round" },
+    paint: { "line-color": "#ffffff", "line-width": 6, "line-opacity": 0.85 } });
+  map.addLayer({ id: "links-line", type: "line", source: "links", layout: { "line-cap": "round" },
+    paint: { "line-color": "#E47303", "line-width": 3 } });
+  const on = $("showLinks").checked ? "visible" : "none";
+  map.setLayoutProperty("links-casing", "visibility", on);
+  map.setLayoutProperty("links-line", "visibility", on);
+  updateLinks();
+});
+$("showLinks").onchange = () => {
+  if (!map.getLayer("links-line")) return;
+  const v = $("showLinks").checked ? "visible" : "none";
+  map.setLayoutProperty("links-casing", "visibility", v);
+  map.setLayoutProperty("links-line", "visibility", v);
+};
+
+/* ============================================================
+   CSV loading
+   ============================================================ */
+
+$("loadLocations").onclick = () => $("fileLocations").click();
+$("loadChildren").onclick  = () => $("fileChildren").click();
+$("fileLocations").onchange = e => loadCSV(e.target.files[0], "loc");
+$("fileChildren").onchange  = e => loadCSV(e.target.files[0], "child");
+$("reloadBoth").onclick = () => { $("fileLocations").click(); };
+$("reloadCSVs").onclick = async () => {
+  if (!confirm("Reload CSVs from the server? Unsaved edits will be lost.")) return;
+  try {
+      const [locRes, chiRes, catRes] = await Promise.all([
+      fetch("locations.csv",    { cache:"no-store" }),
+      fetch("childmarkers.csv", { cache:"no-store" }),
+      fetch("categories.csv",   { cache:"no-store" }).catch(() => null)
+    ]);
+    if (catRes && catRes.ok) ingestCats(Papa.parse(await catRes.text(), { header:true, skipEmptyLines:"greedy" }));
+    if (locRes.ok) ingest(Papa.parse(await locRes.text(), { header:true, skipEmptyLines:"greedy" }), "loc", "locations.csv");
+    if (chiRes.ok) ingest(Papa.parse(await chiRes.text(), { header:true, skipEmptyLines:"greedy" }), "child", "childmarkers.csv");
+    selected = null;
+    await loadExtras();
+    toast("Reloaded from server");
+  } catch (e) {
+    toast("Reload failed: " + e.message);
+  }
+};
+  
+function loadCSV(file, kind){
+  if (!file) return;
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: "greedy",
+    complete: r => ingest(r, kind, file.name),
+    error: err => toast("Couldn't parse " + file.name + ": " + err.message)
+  });
+}
+
+function ingest(parsed, kind, filename){
+  if (parsed.errors && parsed.errors.length){
+    // Papa surfaces minor issues here; only complain about hard ones
+    const hard = parsed.errors.filter(e => !/TooFewFields|TooManyFields/.test(e.code));
+    if (hard.length) console.warn("CSV warnings for " + filename, hard);
+  }
+  const rows = parsed.data.filter(r => Object.values(r).some(v => String(v||"").trim() !== ""));
+  if (!rows.length){ toast(filename + " has no rows."); return; }
+
+  // capture actual headers in order
+  const h = parsed.meta.fields && parsed.meta.fields.length
+    ? parsed.meta.fields.slice()
+    : (kind === "loc" ? LOC_COLS.slice() : CHILD_COLS.slice());
+
+  if (kind === "loc"){
+    headers.loc = mergeHeaders(h, LOC_COLS);
+    parents = rows.map(r => mkParent(r));
+    loaded.loc = true;
+  } else {
+    headers.child = mergeHeaders(h, CHILD_COLS);
+    children = rows.map(r => mkChild(r));
+    loaded.child = true;
+  }
+  linkChildren();
+  render();
+  updateStatus();
+  if (loaded.loc && loaded.child) $("publishBtn").disabled = false;
+}
+
+// keep the source's order, but make sure any known columns exist
+function mergeHeaders(actual, known){
+  const out = actual.slice();
+  for (const k of known) if (!out.includes(k)) out.push(k);
+  return out;
+}
+
+/* ============================================================
+   Model
+   ============================================================ */
+
+function mkParent(row){
+  const lat = parseFloat(row.LAT), lng = parseFloat(row.LONG);
+  return { row, ll: (isNaN(lat)||isNaN(lng)) ? null : [lng, lat], marker:null, el:null, kids:[] };
+}
+function mkChild(row){
+  const lat = parseFloat(row.LAT), lng = parseFloat(row.LONG);
+  return { row, ll: (isNaN(lat)||isNaN(lng)) ? null : [lng, lat], marker:null, el:null, parent:null };
+}
+
+function linkChildren(){
+  parents.forEach(p => p.kids = []);
+  children.forEach(c => {
+    const pid = String(c.row.PARENT_ID||"").trim();
+    const p = parents.find(p => key(p.row.ID) === key(pid));
+    c.parent = p || null;
+    if (p) p.kids.push(c);
+  });
+}
+
+function nextParentId(){
+  const counts = {};
+  parents.forEach(p => { const m = /^([A-Za-z]+)-\d+$/.exec(String(p.row.ID||"").trim()); if (m) counts[m[1].toUpperCase()] = (counts[m[1].toUpperCase()]||0) + 1; });
+  const top = Object.entries(counts).sort((a,b) => b[1]-a[1])[0];
+  const prefix = top ? top[0] : "LOC";
+  const nums = parents
+    .map(p => new RegExp("^" + prefix + "-(\\d+)$", "i").exec(String(p.row.ID||"").trim()))
+    .filter(Boolean)
+    .map(m => +m[1]);
+  const n = (nums.length ? Math.max(...nums) : 0) + 1;
+  return prefix + "-" + String(n).padStart(3, "0");
+}
+
+function nextChildId(parentId){
+  const pid = String(parentId||"").trim();
+  const esc = pid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp("^" + esc + "-(\\d+)$", "i");
+  const nums = children
+    .map(c => re.exec(String(c.row.CHILD_ID||"").trim()))
+    .filter(Boolean)
+    .map(m => +m[1]);
+  const n = (nums.length ? Math.max(...nums) : 0) + 1;
+  return pid + "-" + String(n).padStart(2, "0");
+}
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+
+function render(){
+  renderPins();
+  renderLists();
+  renderCats();
+  renderShapes();
+  renderForm();
+  renderStaged();
+}
+let pinMarkers = [];
+function renderPins(){
+  // tear down
+    pinMarkers.forEach(m => m.remove());
+  pinMarkers = [];
+  parents.concat(children).forEach(o => { o.marker = null; o.el = null; });
+
+  // parents first (kids render on top)
+  parents.forEach(p => {
+    if (!p.ll) return;
+    p.el = makePinEl(p, "parent");
+    p.marker = new maplibregl.Marker({ element: p.el, draggable: true })
+      .setLngLat(p.ll).addTo(map);
+    wireDrag(p, p.marker);
+    p.el.addEventListener("click", e => { e.stopPropagation(); select("parent", p); });
+  });
+  children.forEach(c => {
+    if (!c.ll) return;
+    c.el = makePinEl(c, "child");
+    c.marker = new maplibregl.Marker({ element: c.el, draggable: true })
+      .setLngLat(c.ll).addTo(map);
+    wireDrag(c, c.marker);
+    c.el.addEventListener("click", e => { e.stopPropagation(); select("child", c); });
+  });
+
+  // reflect selection
+  parents.concat(children).forEach(o => o.el && o.el.classList.toggle("sel", isSelected(o)));
+  updateLinks();
+}
+
+function makePinEl(o, kind){
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "pin " + (kind === "parent" && o.kids && o.kids.length ? "parent" : "");
+  if (kind === "child") b.classList.add("child");
+  const cat = String(o.row.CATEGORY||"").trim().toUpperCase() || DEFAULT_CAT;
+  const color = pinColor(cat);
+  b.style.setProperty("--c", color);
+  b.title = (o.row.NAME || o.row.ID || o.row.CHILD_ID || "");
+
+  // try a thumbnail from /photos/{id}.{ext} — same probe the live site uses
+  const id = kind === "parent" ? o.row.ID : o.row.CHILD_ID;
+  const img = new Image();
+  img.alt = "";
+  const EXT = ["jpg","jpeg","png","webp","JPG","PNG"];
+  let i = 0;
+  let useTyped = !!String(o.row.PHOTO || "").trim();   // typed PHOTO path first, then photos/ID.ext
+  const tryNext = () => { img.src = useTyped ? String(o.row.PHOTO).trim() : "photos/" + encodeURIComponent(id) + "." + EXT[i]; };
+   img.onerror = () => {
+    if (useTyped) { useTyped = false; tryNext(); return; }
+    if (++i < EXT.length) { tryNext(); return; }
+    img.onerror = null;
+    img.classList.add("is-default");
+    img.src = catImage(CATEGORIES[cat]);
+    if ((CATEGORIES[cat] || {}).fill) img.classList.add("is-fill");
+    b.classList.add("nophoto");
+  };
+  tryNext();
+  b.appendChild(img);
+  const shp = (CATEGORIES[cat] || {}).shape;
+  if (shp) MarkerShapes.apply(b, shp, customShapes);
+  return b;
+}
+
+function wireDrag(o, marker){
+  pinMarkers.push(marker);
+  marker.on("dragstart", () => { if (o.el) o.el.classList.add("dragging"); });
+  marker.on("drag", () => { const p = marker.getLngLat(); o.ll = [p.lng, p.lat]; updateLinks(); });
+  marker.on("dragend", () => {
+    if (o.el) o.el.classList.remove("dragging");
+    const ll = marker.getLngLat();
+    o.ll = [ll.lng, ll.lat];
+    o.row.LAT = fmt(ll.lat);
+    o.row.LONG = fmt(ll.lng);
+    if (isSelected(o)) renderForm();
+    toast((o.row.NAME || o.row.CHILD_ID || o.row.ID) + " moved");
+  });
+}
+
+function fmt(n){ return (+n).toFixed(13).replace(/0+$/,"").replace(/\.$/,""); }
+
+function isSelected(o){
+  if (!selected) return false;
+  if (selected.kind === "parent") return o === selected.ref;
+  return o === selected.ref;
+}
+
+function select(kind, ref){
+  selected = { kind, ref };
+  render();
+}
+
+function clearSelection(){
+  selected = null;
+  render();
+}
+
+map.on("click", e => {
+  // ignore clicks that were on a pin (those call stopPropagation)
+  clearSelection();
+});
+
+/* ============================================================
+   Left panel lists
+   ============================================================ */
+
+function renderLists(){
+  $("parentCount").textContent = parents.length ? "(" + parents.length + ")" : "";
+  $("childCount").textContent  = children.length ? "(" + children.length + ")" : "";
+
+  const pl = $("parentList");
+  pl.innerHTML = "";
+  const sortedParents = parents.slice().sort((a,b) =>
+    String(a.row.ID||"").localeCompare(String(b.row.ID||"")));
+  for (const p of sortedParents){
+    const row = document.createElement("div");
+    row.className = "row" + (selected && selected.ref === p ? " sel" : "");
+    const cat = String(p.row.CATEGORY||"").trim().toUpperCase() || DEFAULT_CAT;
+    row.innerHTML =
+      `<span class="dot" style="background:${pinColor(cat)}"></span>` +
+      `<span class="name">${esc(p.row.NAME || "(unnamed)")}</span>` +
+      (p.kids.length ? `<span class="id">${p.kids.length}</span>` : "") +
+      `<span class="id">${esc(p.row.ID||"")}</span>`;
+    row.onclick = () => select("parent", p);
+    pl.appendChild(row);
+
+    // children indented under their parent
+    for (const c of p.kids){
+      const cr = document.createElement("div");
+      cr.className = "row child" + (selected && selected.ref === c ? " sel" : "");
+      const ccat = String(c.row.CATEGORY||"").trim().toUpperCase() || DEFAULT_CAT;
+      cr.innerHTML =
+        `<span class="dot" style="background:${pinColor(ccat)};width:8px;height:8px"></span>` +
+        `<span class="name">${esc(c.row.NAME || "(unnamed)")}</span>` +
+        `<span class="id">${esc(c.row.CHILD_ID||"")}</span>`;
+      cr.onclick = () => select("child", c);
+      pl.appendChild(cr);
+    }
+  }
+
+  // orphans (children whose parent isn't in the parents file)
+  const orphans = children.filter(c => !c.parent);
+  const cl = $("childList");
+  cl.innerHTML = "";
+  if (!orphans.length){
+    cl.innerHTML = `<div class="hint">All children are attached to a parent.</div>`;
+  } else {
+    for (const c of orphans){
+      const row = document.createElement("div");
+      row.className = "row child" + (selected && selected.ref === c ? " sel" : "");
+      row.innerHTML =
+        `<span class="dot" style="background:#c00;width:8px;height:8px"></span>` +
+        `<span class="name">${esc(c.row.NAME || "(unnamed)")}</span>` +
+        `<span class="id">${esc(c.row.CHILD_ID||"")}</span>`;
+      row.onclick = () => select("child", c);
+      cl.appendChild(row);
+    }
+  }
+}
+
+/* ============================================================
+   Right panel form
+   ============================================================ */
+
+function renderForm(){
+  const box = $("form");
+  if (!selected){
+    box.innerHTML = `<div class="empty">Nothing selected.<br><br>Click a pin, or drag <kbd>New Parent</kbd> / <kbd>New Child</kbd> onto the map.</div>`;
+    return;
+  }
+
+   if (selected.kind === "shape") renderShapeForm(box, selected.ref);
+  else if (selected.kind === "category") renderCategoryForm(box, selected.ref);
+  else if (selected.kind === "parent") renderParentForm(box, selected.ref);
+  else renderChildForm(box, selected.ref);
+}
+
+function renderParentForm(box, p){
+  const r = p.row;
+  const cat = String(r.CATEGORY||"").trim().toUpperCase() || DEFAULT_CAT;
+
+  box.innerHTML = `
+    <div class="form">
+      <span class="badge">Parent${p.kids.length ? ` <span class="badge container">container · ${p.kids.length}</span>` : ""}</span>
+
+      <div class="field">
+        <label>ID</label>
+        <input type="text" id="f-ID" value="${esc(r.ID||"")}">
+        <div class="sub">Changing this breaks references from children and QR links. The editor will offer to update children on publish.</div>
+      </div>
+
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="f-NAME" value="${esc(r.NAME||"")}">
+      </div>
+
+      <div class="pair">
+        <div class="field">
+          <label>Category</label>
+          <div class="catrow">
+            <select id="f-CATEGORY">
+              ${Object.entries(CATEGORIES).map(([k,v]) =>
+                `<option value="${k}" ${k===cat?"selected":""}>${k} — ${esc(v.label)}</option>`).join("")}
+            </select>
+            <span class="sw" id="catSw" style="background:${pinColor(cat)}"></span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Established</label>
+          <input type="text" id="f-EST" value="${esc(r["EST."]||"")}" placeholder="e.g. 1842">
+        </div>
+      </div>
+
+      <div class="pair">
+        <div class="field"><label>Latitude</label><input type="text" id="f-LAT" value="${esc(r.LAT||"")}"></div>
+        <div class="field"><label>Longitude</label><input type="text" id="f-LONG" value="${esc(r.LONG||"")}"></div>
+      </div>
+
+      <div class="field">
+        <label>Blurb (short preview)</label>
+        <textarea id="f-BLURB" rows="2" maxlength="220" placeholder="One or two sentences for the opening preview. Leave blank to use the first sentence of Details.">${esc(r.BLURB||"")}</textarea>
+      </div>
+
+      <div class="field">
+        <label>Details</label>
+        <textarea id="f-DETAILS">${esc(r.DETAILS||"")}</textarea>
+      </div>
+
+      <div class="field">
+        <label>Passport</label>
+        <label style="display:flex;gap:8px;align-items:center;font-size:13px;text-transform:none;letter-spacing:0;font-weight:normal;color:var(--ink)"><input type="checkbox" id="f-MAJOR" ${isYes(r.MAJOR) ? "checked" : ""}> Major site (listed in the passport collection)</label>
+        <div class="pair" style="margin-top:6px"><div><label>Check-in radius (m)</label><input type="text" id="f-RADIUS" value="${esc(r.RADIUS||"")}" placeholder="50"></div><div><label>How to earn the stamp</label><select id="f-CHECKIN">${CHECKIN_OPTS(r.CHECKIN)}</select></div></div>
+        <div class="sub">QR link for this place: <code>${((window.ETS_CONFIG&&window.ETS_CONFIG.LIVE_PAGE)||"Demo2a.html")}?site=${esc(r.ID||"")}</code></div>
+      </div>
+
+      <div class="field">
+        <label>Photo</label>
+        ${photoBlock(r.ID, r)}
+      </div>
+
+      ${p.kids.length ? `
+        <div class="divider"></div>
+        <div class="field">
+          <label>Children (${p.kids.length})</label>
+          <div id="kidList">
+            ${p.kids.map(k => `
+              <div class="row" data-kid="${esc(k.row.CHILD_ID)}" style="cursor:pointer">
+                <span class="dot" style="background:${pinColor(k.row.CATEGORY)};width:8px;height:8px"></span>
+                <span class="name">${esc(k.row.NAME||"")}</span>
+                <span class="id">${esc(k.row.CHILD_ID||"")}</span>
+              </div>`).join("")}
+          </div>
+        </div>` : ""}
+
+      <div class="actions">
+        <button id="addChild" class="small">＋ Add Child</button>
+        <button id="dupParent" class="small">Duplicate</button>
+        <span class="grow"></span>
+        <button id="delParent" class="small warn">Delete</button>
+      </div>
+    </div>
+  `;
+
+  // wire basic fields
+  bindText(box, "f-ID",       v => { renameItem(r.ID, v); r.ID = v; renderPins(); renderLists(); });
+  bindText(box, "f-NAME",     v => { r.NAME = v; renderPins(); renderLists(); });
+  bindText(box, "f-EST",      v => { r["EST."] = v; });
+  bindText(box, "f-LAT",      v => { r.LAT = v; syncLL(p, v, r.LONG); });
+  bindText(box, "f-LONG",     v => { r.LONG = v; syncLL(p, r.LAT, v); });
+  bindText(box, "f-DETAILS",  v => { r.DETAILS = v; });
+  bindText(box, "f-BLURB", v => { r.BLURB = v; });
+  box.querySelector("#f-MAJOR").onchange = e => { r.MAJOR = e.target.checked ? "yes" : ""; };
+  bindText(box, "f-RADIUS", v => { r.RADIUS = v; });
+  box.querySelector("#f-CHECKIN").onchange = e => { r.CHECKIN = e.target.value; };
+
+  box.querySelector("#f-CATEGORY").onchange = e => {
+    r.CATEGORY = e.target.value;
+    box.querySelector("#catSw").style.background = pinColor(r.CATEGORY);
+    renderPins();
+    renderLists();
+  };
+
+  box.querySelector("#addChild").onclick = () => {
+    const id = nextChildId(r.ID);
+    const c = mkChild({
+      CHILD_ID: id, PARENT_ID: r.ID, NAME: "New Child",
+      HIST_NAMES:"", ADDRESS:"", DETAILS:"",
+      LAT: r.LAT, LONG: r.LONG, CONNECTION:"", CATEGORY: DEFAULT_CAT
+    });
+    c.parent = p;
+    p.kids.push(c);
+    children.push(c);
+    // ensure both files are considered loaded/edited
+    loaded.child = true;
+    selected = { kind:"child", ref:c };
+    render();
+    toast("Added " + id);
+  };
+
+  box.querySelector("#dupParent").onclick = () => {
+    const nr = Object.assign({}, r);
+    nr.ID = nextParentId();
+    nr.NAME = (r.NAME||"") + " (copy)";
+    const n = mkParent(nr);
+    parents.push(n);
+    selected = { kind:"parent", ref:n };
+    render();
+    toast("Duplicated as " + nr.ID);
+  };
+
+  box.querySelector("#delParent").onclick = () => {
+    if (p.kids.length && !confirm(`Delete ${r.ID}? It has ${p.kids.length} children. They'll be orphaned and won't render on the live site. Continue?`)) return;
+    parents = parents.filter(x => x !== p);
+    children.forEach(c => { if (c.parent === p) c.parent = null; });
+    selected = null;
+    render();
+    toast("Deleted " + (r.ID||""));
+  };
+
+  box.querySelectorAll("#kidList [data-kid]").forEach(el => {
+    el.onclick = () => {
+      const c = children.find(x => key(x.row.CHILD_ID) === key(el.dataset.kid));
+      if (c) select("child", c);
+    };
+  });
+
+  wirePhotoBlock(box, r.ID, r);
+  renderGalEditor(box, r.ID);
+}
+
+function renderChildForm(box, c){
+  const r = c.row;
+  const cat = String(r.CATEGORY||"").trim().toUpperCase() || DEFAULT_CAT;
+
+  box.innerHTML = `
+    <div class="form">
+      <span class="badge child">Child</span>
+
+      <div class="field">
+        <label>Child ID</label>
+        <input type="text" id="f-CHILD_ID" value="${esc(r.CHILD_ID||"")}">
+      </div>
+
+      <div class="field">
+        <label>Parent</label>
+        <select id="f-PARENT_ID">
+          <option value="">— none (orphan) —</option>
+          ${parents.map(p =>
+            `<option value="${esc(p.row.ID)}" ${key(p.row.ID)===key(r.PARENT_ID)?"selected":""}>${esc(p.row.ID)} — ${esc(p.row.NAME||"")}</option>`).join("")}
+        </select>
+        ${!c.parent ? `<div class="sub" style="color:#a33">Not attached to a parent — this child won't render on the live site.</div>` : ""}
+      </div>
+
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="f-NAME" value="${esc(r.NAME||"")}">
+      </div>
+
+      <div class="pair">
+        <div class="field">
+          <label>Category</label>
+          <div class="catrow">
+            <select id="f-CATEGORY">
+              ${Object.entries(CATEGORIES).map(([k,v]) =>
+                `<option value="${k}" ${k===cat?"selected":""}>${k} — ${esc(v.label)}</option>`).join("")}
+            </select>
+            <span class="sw" id="catSw" style="background:${pinColor(cat)}"></span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Connection</label>
+          <input type="text" id="f-CONNECTION" value="${esc(r.CONNECTION||"")}" list="connList">
+          <datalist id="connList">
+            ${[...new Set(children.map(x => String(x.row.CONNECTION||"").trim()).filter(Boolean))]
+              .map(v => `<option value="${esc(v)}">`).join("")}
+          </datalist>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Historical names</label>
+        <input type="text" id="f-HIST_NAMES" value="${esc(r.HIST_NAMES||"")}">
+      </div>
+
+      <div class="field">
+        <label>Address</label>
+        <input type="text" id="f-ADDRESS" value="${esc(r.ADDRESS||"")}">
+      </div>
+
+      <div class="pair">
+        <div class="field"><label>Latitude</label><input type="text" id="f-LAT" value="${esc(r.LAT||"")}"></div>
+        <div class="field"><label>Longitude</label><input type="text" id="f-LONG" value="${esc(r.LONG||"")}"></div>
+      </div>
+
+      <div class="field">
+        <label>Blurb (short preview)</label>
+        <textarea id="f-BLURB" rows="2" maxlength="220" placeholder="One or two sentences for the opening preview. Leave blank to use the first sentence of Details.">${esc(r.BLURB||"")}</textarea>
+      </div>
+
+      <div class="field">
+        <label>Details</label>
+        <textarea id="f-DETAILS">${esc(r.DETAILS||"")}</textarea>
+      </div>
+
+      <div class="field">
+        <label>Passport</label>
+        <label style="display:flex;gap:8px;align-items:center;font-size:13px;text-transform:none;letter-spacing:0;font-weight:normal;color:var(--ink)"><input type="checkbox" id="f-MAJOR" ${isYes(r.MAJOR) ? "checked" : ""}> Major site (listed in the passport collection)</label>
+        <div class="pair" style="margin-top:6px"><div><label>Check-in radius (m)</label><input type="text" id="f-RADIUS" value="${esc(r.RADIUS||"")}" placeholder="50"></div><div><label>How to earn the stamp</label><select id="f-CHECKIN">${CHECKIN_OPTS(r.CHECKIN)}</select></div></div>
+        <div class="sub">QR link for this place: <code>${((window.ETS_CONFIG&&window.ETS_CONFIG.LIVE_PAGE)||"Demo2a.html")}?site=${esc(r.CHILD_ID||"")}</code></div>
+      </div>
+
+      <div class="field">
+        <label>Photo</label>
+        ${photoBlock(r.CHILD_ID, r)}
+      </div>
+
+      <div class="actions">
+        <button id="dupChild" class="small">Duplicate</button>
+        <span class="grow"></span>
+        <button id="delChild" class="small warn">Delete</button>
+      </div>
+    </div>
+  `;
+
+  bindText(box, "f-CHILD_ID",  v => { renameItem(r.CHILD_ID, v); r.CHILD_ID = v; renderLists(); });
+  bindText(box, "f-NAME",      v => { r.NAME = v; renderPins(); renderLists(); });
+  bindText(box, "f-HIST_NAMES",v => { r.HIST_NAMES = v; });
+  bindText(box, "f-ADDRESS",   v => { r.ADDRESS = v; });
+  bindText(box, "f-CONNECTION",v => { r.CONNECTION = v; });
+  bindText(box, "f-LAT",       v => { r.LAT = v; syncLL(c, v, r.LONG); });
+  bindText(box, "f-LONG",      v => { r.LONG = v; syncLL(c, r.LAT, v); });
+  bindText(box, "f-DETAILS",   v => { r.DETAILS = v; });
+  bindText(box, "f-BLURB", v => { r.BLURB = v; });
+  box.querySelector("#f-MAJOR").onchange = e => { r.MAJOR = e.target.checked ? "yes" : ""; };
+  bindText(box, "f-RADIUS", v => { r.RADIUS = v; });
+  box.querySelector("#f-CHECKIN").onchange = e => { r.CHECKIN = e.target.value; };
+
+  box.querySelector("#f-CATEGORY").onchange = e => {
+    r.CATEGORY = e.target.value;
+    box.querySelector("#catSw").style.background = pinColor(r.CATEGORY);
+    renderPins();
+    renderLists();
+  };
+
+  box.querySelector("#f-PARENT_ID").onchange = e => {
+    const newPid = e.target.value;
+    const old = c.parent;
+    if (old) old.kids = old.kids.filter(k => k !== c);
+    r.PARENT_ID = newPid;
+    linkChildren();
+    render();
+  };
+
+  box.querySelector("#dupChild").onclick = () => {
+    const nr = Object.assign({}, r);
+    const pid = nr.PARENT_ID || (c.parent && c.parent.row.ID) || "";
+    nr.CHILD_ID = pid ? nextChildId(pid) : "NEW-" + uid();
+    nr.NAME = (r.NAME||"") + " (copy)";
+    const n = mkChild(nr);
+    children.push(n);
+    linkChildren();
+    selected = { kind:"child", ref:n };
+    render();
+    toast("Duplicated as " + nr.CHILD_ID);
+  };
+
+  box.querySelector("#delChild").onclick = () => {
+    if (!confirm("Delete " + (r.CHILD_ID||"") + "?")) return;
+    children = children.filter(x => x !== c);
+    linkChildren();
+    selected = null;
+    render();
+    toast("Deleted " + (r.CHILD_ID||""));
+  };
+
+  wirePhotoBlock(box, r.CHILD_ID, r);
+  renderGalEditor(box, r.CHILD_ID);
+}
+
+function bindText(scope, id, onInput){
+  const el = scope.querySelector("#" + CSS.escape(id));
+  if (!el) return;
+  el.oninput = () => onInput(el.value);
+}
+
+function syncLL(o, latStr, lngStr){
+  const lat = parseFloat(latStr), lng = parseFloat(lngStr);
+  if (isNaN(lat) || isNaN(lng)) return;
+  o.ll = [lng, lat];
+  if (o.marker) o.marker.setLngLat(o.ll);
+  updateLinks();
+}
+
+/* ---------- Photo block ---------- */
+
+function photoBlock(id, row){
+  const safe = esc(id || "");
+  const typed = esc((row && row.PHOTO) || "");
+  return `
+    <div class="photo">
+      <div class="photos missing" id="photoThumb">loading…</div>
+      <div class="meta">
+        <div>Photo file path (any folder, optional)</div>
+        <input type="text" id="f-PHOTO" value="${typed}" placeholder="photos/${safe}.jpg or shared/old-depot.jpg" style="width:100%;margin:4px 0">
+        <div class="sub" id="photoNote">Leave blank to use <code>photos/${safe}.jpg</code> (or png/webp/JPG/PNG). A typed path wins over an uploaded photo.</div>
+        ${PhotoResize.controlHtml()}
+        <div class="actions">
+          <button class="small" id="uploadPhoto" type="button">Upload photo…</button>
+          <input type="file" id="photoInput" accept="image/*" hidden>
+                    <button class="small" id="uploadAnim" type="button">Upload animation…</button>
+          <input type="file" id="animInput" accept="video/mp4,video/webm" hidden>
+        </div>
+      </div>
+    </div>
+    <div id="galEditor"></div>`;
+}
+
+function wirePhotoBlock(scope, id, row){
+  const thumb = scope.querySelector("#photoThumb");
+  const btn   = scope.querySelector("#uploadPhoto");
+  const input = scope.querySelector("#photoInput");
+  const photos = thumb;
+  if (!thumb || !btn || !input) return;
+
+  // show the typed PHOTO path if there is one, otherwise probe photos/{id}.{ext}
+  const EXT = ["jpg","jpeg","png","webp","JPG","PNG"];
+  const note = scope.querySelector("#photoNote");
+  const pathIn = scope.querySelector("#f-PHOTO");
+  const showImg = im => {
+    photos.classList.remove("missing");
+    photos.innerHTML = "";
+    im.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:8px";
+    photos.appendChild(im);
+  };
+  const tryNext = i => {
+    if (i >= EXT.length){
+      photos.classList.add("missing");
+      photos.textContent = "no photo yet";
+      return;
+    }
+    const im = new Image();
+    im.onload = () => showImg(im);
+    im.onerror = () => tryNext(i+1);
+    im.src = "photos/" + encodeURIComponent(id) + "." + EXT[i];
+  };
+  const checkTyped = () => {
+    const p = String((row && row.PHOTO) || "").trim();
+    if (!p) { if (note) note.style.color = ""; tryNext(0); return; }
+    const im = new Image();
+    im.onload = () => { if (note) { note.style.color = ""; note.textContent = "Found " + p; } showImg(im); };
+    im.onerror = () => {
+      photos.classList.add("missing");
+      photos.textContent = "not found";
+      if (note) { note.style.color = "#b42318"; note.textContent = "Not found: " + p + ". The live map will fall back to photos/" + id + " and then the category icon. Check the folder, spelling and extension."; }
+    };
+    im.src = p;
+  };
+  let typedTimer = null;
+  if (pathIn && row) pathIn.addEventListener("input", () => {
+    row.PHOTO = pathIn.value.trim();
+    clearTimeout(typedTimer);
+    typedTimer = setTimeout(() => { checkTyped(); renderPins(); }, 400);
+  });
+  checkTyped();
+
+  btn.onclick = () => input.click();
+    const animBtn = scope.querySelector("#uploadAnim"), animIn = scope.querySelector("#animInput");
+  if (animBtn && animIn) {
+    animBtn.onclick = () => animIn.click();
+    animIn.onchange = () => {
+      const f = animIn.files[0]; if (!f) return;
+      const ext = (f.name.split(".").pop() || "mp4").toLowerCase();
+      const name = id + "." + ext;
+      stagedPhotos = stagedPhotos.filter(p => p.name !== name);
+      stagedPhotos.push({ name, blob: f });
+      renderStaged();
+      toast("Staged " + name + " - it will publish to anims/");
+    };
+  }
+  PhotoResize.wire(scope);
+  input.onchange = async () => {
+    const picked = input.files[0]; if (!picked) return;
+    const r = await PhotoResize.process(picked), f = r.blob;
+    const name = id + "." + r.ext;
+    stagedPhotos = stagedPhotos.filter(p => p.name !== name);
+    stagedPhotos.push({ name, blob: f });
+    stageThumb("photos/" + name, f);
+    // show in the panel
+    const im = new Image();
+    im.onload = () => {
+      photos.classList.remove("missing");
+      photos.innerHTML = "";
+      im.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:8px";
+      photos.appendChild(im);
+    };
+    im.src = URL.createObjectURL(f);
+    renderStaged();
+    toast("Staged " + name + ": " + PhotoResize.describe(r));
+    input.value = "";
+  };
+}
+
+/* ---------- Staged photos ---------- */
+
+function renderStaged(){
+  const bar = $("staged");
+  if (!stagedPhotos.length){ bar.classList.remove("on"); return; }
+  bar.classList.add("on");
+  $("stagedFiles").innerHTML = stagedPhotos.map(p => `<code>${esc(p.name)}</code>`).join(", ");
+}
+
+$("downloadPhotos").onclick = () => {
+  stagedPhotos.forEach(p => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(p.blob);
+    a.download = p.dl || p.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+};
+$("clearStaged").onclick = () => { stagedPhotos = []; renderStaged(); };
+
+/* ============================================================
+   Drag from palette onto map
+   ============================================================ */
+
+const dropzone = $("dropzone");
+let dragKind = null;
+
+document.querySelectorAll(".chip").forEach(chip => {
+  chip.addEventListener("dragstart", e => {
+    dragKind = chip.dataset.add;
+    e.dataTransfer.effectAllowed = "copy";
+    e.dataTransfer.setData("text/plain", dragKind);
+    dropzone.classList.add("on");
+  });
+  chip.addEventListener("dragend", () => {
+    dragKind = null;
+    dropzone.classList.remove("on");
+  });
+});
+
+dropzone.addEventListener("dragover", e => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+
+dropzone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropzone.classList.remove("on");
+  const kind = e.dataTransfer.getData("text/plain") || dragKind;
+  dragKind = null;
+  if (!kind) return;
+  if (kind === "parent" && !loaded.loc) return toast("Load locations.csv first.");
+  if (kind === "child" && !loaded.loc)  return toast("Load locations.csv and childmarkers.csv first.");
+
+  const rect = map.getContainer().getBoundingClientRect();
+  const ll = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+  const lat = fmt(ll.lat), lng = fmt(ll.lng);
+
+  if (kind === "parent"){
+    const id = nextParentId();
+    const row = { ID:id, NAME:"New Parent", "EST.":"", LAT:lat, LONG:lng, DETAILS:"", CATEGORY:DEFAULT_CAT };
+    // make sure every column that exists in the source file is present
+    headers.loc.forEach(h => { if (!(h in row)) row[h] = ""; });
+    const p = mkParent(row);
+    parents.push(p);
+    selected = { kind:"parent", ref:p };
+    render();
+    toast("Added " + id);
+  } else {
+    // find nearest parent
+    const nearest = nearestParent([ll.lng, ll.lat]);
+    if (!nearest) return toast("No parents loaded yet.");
+    const id = nextChildId(nearest.row.ID);
+    const row = {
+      CHILD_ID:id, PARENT_ID:nearest.row.ID, NAME:"New Child",
+      HIST_NAMES:"", ADDRESS:"", DETAILS:"",
+      LAT:lat, LONG:lng, CONNECTION:"", CATEGORY:DEFAULT_CAT
+    };
+    headers.child.forEach(h => { if (!(h in row)) row[h] = ""; });
+    const c = mkChild(row);
+    children.push(c);
+    linkChildren();
+    selected = { kind:"child", ref:c };
+    render();
+    toast("Added " + id + " to " + nearest.row.ID);
+  }
+});
+
+function nearestParent(ll){
+  if (!parents.length) return null;
+  let best = null, bd = Infinity;
+  for (const p of parents){
+    if (!p.ll) continue;
+    const d = (p.ll[0]-ll[0])**2 + (p.ll[1]-ll[1])**2;
+    if (d < bd){ bd = d; best = p; }
+  }
+  return best;
+}
+/* ============================================================
+   Categories (categories.csv): color + icon per category
+   ============================================================ */
+function usage(code){
+  return parents.concat(children).filter(o => String(o.row.CATEGORY||"").trim().toUpperCase() === code).length;
+}
+
+function renderCats(){
+  const box = $("catList");
+  if (!box) return;
+  box.innerHTML = "";
+  $("catCount").textContent = "(" + Object.keys(CATEGORIES).length + ")";
+  Object.entries(CATEGORIES).forEach(([code, c]) => {
+    const row = document.createElement("div");
+    row.className = "row" + (selected && selected.kind === "category" && selected.ref === code ? " sel" : "");
+    row.innerHTML =
+      `<span class="dot" style="background:${esc(c.color)}"></span>` +
+      `<img class="cicon" src="${catImage(c)}" alt="" style="${c.fill ? "border-radius:4px;object-fit:cover" : ""}">` +
+      `<span class="name">${esc(code)}</span>` +
+      `<span class="id">${c.ranked ? "ranked · " : ""}${usage(code)}</span>`;
+    row.onclick = () => select("category", code);
+    box.appendChild(row);
+  });
+}
+
+// Update colors in place (no pin rebuild, so photos don't reload while you drag the picker)
+function recolor(){
+  const catOf = o => String(o.row.CATEGORY||"").trim().toUpperCase() || DEFAULT_CAT;
+  parents.concat(children).forEach(o => { if (o.el) o.el.style.setProperty("--c", pinColor(catOf(o))); });
+  renderLists();
+  renderCats();
+}
+
+function renderCategoryForm(box, code){
+  const c = CATEGORIES[code];
+  if (!c){ selected = null; renderForm(); return; }
+  const n = usage(code);
+
+  box.innerHTML = `
+    <div class="form">
+      <span class="badge">Category</span>
+
+      <div class="field">
+        <label>Code</label>
+        <input type="text" class="ro" value="${esc(code)}" readonly>
+        <div class="sub">This is what goes in the CATEGORY column. ${n} place(s) use it.</div>
+      </div>
+
+      <div class="field">
+        <label>Label</label>
+        <input type="text" id="c-label" value="${esc(c.label)}">
+        <div class="sub">Shown in this editor only.</div>
+      </div>
+
+      <div class="field">
+        <label>Color</label>
+        <div class="catrow">
+          <input type="color" id="c-color" value="${esc(c.color)}" style="width:44px;height:32px;padding:0;flex:none">
+          <input type="text" id="c-hex" value="${esc(c.color)}">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Ranking</label>
+        <label style="display:flex;gap:8px;align-items:center;font-size:13px;text-transform:none;letter-spacing:0;font-weight:normal;color:var(--ink)"><input type="checkbox" id="c-ranked" ${c.ranked ? "checked" : ""}> This category can earn passport ranks</label>
+        <div class="sub">Off: places and tasks in this category still work, but no stars or ranks come from it.</div>
+      </div>
+
+      <div class="field">
+        <label>Marker shape</label>
+        <div class="shapegrid" id="c-shapes">
+          ${MarkerShapes.list(customShapes).map(s => `<button type="button" class="sh ${(c.shape || "circle") === s.code ? "on" : ""}" data-shape="${esc(s.code)}" title="${esc(s.label)}">${shapePrev(s.code, c.color)}<span>${esc(s.label)}</span></button>`).join("")}
+        </div>
+        <div class="sub">Shape and color together make categories easier to tell apart. Draw your own under Marker shapes on the left.</div>
+      </div>
+
+      <div class="field">
+        <label>Icon (shown when a place has no photo)</label>
+        <div class="icongrid" id="c-icons">
+          ${Object.entries(ICONS).map(([k, i]) =>
+            `<button type="button" class="ic ${!c.fill && k === c.icon ? "on" : ""}" data-icon="${k}" title="${esc(i.label)}"><img src="${iconUrl(k)}" alt="${esc(i.label)}"></button>`).join("")}${MarkerFill.tileHtml(c)}
+        </div>
+        ${MarkerFill.panelHtml(c)}
+        <div class="sub" id="c-iconname">${esc((ICONS[c.icon] || {}).label || "")}</div>
+      </div>
+
+      <div class="actions">
+        <span class="grow"></span>
+        <button id="c-del" class="small warn" type="button">Delete category</button>
+      </div>
+    </div>`;
+
+  bindText(box, "c-label", v => { c.label = v; });
+  box.querySelector("#c-ranked").onchange = e => { c.ranked = e.target.checked; renderCats(); };
+
+  const colorIn = box.querySelector("#c-color"), hexIn = box.querySelector("#c-hex");
+  colorIn.oninput = () => { c.color = colorIn.value; hexIn.value = c.color; recolor(); };
+  hexIn.oninput = () => {
+    const v = hexIn.value.trim();
+    if (/^#[0-9a-f]{6}$/i.test(v)){ c.color = v; colorIn.value = v; recolor(); }
+  };
+
+  box.querySelectorAll("#c-shapes .sh").forEach(b => b.onclick = () => {
+    c.shape = b.dataset.shape;
+    box.querySelectorAll("#c-shapes .sh").forEach(x => x.classList.toggle("on", x === b));
+    renderPins();
+  });
+
+  box.querySelectorAll("#c-icons .ic[data-icon]").forEach(b => b.onclick = () => {
+    c.icon = b.dataset.icon;
+    c.fill = "";
+    box.querySelectorAll("#c-icons .ic").forEach(x => x.classList.toggle("on", x === b));
+    box.querySelector("#c-iconname").textContent = ICONS[c.icon].label;
+    renderCats();
+    renderPins();
+  });
+
+  MarkerFill.wire(box, c, () => { renderCats(); renderPins(); });
+
+  box.querySelector("#c-del").onclick = () => {
+    const msg = n
+      ? `${n} place(s) use ${code}. They will show the default color and a plain building icon. Delete it?`
+      : `Delete ${code}?`;
+    if (!confirm(msg)) return;
+    delete CATEGORIES[code];
+    selected = null;
+    render();
+    toast("Deleted category " + code);
+  };
+}
+
+$("addCat").onclick = () => {
+  const code = (prompt("Short code for the new category (letters and numbers, e.g. SCHOOL):") || "")
+    .trim().toUpperCase().replace(/[^A-Z0-9_]/g, "");
+  if (!code) return;
+  if (CATEGORIES[code]) return toast(code + " already exists.");
+  const label = (prompt("Name for " + code + ":", code) || code).trim();
+  CATEGORIES[code] = { label, color: "#888888", icon: "generic", ranked: false };
+  select("category", code);
+  toast("Added " + code + ". Pick its color and icon on the right.");
+};
+
+const CAT_KNOWN = ["CODE","LABEL","COLOR","ICON","RANKED","SHAPE","FILL","FILL_COLOR","FILL_COLOR2"];
+let catExtraCols = [];
+const catImage = c => (c && c.fill) ? MarkerFill.url(c.fill, c.fillColor, c.fillColor2) : iconUrl((c && c.icon) || "generic");
+function ingestCats(parsed){
+  const next = {};
+  catExtraCols = ((parsed.meta && parsed.meta.fields) || []).map(f => String(f).trim()).filter(f => f && !CAT_KNOWN.includes(f));   // columns this editor does not manage (for example SHAPE) are kept as they are, so saving never drops them
+
+  const hasRanked = parsed.data.length && Object.prototype.hasOwnProperty.call(parsed.data[0], "RANKED");
+  parsed.data.forEach(r => {
+    const code = String(r.CODE||"").trim().toUpperCase();
+    const color = String(r.COLOR||"").trim();
+    if (!code || !/^#[0-9a-f]{6}$/i.test(color)) return;
+    const icon = String(r.ICON||"").trim();
+    const old = CATEGORIES[code];
+    next[code] = {
+      label: String(r.LABEL||"").trim() || code,
+      color,
+      icon: ICONS[icon] ? icon : ((old && old.icon) || "generic"),
+      ranked: hasRanked ? isYes(r.RANKED) : !!(old && old.ranked),
+      shape: MarkerShapes.slug(r.SHAPE || "") || (old && old.shape) || "",
+      ...(MarkerFill.fromRow(r, color) || (old && old.fill ? { fill: old.fill, fillColor: old.fillColor, fillColor2: old.fillColor2 } : { fill: "" })),
+      extra: Object.fromEntries(catExtraCols.map(k => [k, String(r[k] == null ? "" : r[k])]))
+    };
+  });
+  if (!Object.keys(next).length) return;
+  CATEGORIES = next;
+  render();
+}
+
+/* ============================================================
+   photos.csv  (ITEM_ID, ORDER, PATH, CAPTION, CREDIT)
+   Row 1 per item = caption/credit for the main photo; rows 2+ = extra photos.
+   ============================================================ */
+const PHOTO_COLS = ["ITEM_ID","ORDER","PATH","CAPTION","CREDIT"];
+let photoRows = [];
+let photosLoaded = false;
+const rowsFor = id => photoRows.filter(x => x.ITEM_ID === id).sort((a, b) => (parseFloat(a.ORDER) || 0) - (parseFloat(b.ORDER) || 0));
+const renumber = id => rowsFor(id).forEach((x, i) => { x.ORDER = String(i + 1); });
+function renameItem(oldId, newId){ photoRows.forEach(x => { if (x.ITEM_ID === oldId) x.ITEM_ID = newId; }); }
+
+async function loadExtras(){   // photos.csv and shapes.csv from the same folder (or the event's folder)
+  try {
+    const r = await fetch("photos.csv", { cache: "no-store" });
+    if (r.ok) {
+      photoRows = Papa.parse(await r.text(), { header: true, skipEmptyLines: "greedy" }).data.map(x => ({
+        ITEM_ID: String(x.ITEM_ID||"").trim(), ORDER: String(x.ORDER||"").trim(), PATH: String(x.PATH||"").trim(),
+        CAPTION: String(x.CAPTION||"").trim(), CREDIT: String(x.CREDIT||"").trim()
+      })).filter(x => x.ITEM_ID);
+      photosLoaded = true;
+    } else if (r.status === 404) { photoRows = []; photosLoaded = true; }
+  } catch (x) {}
+  try {
+    const r = await fetch("shapes.csv", { cache: "no-store" });
+    if (r.ok) { customShapes = MarkerShapes.parseRows(Papa.parse(await r.text(), { header: true, skipEmptyLines: "greedy" }).data); shapesLoaded = true; }
+    else if (r.status === 404) shapesLoaded = true;
+  } catch (x) {}
+  render();
+}
+loadExtras();
+$("loadPhotos").onclick = () => $("filePhotos").click();
+$("filePhotos").onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  Papa.parse(f, { header:true, skipEmptyLines:"greedy", complete: r => {
+    photoRows = r.data.map(x => ({
+      ITEM_ID: String(x.ITEM_ID||"").trim(), ORDER: String(x.ORDER||"").trim(), PATH: String(x.PATH||"").trim(),
+      CAPTION: String(x.CAPTION||"").trim(), CREDIT: String(x.CREDIT||"").trim()
+    })).filter(x => x.ITEM_ID);
+    photosLoaded = true;
+    renderForm();
+    toast("Loaded " + f.name + " (" + photoRows.length + " rows)");
+  }});
+  e.target.value = "";
+};
+
+function renderGalEditor(scope, id){
+  const box = scope.querySelector("#galEditor");
+  if (!box) return;
+  const idNow = () => (scope.querySelector("#f-ID") || scope.querySelector("#f-CHILD_ID") || {}).value || id;
+  const list = rowsFor(idNow());
+  box.innerHTML = '<div class="sub" style="margin:10px 0 4px">Captions, credits and extra photos</div>' + list.map((x, i) => `
+    <div class="galrow" data-i="${i}" style="border:1px solid var(--line);border-radius:8px;padding:6px;margin-bottom:6px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:3px">${i === 0 ? "Main photo (its file is chosen above)" : "Extra photo " + i}</div>
+      ${i === 0 ? "" : '<div style="display:flex;gap:6px"><input type="text" class="g-path" placeholder="folder/photo.jpg" value="' + esc(x.PATH || "") + '" style="flex:1"><button class="small g-fbtn" type="button">Upload…</button><input type="file" class="g-file" accept="image/*" hidden></div>'}
+      <input type="text" class="g-cap" placeholder="Caption" value="${esc(x.CAPTION || "")}" style="margin-top:4px">
+      <input type="text" class="g-cred" placeholder="Credit (who took it or owns it)" value="${esc(x.CREDIT || "")}" style="margin-top:4px">
+      <div class="actions" style="margin-top:4px">
+        <button class="small g-up" type="button" ${i < 2 ? "disabled" : ""}>↑</button>
+        <button class="small g-dn" type="button" ${i === 0 || i === list.length - 1 ? "disabled" : ""}>↓</button>
+        <span class="grow"></span>
+        <button class="small warn g-del" type="button" ${i === 0 && list.length > 1 ? "disabled title='Remove the extra photos first'" : ""}>Remove</button>
+      </div>
+    </div>`).join("") + `<button class="small" id="galAdd" type="button">＋ ${list.length ? "Add extra photo" : "Add caption / credit"}</button>`;
+
+  box.querySelectorAll(".galrow").forEach(rowEl => {
+    const i = +rowEl.dataset.i, x = list[i];
+    const bind = (sel, key) => { const el = rowEl.querySelector(sel); if (el) el.oninput = () => { x[key] = el.value.trim(); return el; }; };
+    bind(".g-cap", "CAPTION"); bind(".g-cred", "CREDIT");
+    const pathEl = rowEl.querySelector(".g-path");
+    if (pathEl) {
+      let t = null;
+      pathEl.oninput = () => {
+        x.PATH = pathEl.value.trim();
+        clearTimeout(t);
+        t = setTimeout(() => {
+          pathEl.style.borderColor = ""; pathEl.title = "";
+          if (!x.PATH) return;
+          if (stagedPhotos.some(p => p.name === x.PATH || "photos/" + p.name === x.PATH)) { pathEl.title = "Staged upload, not published yet"; return; }
+          const im = new Image();
+          im.onerror = () => { pathEl.style.borderColor = "#b42318"; pathEl.title = "Not found: check the folder, spelling and extension"; };
+          im.src = x.PATH;
+        }, 400);
+      };
+      pathEl.oninput();
+      const fb = rowEl.querySelector(".g-fbtn"), fi = rowEl.querySelector(".g-file");
+      fb.onclick = () => fi.click();
+      fi.onchange = async () => {
+        const picked = fi.files[0];
+        if (!picked) return;
+        const r = await PhotoResize.process(picked), f = r.blob;
+        const name = idNow() + "-" + Date.now().toString(36).slice(-4) + "." + r.ext;
+        stagedPhotos = stagedPhotos.filter(p => p.name !== name);
+        stagedPhotos.push({ name, blob: f });
+        stageThumb("photos/" + name, f);
+        pathEl.value = "photos/" + name;
+        pathEl.oninput();
+        renderStaged();
+        toast("Staged " + name + ": " + PhotoResize.describe(r));
+        fi.value = "";
+      };
+    }
+    const move = dir => { const o = list[i + dir]; const t = x.ORDER; x.ORDER = o.ORDER; o.ORDER = t; renumber(idNow()); renderGalEditor(scope, id); };
+    rowEl.querySelector(".g-up").onclick = () => move(-1);
+    rowEl.querySelector(".g-dn").onclick = () => move(1);
+    rowEl.querySelector(".g-del").onclick = () => { photoRows = photoRows.filter(r => r !== x); renumber(idNow()); renderGalEditor(scope, id); };
+  });
+  box.querySelector("#galAdd").onclick = () => {
+    if (!photosLoaded && !photoRows.length) toast("If you already have a photos.csv, load it first. Otherwise downloading will replace it.");
+    photoRows.push({ ITEM_ID: idNow(), ORDER: String(list.length + 1), PATH: "", CAPTION: "", CREDIT: "" });
+    renderGalEditor(scope, id);
+  };
+}
+
+/* ============================================================
+   Marker shapes  (shapes.csv: CODE, LABEL, POINTS)
+   ============================================================ */
+function shapePrev(code, color){
+  const clip = MarkerShapes.clipFor(code, customShapes);
+  return '<span style="display:block;width:26px;height:26px;background:' + color + ';' + (clip ? "clip-path:" + clip : "border-radius:50%") + '"></span>';
+}
+function renderShapes(){
+  const box = $("shapeList");
+  if (!box) return;
+  const codes = Object.keys(customShapes);
+  $("shapeCount").textContent = "(" + codes.length + ")";
+  box.innerHTML = "";
+  codes.forEach(code => {
+    const used = Object.values(CATEGORIES).filter(c => c.shape === code).length;
+    const row = document.createElement("div");
+    row.className = "row" + (selected && selected.kind === "shape" && selected.ref === code ? " sel" : "");
+    row.innerHTML = '<span style="display:flex;margin-right:6px">' + shapePrev(code, "#E47303") + '</span><span class="name">' + esc(customShapes[code].label) + '</span><span class="id">' + esc(code) + " · " + used + " used</span>";
+    row.onclick = () => select("shape", code);
+    box.appendChild(row);
+  });
+}
+
+function renderShapeForm(box, code){
+  const s = customShapes[code];
+  if (!s){ selected = null; renderForm(); return; }
+  const used = Object.entries(CATEGORIES).filter(([k, c]) => c.shape === code).map(([k]) => k);
+  const tpl = Object.entries(MarkerShapes.TEMPLATES).map(([k, t]) => '<option value="' + k + '">' + esc(t.label) + "</option>").join("");
+  box.innerHTML = `
+    <div class="form">
+      <span class="badge">Marker shape</span>
+      <div class="field">
+        <label>Code</label>
+        <input type="text" class="ro" value="${esc(code)}" readonly>
+        <div class="sub">Goes in the SHAPE column of categories.csv. ${used.length ? "Used by " + esc(used.join(", ")) + "." : "No category uses it yet. Pick it in a category's Marker shape."}</div>
+      </div>
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="s-label" value="${esc(s.label)}">
+      </div>
+      <div class="field">
+        <label>Draw the outline</label>
+        <svg id="s-canvas" viewBox="0 0 100 100" style="width:100%;max-width:300px;aspect-ratio:1;background:#fff;border:1px solid var(--line);border-radius:8px;touch-action:none;cursor:crosshair"></svg>
+        <div class="sub">Click an empty spot to add a corner (near an edge it goes into that edge). Drag a corner to move it. Double-click a corner to remove it. Keep it simple: bold shapes stay readable on a small marker.</div>
+        <div class="actions" style="margin-top:6px"><select id="s-from"><option value="">Start from…</option>${tpl}</select><button class="small" id="s-undo" type="button">Remove last corner</button></div>
+      </div>
+      <div class="field"><label>Preview</label><div id="s-prev"></div></div>
+      <div class="actions"><span class="grow"></span><button id="s-del" class="small warn" type="button">Delete shape</button></div>
+    </div>`;
+
+  const svg = box.querySelector("#s-canvas");
+  const pts = () => s.points;
+  const dist = (x, y, a, b) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / l2)) : 0;
+    return Math.hypot(x - (a[0] + t * dx), y - (a[1] + t * dy));
+  };
+  const preview = () => {
+    const wrap = box.querySelector("#s-prev");
+    wrap.innerHTML = "";
+    [["", 44], ["parent", 58]].forEach(([cls, size]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "pin " + cls;
+      b.style.cssText = "position:relative;display:inline-block;margin:6px;pointer-events:none";
+      b.style.setProperty("--c", "#E47303");
+      const im = new Image();
+      im.className = "is-default";
+      im.src = iconUrl("generic");
+      b.appendChild(im);
+      MarkerShapes.apply(b, code, customShapes);
+      wrap.appendChild(b);
+    });
+  };
+  const draw = () => {
+    svg.innerHTML = '<g stroke="#e5e8ec" stroke-width=".4"><path d="M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100"/></g>' +
+      '<polygon points="' + pts().map(p => p.join(",")).join(" ") + '" fill="#E4730355" stroke="#E47303" stroke-width="1"/>' +
+      pts().map((p, i) => '<circle data-i="' + i + '" cx="' + p[0] + '" cy="' + p[1] + '" r="2.8" fill="#fff" stroke="#E47303" stroke-width="1" style="cursor:grab"/>').join("");
+    preview();
+  };
+  const toXY = ev => { const r = svg.getBoundingClientRect(); return [Math.max(0, Math.min(100, +((ev.clientX - r.left) / r.width * 100).toFixed(1))), Math.max(0, Math.min(100, +((ev.clientY - r.top) / r.height * 100).toFixed(1)))]; };
+  let drag = -1;
+  svg.onpointerdown = ev => {
+    const c = ev.target.closest && ev.target.closest("circle");
+    svg.setPointerCapture(ev.pointerId);
+    if (c) { drag = +c.dataset.i; return; }
+    const [x, y] = toXY(ev);
+    let best = { d: 1e9, i: pts().length - 1 };
+    pts().forEach((p, i) => { const d = dist(x, y, p, pts()[(i + 1) % pts().length]); if (d < best.d) best = { d, i }; });
+    pts().splice(best.d < 6 ? best.i + 1 : pts().length, 0, [x, y]);
+    draw(); renderPins(); renderShapes();
+  };
+  svg.onpointermove = ev => { if (drag >= 0) { pts()[drag] = toXY(ev); draw(); } };
+  svg.onpointerup = () => { if (drag >= 0) { drag = -1; renderPins(); renderShapes(); } };
+  svg.ondblclick = ev => {
+    const c = ev.target.closest && ev.target.closest("circle");
+    if (!c) return;
+    if (pts().length <= 3) return toast("A shape needs at least 3 corners.");
+    pts().splice(+c.dataset.i, 1);
+    draw(); renderPins(); renderShapes();
+  };
+  box.querySelector("#s-undo").onclick = () => { if (pts().length <= 3) return toast("A shape needs at least 3 corners."); pts().pop(); draw(); renderPins(); renderShapes(); };
+  box.querySelector("#s-from").onchange = ev => {
+    const t = MarkerShapes.TEMPLATES[ev.target.value];
+    if (!t) return;
+    s.points = JSON.parse(JSON.stringify(t.points));
+    ev.target.value = "";
+    draw(); renderPins(); renderShapes();
+  };
+  bindText(box, "s-label", v => { s.label = v || code; renderShapes(); });
+  box.querySelector("#s-del").onclick = () => {
+    if (!confirm(used.length ? used.join(", ") + " use this shape. They will go back to round markers. Delete it?" : "Delete " + code + "?")) return;
+    used.forEach(k => { CATEGORIES[k].shape = "circle"; });
+    delete customShapes[code];
+    selected = null;
+    render();
+    toast("Deleted shape " + code);
+  };
+  draw();
+}
+
+$("addShape").onclick = () => {
+  const name = (prompt("Name for the new shape:", "") || "").trim();
+  const code = MarkerShapes.slug(name);
+  if (!code) return;
+  if (MarkerShapes.BUILTIN[code] || customShapes[code]) return toast(code + " already exists.");
+  if (!shapesLoaded && !Object.keys(customShapes).length) toast("If you already have a shapes.csv, load it first. Otherwise downloading will replace it.");
+  const t = MarkerShapes.TEMPLATES.hexagon || { points: [[50,0],[100,50],[50,100],[0,50]] };
+  customShapes[code] = { label: name, points: JSON.parse(JSON.stringify(t.points)) };
+  select("shape", code);
+};
+$("loadShapes").onclick = () => $("fileShapes").click();
+$("fileShapes").onchange = ev => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  Papa.parse(f, { header: true, skipEmptyLines: "greedy", complete: r => {
+    customShapes = MarkerShapes.parseRows(r.data);
+    shapesLoaded = true;
+    render();
+    toast("Loaded " + f.name + " (" + Object.keys(customShapes).length + " shapes)");
+  }});
+  ev.target.value = "";
+};
+
+$("loadCats").onclick = () => $("fileCats").click();
+$("fileCats").onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  Papa.parse(f, { header:true, skipEmptyLines:"greedy", complete: r => { ingestCats(r); toast("Loaded " + f.name); } });
+};
+  
+/* ============================================================
+   Publish — write both CSVs
+   ============================================================ */
+
+$("publishBtn").onclick = () => {
+  // Build the arrays of plain row objects in the exact header order
+  const locRows   = parents.map(p => pick(p.row, headers.loc));
+  const childRows = children.map(c => pick(c.row, headers.child));
+
+  const locCSV   = Papa.unparse({ fields: headers.loc,   data: locRows   });
+  const childCSV = Papa.unparse({ fields: headers.child, data: childRows });
+
+  download("locations.csv", locCSV);
+  download("childmarkers.csv", childCSV);
+    const catRows = Object.entries(CATEGORIES).map(([CODE, c]) => Object.assign({}, c.extra || {}, { CODE, LABEL: c.label, COLOR: c.color, ICON: c.icon, RANKED: c.ranked ? "yes" : "no", SHAPE: c.shape || "circle", FILL: c.fill || "", FILL_COLOR: c.fill ? c.fillColor : "", FILL_COLOR2: c.fill ? c.fillColor2 : "" }));
+  download("categories.csv", Papa.unparse({ fields: ["CODE","LABEL","COLOR","ICON","RANKED","SHAPE","FILL","FILL_COLOR","FILL_COLOR2"].concat(catExtraCols), data: catRows }));
+  if (shapesLoaded || Object.keys(customShapes).length) {
+    const shapeRows = Object.entries(customShapes).map(([CODE, s]) => ({ CODE, LABEL: s.label, POINTS: s.points.map(p => (+p[0].toFixed(1)) + " " + (+p[1].toFixed(1))).join(";") }));
+    download("shapes.csv", Papa.unparse({ fields: ["CODE","LABEL","POINTS"], data: shapeRows }));
+  }
+  if (photosLoaded || photoRows.length) {
+    const sorted = photoRows.slice().sort((a, b) => a.ITEM_ID.localeCompare(b.ITEM_ID) || (parseFloat(a.ORDER) || 0) - (parseFloat(b.ORDER) || 0));
+    download("photos.csv", Papa.unparse({ fields: PHOTO_COLS, data: sorted.map(x => pick(x, PHOTO_COLS)) }));
+  }
+
+  toast(`Downloaded ${parents.length} parents, ${children.length} children.`
+        + (stagedPhotos.length ? ` Plus ${stagedPhotos.length} staged photos below.` : ""));
+};
+
+function pick(row, cols){
+  const out = {};
+  for (const c of cols) out[c] = row[c] != null ? row[c] : "";
+  return out;
+}
+
+function download(name, text){
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ============================================================
+   UI helpers
+   ============================================================ */
+
+function updateStatus(){
+  const bits = [];
+  if (loaded.loc)   bits.push(`locations.csv (${parents.length})`);
+  if (loaded.child) bits.push(`childmarkers.csv (${children.length})`);
+  $("status").textContent = bits.length ? "Loaded: " + bits.join(" · ") : "Load both CSVs to begin";
+}
+
+let toastTimer = 0;
+function toast(msg){
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2600);
+}
+
+/* keyboard: Delete removes selection, Escape clears */
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input,textarea,select")) return;
+  if (e.key === "Escape"){ clearSelection(); return; }
+  if (e.key === "Delete" || e.key === "Backspace"){
+  if (!selected || selected.kind === "category" || selected.kind === "shape") return;
+    const o = selected.ref;
+    if (selected.kind === "parent"){
+      if (o.kids.length && !confirm(`Delete ${o.row.ID}? It has ${o.kids.length} children.`)) return;
+      parents = parents.filter(x => x !== o);
+      children.forEach(c => { if (c.parent === o) c.parent = null; });
+    } else {
+      if (!confirm("Delete " + (o.row.CHILD_ID||"") + "?")) return;
+      children = children.filter(x => x !== o);
+    }
+    selected = null;
+    linkChildren();
+    render();
+  }
+});
+  async function stageThumb(fullPath, blob) {      // also stage a small copy at folder/thumbs/name.jpg
+    try {
+      const t = await PhotoThumb.entry(fullPath, blob);
+      if (!t) return;
+      stagedPhotos = stagedPhotos.filter(p => p.name !== t.name);
+      stagedPhotos.push(t); renderStaged();
+    } catch (e) {}
+  }
+  GHPublish.attach({
+  buttons: ["publishBtn", "downloadPhotos"],
+  route: name => { const p = stagedPhotos.find(x => x.dl === name); return p ? p.name : undefined; },
+  onPublished: () => { stagedPhotos = []; renderStaged(); }
+});
+  PhotoThumb.addButton("publishBtn", t => { stagedPhotos = stagedPhotos.filter(p => p.name !== t.name); stagedPhotos.push(t); }, renderStaged);
+</script>
+</body>
+</html>

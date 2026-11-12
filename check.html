@@ -52,13 +52,14 @@ code{background:#eee;padding:1px 4px;border-radius:3px}
 <script src="marker-shapes.js"></script>
 <script src="welcome-themes.js"></script>
 <script src="schedule.js"></script>
+<script src="announcements.js"></script>
 <script src="marker-fill.js"></script>
 <script src="ets-config.js"></script>
 <script src="workspace.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
-const ORDER = ["Setup","Settings","Places","Children","Stories and spots","Categories","Marker shapes","Photos","Passport","Tours","Old maps","Events"];
+const ORDER = ["Setup","Settings","Places","Children","Stories and spots","Categories","Marker shapes","Photos","Passport","Tours","Announcements","Icons","Old maps","Events"];
 const BIG_PHOTO = 1.5 * 1024 * 1024;
 const PHOTO_EXT = ["jpg","jpeg","png","webp","JPG","PNG"];
 let issues = [], counts = { files: 0, photos: 0 }, evSlug = "", evInfo = null, headCache = new Map();
@@ -365,6 +366,15 @@ async function runOnce(){
     if (got["tours.csv"].text != null) {
       const TT = parseCsv("Tours", "tours.csv", got["tours.csv"].text, ["TOUR_ID"], WT);
       dupes("Tours", "Tour", TT.rows, r => v(r, "TOUR_ID"), WT);
+      TT.rows.forEach(r => {   // the visitor-list columns: SUMMARY, EFFORT, MINUTES, FEATURED
+        const id = v(r, "TOUR_ID"); if (!id || lc(v(r, "TYPE")) === "line") return;
+        const ref = "tour " + id;
+        if (v(r, "EFFORT") && !/^(easy|moderate|strenuous)$/i.test(v(r, "EFFORT"))) add("note", "Tours", ref, 'Effort "' + v(r, "EFFORT") + '" is not Easy, Moderate or Strenuous. It still shows, as typed.', "");
+        if (v(r, "MINUTES") && !(num(v(r, "MINUTES")) > 0)) add("warn", "Tours", ref, 'MINUTES "' + v(r, "MINUTES") + '" is not a positive number, so the time is worked out from the route instead.', "Type a number of minutes, or clear it in " + WT + ".");
+        if (v(r, "FEATURED") && !/^(y|yes|true|1|n|no|false|0)$/i.test(v(r, "FEATURED"))) add("warn", "Tours", ref, 'FEATURED "' + v(r, "FEATURED") + '" should be yes or blank.', "Tick or untick Feature in " + WT + ".");
+        if (/^(y|yes|true|1)$/i.test(v(r, "FEATURED")) && !v(r, "ROUTE") && !(got["tourstops.csv"].text || "").split(/\r?\n/).some(l => lc(l.split(",")[0]) === lc(id))) add("warn", "Tours", ref, "Is featured but has no stops and no route, so there is nothing to show when a visitor presses Start.", "Add stops or a route in " + WT + ".");
+        if (!v(r, "SUMMARY") && !v(r, "INTRO")) add("note", "Tours", ref, "Has no short description or intro, so its card in the visitor's list has no text.", "");
+      });
       TT.rows.forEach(r => { const id = v(r, "TOUR_ID"); if (!id) return; tourIds.add(lc(id)); const c = v(r, "CATEGORY").toUpperCase(); if (c && cats.size && !cats.has(c)) add("warn", "Tours", "tour " + id, 'Category "' + c + '" is not in categories.csv.', ""); });
     }
     const stopsBy = new Map();
@@ -387,6 +397,72 @@ async function runOnce(){
     tourIds.forEach(t => { if (!stopsBy.has(t)) add("warn", "Tours", "tour " + t, "Has no stops.", "Add stops in " + WT + " or remove the tour."); });
   }
 
+  /* tour stops: icons for the travelling vehicle */
+  const iconCodes = new Set(); let iconText = null;
+  { const ic = await tryFetch("icons.js"); if (ic && ic.ok) { iconText = await ic.text(); for (const m of iconText.matchAll(/^\s{2}([A-Za-z0-9_]+):\s*\{\s*label:/gm)) iconCodes.add(lc(m[1])); } }
+  if (iconCodes.size && got["tourstops.csv"].text != null) {
+    const seenV = new Set();
+    Papa.parse(got["tourstops.csv"].text, { header: true, skipEmptyLines: "greedy" }).data.forEach(r => {
+      const vh = lc(v(r, "VEHICLE")), k = v(r, "TOUR_ID") + "|" + vh;
+      if (vh && !iconCodes.has(vh) && !seenV.has(k)) { seenV.add(k); add("warn", "Tours", "tour " + v(r, "TOUR_ID"), 'Vehicle "' + v(r, "VEHICLE") + '" is not an icon in icons.js, so a train is used.', "Pick a vehicle in the Tours editor, or add the icon in the Icons tab."); }
+    });
+  }
+
+  /* announcements (shared by the whole site, so never read from an event folder) */
+  {
+    const an = await tryFetch((window.ETS_CONFIG && ETS_CONFIG.ANNOUNCEMENTS_FILE) || "announcements.csv");
+    if (an && an.ok) {
+      const WA = "the Announcements tab", text = await an.text();
+      const A = parseCsv("Announcements", "announcements.csv", text, ["ANN_ID", "NAME"], WA);
+      dupes("Announcements", "Announcement", A.rows, r => v(r, "ANN_ID"), WA);
+      const tourSet = new Set(); if (got["tours.csv"].text != null) Papa.parse(got["tours.csv"].text, { header: true, skipEmptyLines: "greedy" }).data.forEach(r => { if (v(r, "TOUR_ID")) tourSet.add(lc(v(r, "TOUR_ID"))); });
+      const nowWall = window.EventSchedule ? EventSchedule.wallNow("America/Indiana/Indianapolis") : 0;
+      A.rows.forEach((r, i) => {
+        const id = v(r, "ANN_ID") || ("row " + (i + 2)), ref = id + (v(r, "NAME") ? " (" + v(r, "NAME") + ")" : "");
+        if (!v(r, "NAME")) { add("problem", "Announcements", ref, "Has no name, so it is never shown.", "Give it a name in " + WA + "."); return; }
+        const off = /^(n|no|false|0|off)$/i.test(v(r, "ENABLED"));
+        const sch = window.Announcements ? Announcements.scheduleFromRow(r) : null;
+        if (!sch) add(off ? "note" : "warn", "Announcements", ref, "Has no dates, so it never appears.", "Set dates in " + WA + ".");
+        else if (window.EventSchedule) {
+          const probs = EventSchedule.validate(sch);
+          probs.forEach(p => add("problem", "Announcements", ref, "Dates: " + p, "Fix them in " + WA + "."));
+          if (!probs.length && !off && EventSchedule.status(sch, nowWall).state === "ended") add("note", "Announcements", ref, "Is over (a one-time event in the past) but still switched on.", "Delete it or untick Show in " + WA + ".");
+        }
+        String(v(r, "VENUE_IDS")).split("|").map(s => s.trim()).filter(Boolean).forEach(vid => {
+          const kind = idKinds.get(lc(vid));
+          if (!kind) add("problem", "Announcements", ref, 'Happens at "' + vid + '", which is not a place or child in your data, so the welcome screen has nothing to point at.', "Pick the place again in " + WA + ".");
+          else if (kind === "spot") add("warn", "Announcements", ref, 'Happens at "' + vid + '", which is a story or spot. Only places and parts of places can be pointed at.', "Pick a place instead.");
+        });
+        if (v(r, "TOUR_ID") && !tourSet.has(lc(v(r, "TOUR_ID")))) add("problem", "Announcements", ref, 'Features the tour "' + v(r, "TOUR_ID") + '", which is not in tours.csv, so its button does nothing.', "Pick another in " + WA + ".");
+        if (v(r, "COLOR") && !/^#[0-9a-f]{6}$/i.test(v(r, "COLOR"))) add("warn", "Announcements", ref, 'Color "' + v(r, "COLOR") + '" is not like #C2185B, so orange is used.', "Pick the color again in " + WA + ".");
+        if (v(r, "LINK") && !/^https?:\/\//i.test(v(r, "LINK"))) add("warn", "Announcements", ref, 'Web page "' + v(r, "LINK") + '" must start with http:// or https://.', "");
+        if (!v(r, "BLURB")) add("note", "Announcements", ref, "Has no description sentence, so the welcome screen shows only its name.", "");
+        else if (v(r, "BLURB").length > 170) add("note", "Announcements", ref, "Its description is " + v(r, "BLURB").length + " characters. The welcome screen cuts it at about 170.", "");
+        if (!v(r, "VENUE_IDS") && !v(r, "TOUR_ID") && !v(r, "LINK") && !off) add("note", "Announcements", ref, "Has no place, tour or web page, so its welcome-screen button just closes the screen.", "");
+      });
+    }
+  }
+
+  /* icons.js itself */
+  if (iconText) {
+    let obj = null;
+    try {
+      const m = /const\s+ICONS\s*=\s*\{/.exec(iconText), s0 = m.index + m[0].length - 1, e0 = s0 + iconText.slice(s0).search(/\n\};/);
+      obj = new Function("return (" + iconText.slice(s0, e0 + 2) + ");")();
+    } catch (e) { add("problem", "Icons", "icons.js", "Could not be read: " + e.message, "Download it again from the Icons tab, or restore an earlier version."); }
+    if (obj) Object.keys(obj).forEach(code => {
+      const o = obj[code], ref = 'icon "' + code + '"';
+      if (!o.label) add("warn", "Icons", ref, "Has no label.", "");
+      const vb = String(o.vb || "").trim().split(/[\s,]+/).map(Number);
+      if (vb.length !== 4 || vb.some(n => !isFinite(n)) || !(vb[2] > 0 && vb[3] > 0)) add("problem", "Icons", ref, 'Its viewBox "' + (o.vb || "") + '" needs four numbers, like 0 0 60 60.', "Fix it in the Icons tab.");
+      if (o.scene && !/^(rail|water|road)$/.test(o.scene)) add("warn", "Icons", ref, 'Its scenery "' + o.scene + '" is not rail, water or road.', "Pick one in the Icons tab.");
+      const doc = new DOMParser().parseFromString('<svg xmlns="http://www.w3.org/2000/svg">' + (o.art || "") + "</svg>", "image/svg+xml");
+      if (!o.art || !String(o.art).trim()) add("problem", "Icons", ref, "Has no artwork.", "Draw it in the Icons tab.");
+      else if (doc.querySelector("parsererror")) add("problem", "Icons", ref, "Its artwork is not valid SVG.", "Fix it in the Code view of the Icons tab.");
+      else if (doc.querySelector("script,foreignObject,image,iframe,object,embed")) add("problem", "Icons", ref, "Its artwork contains script, image or embedded elements, which are not allowed.", "Remove them in the Code view of the Icons tab.");
+    });
+  }
+
   /* overlays, welcome picture, outline, code files, events */
   const fileJobs = [];
   if (got["overlays.json"].text != null && /^yes$/i.test(S.OVERLAY_SLIDER || "yes")) {
@@ -406,7 +482,14 @@ async function runOnce(){
   if (!evSlug) {
     const ix = await tryFetch("events/index.json");
     if (ix && ix.ok) { try {
-      (await ix.json()).forEach(e => {
+      const idxList = await ix.json();
+      if (window.EventSchedule && Array.isArray(idxList)) {
+        const t0 = EventSchedule.wallNow("America/Indiana/Indianapolis"), runs = [];
+        idxList.filter(e => e && e.auto && e.schedule && EventSchedule.validate(e.schedule).length === 0).forEach(e => EventSchedule.range(e.schedule, t0 - 864e5, t0 + 365 * 864e5).forEach(o => runs.push({ e, start: o.start, end: o.end })));
+        const said = new Set();
+        runs.forEach((p, i) => runs.slice(i + 1).forEach(q => { const pair = [p.e.slug, q.e.slug].sort().join("|"); if (p.e !== q.e && p.start < q.end && q.start < p.end && !said.has(pair)) { said.add(pair); add("warn", "Events", "Events " + p.e.slug + " and " + q.e.slug, "Both open themselves automatically and their dates overlap (around " + new Date(Math.max(p.start, q.start)).toISOString().slice(0, 10) + "). Only the one that started last opens.", "Change the dates, or untick Open automatically on one. The Calendar tab shows it."); } }));
+      }
+      idxList.forEach(e => {
         fileJobs.push({ section: "Events", ref: "Event " + e.slug, path: "events/" + e.slug + "/event.json", what: "event", sev: "warn", fix: "The event is listed but its folder is gone. Remove it from events/index.json." });
         if (e.auto && !e.schedule) add("warn", "Events", "Event " + e.slug, "Is set to open automatically but has no dates.", "Set dates on its card in the Events tab.");
         if (e.schedule && window.EventSchedule) EventSchedule.validate(e.schedule).forEach(p => add("problem", "Events", "Event " + e.slug, "Dates: " + p, "Fix them on the event's card in the Events tab."));

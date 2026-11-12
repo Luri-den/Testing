@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site Settings Editor</title>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script src="editor-common.js"></script>
+<script>Workspace.install();</script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:Arial,sans-serif;color:#222}
+body{display:flex;flex-direction:column}
+header{background:#333;color:#fff;padding:8px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+header h1{font-size:17px;margin:0 8px 0 0}
+.btn,button{font:inherit;font-size:13px;padding:7px 11px;border:0;border-radius:4px;background:#fff;color:#222;cursor:pointer}
+.btn:hover,button:hover{background:#eee}
+button.go{background:#28a745;color:#fff;font-weight:bold}
+button.go:hover{background:#218838}
+button:disabled{opacity:.4;cursor:not-allowed}
+#status{background:#fff3cd;color:#664d03;padding:6px 12px;font-size:13px;border-bottom:1px solid #e6d9a2}
+main{flex:1;display:flex;min-height:0}
+#map{flex:1;min-width:0}
+#side{width:340px;overflow:auto;padding:12px 14px;border-left:1px solid #ccc;background:#fafafa}
+#side.off{opacity:.45;pointer-events:none}
+#side h2{font-size:14px;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #ddd}
+#side h2:first-child{margin-top:0}
+label{display:block;font-size:12px;font-weight:bold;color:#555;margin:8px 0 3px}
+label.chk{display:flex;gap:8px;align-items:flex-start;font-weight:normal;color:#222;font-size:13px}
+textarea{width:100%;min-height:110px;padding:6px;font:inherit;font-size:14px;border:1px solid #bbb;border-radius:4px;resize:vertical}
+input:not([type=checkbox]):not([type=color]){width:100%;padding:6px;font-size:14px;border:1px solid #bbb;border-radius:4px}
+input[type=color]{width:44px;height:32px;padding:0;border:1px solid #bbb;border-radius:4px;background:none}
+.two{display:flex;gap:8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+small{color:#777;font-size:11px;display:block;margin-top:3px}
+.row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.row button{background:#e9ecef}
+.row button:hover{background:#dde1e5}
+#pvBar{color:#fff;padding:10px 12px;border-radius:6px;font-weight:bold;font-size:16px}
+#pvTab{font-size:12px;color:#777;margin:4px 0 8px}
+#warn{margin-top:14px;font-size:13px;color:#842029}
+#warn div{background:#f8d7da;border-radius:4px;padding:6px 8px;margin-top:6px}
+.pin-center{width:26px;height:26px;border-radius:50%;border:4px solid #d40000;background:#fff8;box-shadow:0 0 0 2px #fff,0 1px 5px #0008;cursor:grab}
+.handle{width:18px;height:18px;background:#0072B2;border:3px solid #fff;box-shadow:0 1px 4px #0008;cursor:grab}
+select{width:100%;padding:6px;font-size:14px;border:1px solid #bbb;border-radius:4px}
+input[type=range]{padding:0;border:0}
+.zl{font-size:12px;font-weight:bold;color:#555;margin:8px 0 3px}
+#board .zone{min-height:40px;display:flex;flex-wrap:wrap;gap:6px;padding:6px;border:2px dashed #bbb;border-radius:6px;background:#fff}
+#board .zone.hot{border-color:#28a745;background:#eefaf0}
+.chip{touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;background:#e9ecef;border:1px solid #aaa;border-radius:999px;padding:6px 11px;font-size:12px}
+.chip.lock{background:#fff3cd}
+.chip.dragging{opacity:.35}
+.chip.ghost{position:fixed;z-index:99;pointer-events:none;opacity:.92;box-shadow:0 2px 8px #0006}
+@media(max-width:760px){main{flex-direction:column}#side{width:100%;max-height:48%;border-left:0;border-top:1px solid #ccc}}
+.grp{border:1px solid #d5d5d5;border-radius:6px;background:#fff;margin:0 0 8px}
+.grp>summary{cursor:pointer;padding:10px 12px;font-weight:bold;font-size:14px;display:block}
+.grp>summary small{font-weight:normal;margin-top:2px}
+.grp[open]>summary{border-bottom:1px solid #e3e3e3;background:#f3f6fa}
+.grp-body{padding:4px 12px 12px}
+#side .grp h2{font-size:13px;margin:14px 0 6px;color:#333}
+#side .grp-body>h2:first-child{margin-top:6px}
+.seg{display:inline-flex;gap:4px}
+.seg button.on{background:#ffd966}
+#pv{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:#e9ecef}
+#pv[hidden]{display:none}
+#pvTools{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:6px 8px;background:#f8f9fa;border-bottom:1px solid #ccc;font-size:13px}
+#pvWrap{position:relative;flex:1;min-height:0;overflow:hidden}
+#pvFrame{position:absolute;left:50%;top:50%;border:10px solid #222;border-radius:26px;background:#fff}
+#pvFrame.desk{border:2px solid #555;border-radius:6px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Site Settings Editor</h1>
+  <label class="btn" style="margin:0;font-weight:normal;color:#222">Load site.csv…<input type="file" id="fSite" accept=".csv,text/csv" hidden></label>
+  <label class="btn" style="margin:0;font-weight:normal;color:#222">Show Places (locations.csv)…<input type="file" id="fLocs" accept=".csv,text/csv" hidden></label>
+  <button id="startBtn" type="button">Start from Defaults</button>
+  <button id="reloadBtn" type="button" disabled>↻ Reload</button>
+  <span class="seg"><button id="viewMap" type="button" class="on">Map</button><button id="viewPhone" type="button">Phone Preview</button><button id="viewDesk" type="button">Desktop Preview</button></span>
+  <button id="dlBtn" type="button" class="go" disabled>Download Updated site.csv</button>
+</header>
+<div id="status">Load site.csv to begin, or click Start from defaults.</div>
+
+<main>
+  <div id="map"></div>
+  <div id="pv" hidden>
+    <div id="pvTools"><b id="pvTitle">Preview</b> <button id="pvRefresh" type="button">&#8635; Refresh</button> <button id="pvIntro" type="button">&#9654; Replay Intro</button> <small style="margin:0">Shows your changes before you save or publish them.</small></div>
+    <div id="pvWrap"><iframe id="pvFrame" title="Preview of your page"></iframe></div>
+  </div>
+
+  <aside id="side" class="off">
+    <h2>Page Name and Color</h2>
+    <div id="pvBar"></div>
+    <div id="pvTab"></div>
+
+    <label>Place Name</label>
+    <input data-k="PLACE" placeholder="Your town or county">
+    <label>Top Bar Text</label>
+    <input data-k="HEADER">
+    <small>{PLACE} is replaced with the place name above.</small>
+    <label>Browser Tab Title</label>
+    <input data-k="TAB_TITLE">
+    <label>Top Bar Color</label>
+    <div class="two"><input type="color" data-k="BAR_COLOR"><input data-k="BAR_COLOR" placeholder="#E47303"></div>
+
+    <h2>Bar Layout (Top, Bottom, Drawer, Etc)</h2>
+    <small>Click / Press and drag a button into another box. Bars run left to right and will wrap large buttons to new rows. The Bottom Bar stays hidden until you put something in it. Yellow buttons can't leave the top bar. The Legend can float over the map (as now), sit in either Bar, or go in the Drawer.</small>
+    <div id="board">
+      <div class="zl">Top Bar</div><div class="zone" id="zTop" data-z="top"></div>
+      <div class="zl">Bottom Bar</div><div class="zone" id="zBot" data-z="bottom"></div>
+      <div class="zl">Inside the More &#9662; Drawer</div><div class="zone" id="zMore" data-z="more"></div>
+      <div class="zl">Hidden</div><div class="zone" id="zOff" data-z="off"></div>
+      <div class="zl">Floating Over the Map (Legend Only)</div><div class="zone" id="zFlt" data-z="flt"></div>
+    </div>
+    <small id="layNote"></small>
+    <small>"&harr; Flexible Space" Pushes everything after it to the right edge. "&crarr; New Row" Starts a new line. A saved layout applies to phones too. The checkboxes further down (Year, Aerial, About) decide whether that control exists at all.</small>
+    <div class="row"><button type="button" id="layReset">Back to Built-in Layout</button></div>
+    <label>Search Bar Width (Desktop): <b id="qwdV"></b></label>
+    <input type="range" min="25" max="100" step="5" data-k="SEARCH_WIDTH">
+    <label>Search Bar Width (Mobile): <b id="qwpV"></b></label>
+    <input type="range" min="50" max="100" step="5" data-k="SEARCH_WIDTH_PHONE">
+    <label>Button Style</label>
+    <select data-k="BAR_STYLE"><option value="">Pill (Rounded)</option><option value="bar">Bar (Square)</option></select>
+    <label>Zoom Buttons (+ and -)</label>
+    <select data-k="ZOOM_POS"><option value="">Bottom Right (Default)</option><option value="top">Top Right (Below Bar)</option></select>
+    <label>Top Bar Background</label>
+    <select data-k="LAYOUT_STYLE"><option value="">Floating Buttons</option><option value="band">Solid Colored Band</option></select>
+    <small>The solid color band uses the Top Bar Color above, shows the Page Title, and displays the map just below it.</small>
+
+    <h2>Fonts</h2>
+    <label>Headings and Title</label>
+    <select data-k="FONT_HEAD"><option value="">Standard (Arial)</option><option value="classic">Classic Serif (Georgia)</option><option value="book">Book Serif (Palatino / Charter)</option><option value="humanist">Friendly Sans (Gill Sans / Calibri)</option><option value="typewriter">Typewriter</option></select>
+    <label>Everything Else</label>
+    <select data-k="FONT_BODY"><option value="">Standard (Arial)</option><option value="classic">Classic Eerif (Georgia)</option><option value="book">Book Serif (Palatino / Charter)</option><option value="humanist">Friendly Sans (Gill Sans / Calibri)</option><option value="typewriter">Typewriter</option></select>
+    <small>These use fonts already on the visitor's device, so nothing extra downloads and they work offline. A device without the named font shows a similar one, so the look can differ a little between iPhone and Android.</small>
+
+    <h2>Map Style</h2>
+    <label>Street Map Colors</label>
+    <select data-k="MAP_TONE"><option value="">Standard Map</option><option value="warm">Warm Paper (A soft sepia with cream-shaded pop-up cards)</option><option value="muted">Muted (A calm option with less color saturation)</option></select>
+    <small>Only the street map changes. Aerial photos and historical map overlays keep their own colors.</small>
+
+    <h2>Passport Look</h2>
+    <label>Passport Display</label>
+    <select data-k="PASSPORT_STYLE"><option value="">Button (Trophy and Count)</option><option value="ring">Progress Ring</option></select>
+    <label>Ring Color (Filled)</label>
+    <div class="two"><input type="color" data-k="RING_COLOR"><input data-k="RING_COLOR" placeholder="same as top bar"></div>
+    <label>Ring Track Color (Empty)</label>
+    <div class="two"><input type="color" data-k="RING_TRACK"><input data-k="RING_TRACK" placeholder="#E6E0D8"></div>
+    <label>Ring Text Color</label>
+    <div class="two"><input type="color" data-k="RING_TEXT"><input data-k="RING_TEXT" placeholder="same as top bar"></div>
+    <small>This is only used when Passport Display is set to Progress Ring. Leave a color blank to use the Top Bar color.</small>
+
+    <h2>Welcome Screen</h2>
+    <label>Theme</label>
+    <select data-k="WELCOME_THEME" id="wtSel"></select>
+    <label>Welcome Text</label>
+    <input data-k="WELCOME_TEXT" placeholder="Welcome to|{PLACE}">
+    <small>{PLACE} is replaced with the place name. Use | to start a new line. The last line is the big one.</small>
+    <label>After the Welcome Screen</label>
+    <select data-k="INTRO_STYLE"><option value="">Point to Places (Default)</option><option value="zoom">Zoom to Places</option><option value="spin">Zoom and Circle Places</option></select>
+    <small>The zoom options are skipped for visitors who have "reduce motion" turned on.</small>
+    <label>Stops Featured in the Intro</label>
+    <select data-k="INTRO_FEATURES"><option value="">Parent / Child Markers Only (Default)</option><option value="mixed">Parent / Child With Some Stry / Spot Locations</option><option value="spots">Stories and Spots Only</option></select>
+    <label>Intro card position</label>
+    <select data-k="INTRO_CARD"><option value="">Bottom, moving to the top only if it would cover the pin</option><option value="bottom">Always on the bottom</option><option value="top">Always on the top (below the Bar)</option></select>
+    <small>The card never covers the top bar.</small>
+    <small>Stories and Spots only appear in the two zoom options which include them, because they only show once the map is zoomed in. The point-at-places intro always uses places. A Spot with no photo is skipped.</small>
+    <img id="wtPrev" alt="Welcome screen preview" style="width:100%;border-radius:10px;margin-top:8px;background:#ddd">
+    <small id="wtNote"></small>
+
+    <h2>Start View (Move the Red Circle)</h2>
+    <label class="chk"><input type="checkbox" data-k="FIT_TO_MARKERS"> Fit to All Markers (Over-rides Start View)</label>
+    <div class="grid">
+      <div><label>Latitude</label><input data-k="CENTER_LAT" inputmode="decimal"></div>
+      <div><label>Longitude</label><input data-k="CENTER_LNG" inputmode="decimal"></div>
+    </div>
+    <label>Zoom</label>
+    <input data-k="ZOOM" inputmode="decimal">
+    <div class="row">
+      <button type="button" id="useView">Use Current Map View</button>
+      <button type="button" id="goStart">Go to Start View</button>
+    </div>
+
+    <h2>Allowed Area (Move the Blue Squares)</h2>
+    <div class="grid">
+      <div><label>West</label><input data-k="BOUNDS_WEST" inputmode="decimal"></div>
+      <div><label>East</label><input data-k="BOUNDS_EAST" inputmode="decimal"></div>
+      <div><label>South</label><input data-k="BOUNDS_SOUTH" inputmode="decimal"></div>
+      <div><label>North</label><input data-k="BOUNDS_NORTH" inputmode="decimal"></div>
+    </div>
+    <div class="row">
+      <button type="button" id="useBounds">Use Current Map View</button>
+      <button type="button" id="zoomBounds">Zoom to Area</button>
+    </div>
+    <div class="grid">
+      <div><label>Min Zoom (Optional)</label><input data-k="MIN_ZOOM" inputmode="decimal"></div>
+      <div><label>Max Zoom (Optional)</label><input data-k="MAX_ZOOM" inputmode="decimal"></div>
+    </div>
+    <small>Visitors can't pan or zoom outside the blue area, so remember to leave zoom limits blank for no limit and to be generous with your boundaries.</small>
+
+    <h2>Passport</h2>
+    <label class="chk"><input type="checkbox" data-k="PASSPORT"> Show the History Passport</label>
+    <label class="chk"><input type="checkbox" data-k="PASSPORT_RANKS"> Use Stars and Ranks</label>
+    <small>Turn Ranks off to keep the Discovery Collection and tasks without any Stars. Which Categories can earn ranks is set per Category in the Places Editor.</small>
+
+    <h2>Prizes</h2>
+    <label class="chk"><input type="checkbox" data-k="PRIZES"> Show Prize Progress in the Passport</label>
+    <small>When off, the prize section is hidden from visitors and the Prizes tab in the Passport editor is disabled. Prizes are built in the Passport editor.</small>
+
+    <h2>Sliders</h2>
+    <label class="chk"><input type="checkbox" data-k="YEAR_SLIDER"> Show the Year Slider</label>
+    <label class="chk"><input type="checkbox" data-k="OVERLAY_SLIDER"> Show Old Map Olverlays / Opacity Slider</label>
+    <label class="chk"><input type="checkbox" data-k="AERIAL_BUTTON"> Show the Aerial View Button</label>
+    <label class="chk"><input type="checkbox" data-k="MAPS_LINK"> Show an "Open in Maps" Link on Place and Spot Cards</label>
+    <small>Turning the opacity overlay slider off removes old map overlays from the page completely.</small>
+
+    <h2>Event or Focus Panel</h2>
+    <label>Button Text</label>
+    <input data-k="EVENT_BUTTON" placeholder="About">
+    <label>Panel Title</label>
+    <input data-k="EVENT_TITLE" placeholder="Fried Chicken Trail">
+    <label>Panel Text</label>
+    <textarea data-k="EVENT_TEXT" placeholder="What is happening, when, and what visitors should look for."></textarea>
+    <small>The button only appears when there is a title or text. Press Enter for a new paragraph. {PLACE} is replaced with the place name.</small>
+
+    <h2>Phone Settings</h2>
+    <label>Bottom Bar On</label>
+    <select data-k="BOTTOM_ON"><option value="">Phones only (on computers those buttons move to the top bar)</option><option value="all">Phones and Computers</option></select>
+    <small>Choose what goes in the Bottom Bar in the layout box under Buttons and Bars. Remembeer that the bottom of a phone is the easiest place to reach with one thumb.</small>
+
+    <div id="warn"></div>
+  </aside>
+</main>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="welcome-themes.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const status = t => $('status').textContent = t;
+
+const DEFAULTS = {
+  PLACE: "Your Area",
+  HEADER: "Discover {PLACE}'s Past",
+  TAB_TITLE: "Explore {PLACE}'s Past",
+  BAR_COLOR: "#E47303",
+  CENTER_LAT: "39.8283", CENTER_LNG: "-98.5795", ZOOM: "4",
+  BOUNDS_WEST: "-125", BOUNDS_SOUTH: "24", BOUNDS_EAST: "-66", BOUNDS_NORTH: "50",
+  MIN_ZOOM: "", MAX_ZOOM: "",
+  FIT_TO_MARKERS: "yes",
+  PASSPORT: "yes",
+  PASSPORT_RANKS: "yes",
+  PRIZES: "yes",
+  YEAR_SLIDER: "yes",
+  OVERLAY_SLIDER: "yes",
+  AERIAL_BUTTON: "yes",
+  MAPS_LINK: "yes",
+  LAYOUT_STYLE: "",
+  EVENT_BUTTON: "About",
+  EVENT_TITLE: "",
+  EVENT_TEXT: "",
+  WELCOME_THEME: "",
+  WELCOME_TEXT: "Welcome to|{PLACE}",
+  BAR_STYLE: "", SEARCH_WIDTH: "", SEARCH_WIDTH_PHONE: "", BOTTOM_ON: "", MAP_TONE: "",
+  PASSPORT_STYLE: "", RING_COLOR: "", RING_TRACK: "", RING_TEXT: "", INTRO_STYLE: "", INTRO_FEATURES: "", INTRO_CARD: "", FONT_BODY: "", FONT_HEAD: "",
+  LAYOUT_TOP: "", LAYOUT_MORE: "", LAYOUT_OFF: "", LAYOUT_BOTTOM: "", LAYOUT_FLOAT: "", ZOOM_POS: ""
+};
+
+(function () {   // theme choices
+  const sel = document.getElementById("wtSel");
+  sel.innerHTML = '<option value="">Classic picture (welcome1.gif)</option>' +
+    Object.entries(window.WelcomeThemes ? WelcomeThemes.list : {}).map(([k, v]) => '<option value="' + k + '">' + v + "</option>").join("");
+})();
+const ORDER = Object.keys(DEFAULTS);
+
+let S = null;            // current settings (all strings)
+let extra = {};          // keys in the CSV this editor doesn't know about; kept as-is
+let lastText = null;     // last loaded CSV text, for Reload
+let mapLoaded = false;
+let markersAdded = false;
+let locData = { type: 'FeatureCollection', features: [] };
+
+const num = k => { const v = parseFloat(S[k]); return isNaN(v) ? null : v; };
+const r6 = v => String(Math.round(v * 1e6) / 1e6);
+const fill = t => String(t || '').replace(/\{PLACE\}/g, S.PLACE || '');
+const goodColor = c => /^#[0-9a-f]{6}$/i.test(c || '');
+
+// ---------- map ----------
+const map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, maxzoom: 19, attribution: '&copy; OpenStreetMap contributors' } },
+    layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+  },
+  center: [-98.5795, 39.8283], zoom: 4
+});
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+map.addControl(new maplibregl.ScaleControl(), 'bottom-left');
+
+const el = cls => { const d = document.createElement('div'); d.className = cls; return d; };
+const centerMk = new maplibregl.Marker({ element: el('pin-center'), draggable: true });
+const swMk = new maplibregl.Marker({ element: el('handle'), draggable: true });
+const neMk = new maplibregl.Marker({ element: el('handle'), draggable: true });
+
+map.on('load', () => {
+  map.addSource('bnd', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({ id: 'bnd-fill', type: 'fill', source: 'bnd', paint: { 'fill-color': '#0072B2', 'fill-opacity': 0.08 } });
+  map.addLayer({ id: 'bnd-line', type: 'line', source: 'bnd', paint: { 'line-color': '#0072B2', 'line-width': 3, 'line-dasharray': [3, 2] } });
+  map.addSource('locs', { type: 'geojson', data: locData });
+  map.addLayer({ id: 'locs', type: 'circle', source: 'locs', paint: { 'circle-radius': 4, 'circle-color': '#E47303', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
+  mapLoaded = true;
+  if (S) { drawMap(); gotoStart(); }
+});
+
+function drawBounds() {
+  if (!mapLoaded) return;
+  const w = num('BOUNDS_WEST'), s = num('BOUNDS_SOUTH'), e = num('BOUNDS_EAST'), n = num('BOUNDS_NORTH');
+  const ok = [w, s, e, n].every(v => v !== null);
+  map.getSource('bnd').setData(ok
+    ? { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] } }
+    : { type: 'FeatureCollection', features: [] });
+  if (ok) { swMk.setLngLat([w, s]); neMk.setLngLat([e, n]); }
+}
+
+function drawMap() {
+  if (!S || !mapLoaded) return;
+  const lat = num('CENTER_LAT'), lng = num('CENTER_LNG');
+  if (lat !== null && lng !== null) centerMk.setLngLat([lng, lat]);
+  drawBounds();
+  if (!markersAdded) { centerMk.addTo(map); swMk.addTo(map); neMk.addTo(map); markersAdded = true; }
+}
+
+function gotoStart() {
+  const lat = num('CENTER_LAT'), lng = num('CENTER_LNG'), z = num('ZOOM');
+  if (lat !== null && lng !== null) map.jumpTo({ center: [lng, lat], zoom: z !== null ? z : map.getZoom() });
+}
+
+function fitOff() {
+  if (S.FIT_TO_MARKERS === 'yes') {
+    S.FIT_TO_MARKERS = 'no';
+    status('Turned off "Fit to all markers" so your start view is used.');
+  }
+}
+
+centerMk.on('drag', () => {
+  const ll = centerMk.getLngLat();
+  S.CENTER_LNG = r6(ll.lng); S.CENTER_LAT = r6(ll.lat);
+  fitOff(); syncUI(); validate();
+});
+swMk.on('drag', () => { const ll = swMk.getLngLat(); S.BOUNDS_WEST = r6(ll.lng); S.BOUNDS_SOUTH = r6(ll.lat); syncUI(); drawBounds(); validate(); });
+neMk.on('drag', () => { const ll = neMk.getLngLat(); S.BOUNDS_EAST = r6(ll.lng); S.BOUNDS_NORTH = r6(ll.lat); syncUI(); drawBounds(); validate(); });
+
+// ---------- form <-> state ----------
+function syncUI(except) {
+  document.querySelectorAll('[data-k]').forEach(f => {
+    if (f === except) return;
+    const v = S[f.dataset.k] == null ? '' : S[f.dataset.k];
+    if (f.type === 'checkbox') f.checked = v === 'yes';
+    else if (f.type === 'color') { if (goodColor(v)) f.value = v; }
+    else f.value = v;
+  });
+  preview();
+  renderBoard();
+}
+
+function preview() {
+  const key = S.WELCOME_THEME;
+  $('wtPrev').src = key && window.WelcomeThemes ? WelcomeThemes.url(key, S.WELCOME_TEXT, S.PLACE, true) : 'welcome1.gif';
+  $('wtNote').textContent = key ? '' : 'The classic picture is welcome1.gif from your site folder. Its words are part of the picture, so the text above does not change it.';
+  const bar = $('pvBar');
+  bar.style.background = goodColor(S.BAR_COLOR) ? S.BAR_COLOR : '#999';
+  bar.textContent = fill(S.HEADER) || ' ';
+  $('pvTab').textContent = 'Tab title: ' + fill(S.TAB_TITLE);
+}
+
+document.querySelectorAll('[data-k]').forEach(f => f.addEventListener('input', () => {
+  if (!S) return;
+  S[f.dataset.k] = f.type === 'checkbox' ? (f.checked ? 'yes' : 'no') : f.value;
+  syncUI(f); drawMap(); validate();
+}));
+
+function boundsOk() {
+  const w = num('BOUNDS_WEST'), s = num('BOUNDS_SOUTH'), e = num('BOUNDS_EAST'), n = num('BOUNDS_NORTH');
+  return [w, s, e, n].every(v => v !== null) && w < e && s < n;
+}
+
+function validate() {
+  const msgs = [];
+  if (!boundsOk()) msgs.push('Allowed area is incomplete or backwards (west must be less than east, south less than north).');
+  else if (S.FIT_TO_MARKERS !== 'yes') {
+    const lat = num('CENTER_LAT'), lng = num('CENTER_LNG');
+    if (lat === null || lng === null) msgs.push('Start view needs a latitude and longitude.');
+    else if (lng < num('BOUNDS_WEST') || lng > num('BOUNDS_EAST') || lat < num('BOUNDS_SOUTH') || lat > num('BOUNDS_NORTH'))
+      msgs.push('The start view is outside the allowed area, so visitors would land on the edge.');
+  }
+  const a = num('MIN_ZOOM'), b = num('MAX_ZOOM'), z = num('ZOOM');
+  if (a !== null && b !== null && a > b) msgs.push('Min zoom is larger than max zoom.');
+  if (S.FIT_TO_MARKERS !== 'yes' && z !== null && ((a !== null && z < a) || (b !== null && z > b))) msgs.push('The start zoom is outside the min/max zoom.');
+  $('warn').innerHTML = msgs.map(m => '<div>' + m + '</div>').join('');
+}
+
+// ---------- buttons ----------
+$('useView').onclick = () => {
+  const c = map.getCenter();
+  S.CENTER_LNG = r6(c.lng); S.CENTER_LAT = r6(c.lat); S.ZOOM = (Math.round(map.getZoom() * 100) / 100).toString();
+  fitOff(); syncUI(); drawMap(); validate();
+};
+$('goStart').onclick = gotoStart;
+$('useBounds').onclick = () => {
+  const b = map.getBounds();
+  S.BOUNDS_WEST = r6(b.getWest()); S.BOUNDS_EAST = r6(b.getEast());
+  S.BOUNDS_SOUTH = r6(b.getSouth()); S.BOUNDS_NORTH = r6(b.getNorth());
+  syncUI(); drawMap(); validate();
+};
+$('zoomBounds').onclick = () => {
+  if (!boundsOk()) return;
+  map.fitBounds([[num('BOUNDS_WEST'), num('BOUNDS_SOUTH')], [num('BOUNDS_EAST'), num('BOUNDS_NORTH')]], { padding: 40 });
+};
+
+// ---------- load / start / reload ----------
+function startFrom(text) {
+  S = {}; extra = {};
+  ORDER.forEach(k => S[k] = DEFAULTS[k]);
+  if (text) {
+    Papa.parse(text, { header: true, skipEmptyLines: 'greedy' }).data.forEach(r => {
+      const k = String(r.KEY || '').trim().toUpperCase();
+      if (!k) return;
+      const v = String(r.VALUE == null ? '' : r.VALUE).trim();
+      if (ORDER.includes(k)) S[k] = v; else extra[k] = v;
+    });
+  }
+  $('side').classList.remove('off');
+  $('dlBtn').disabled = false;
+  $('reloadBtn').disabled = false;
+  syncUI(); drawMap(); validate();
+  if (mapLoaded) gotoStart();
+}
+
+$('fSite').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  lastText = await f.text();
+  startFrom(lastText);
+  status('Loaded ' + f.name + '. Edit, then Download updated site.csv.');
+  e.target.value = '';
+});
+
+// Auto-load site.csv on page open:
+//  - while designing an event, Workspace.slug is set and the editors fetch the event's own copy
+//  - otherwise this is the live site: fetch the site.csv that lives next to this page
+(async () => {
+  // wait for the map to finish loading, so startFrom() has somewhere to draw
+  let tries = 0;
+  while (!mapLoaded && tries++ < 40) await new Promise(r => setTimeout(r, 250));
+
+  try {
+    const res = await fetch('site.csv', { cache: 'no-store' });
+    if (res.ok) {
+      const text = await res.text();
+      if (text && text.trim()) {
+        lastText = text;
+        startFrom(text);
+        status((window.Workspace && Workspace.slug ? "Loaded this event's own site.csv." : "Loaded site.csv.") + " Edit, then Download updated site.csv.");
+        return;
+      }
+    }
+  } catch (e) { /* fall through */ }
+
+  // no site.csv on the server yet — leave the panel disabled so the user can use Start from defaults
+  status('No site.csv found next to this page. Click "Start from defaults" to build one, or pick a file.');
+})();
+// ---------- top bar layout board ----------
+const CTRL = { search: 'Search bar', near: 'Near Me', event: 'About button', more: 'More \u25BE', tour: 'Take the Tour', tours: 'Tours',
+  stories: 'Stories & Spots', chips: 'Category pills', aerial: 'Aerial', year: 'Year slider', oldmaps: 'Old Maps', passport: 'Passport',
+  legend: 'Legend', spacer: '\u2194 Flexible space', newrow: '\u21B5 New row' };
+const DEF_TOP = ['search','near','event','more','aerial','tour','tours','stories','chips','spacer','passport','year','oldmaps'];
+const NO_MORE = ['search','more','spacer','newrow'], NO_OFF = ['search','more'], NO_BOTTOM = ['search','more'];
+let drag = null;
+
+function getLayout() {
+  const list = k => (S[k] || '').split(',').map(x => x.trim()).filter(x => CTRL[x]);
+  let top = list('LAYOUT_TOP'), more = list('LAYOUT_MORE'), off = list('LAYOUT_OFF'), bottom = list('LAYOUT_BOTTOM'), flt = list('LAYOUT_FLOAT');
+  if (!top.length && !more.length && !off.length && !bottom.length && !flt.length) { top = DEF_TOP.slice(); off = ['newrow']; flt = ['legend']; }
+  const seen = new Set();
+  const uniq = a => a.filter(id => !seen.has(id) && seen.add(id));
+  top = uniq(top); more = uniq(more.filter(id => !NO_MORE.includes(id))); off = uniq(off.filter(id => !NO_OFF.includes(id)));
+  bottom = uniq(bottom.filter(id => !NO_BOTTOM.includes(id))); flt = uniq(flt.filter(id => id === 'legend'));
+  Object.keys(CTRL).forEach(id => { if (!seen.has(id)) (id === 'spacer' || id === 'newrow' ? off : id === 'legend' ? flt : top).push(id); });
+  return { top, bottom, more, off, flt };
+}
+
+function renderBoard() {
+  if (!S || drag) return;
+  const L = getLayout();
+  [['top', 'zTop'], ['bottom', 'zBot'], ['more', 'zMore'], ['off', 'zOff'], ['flt', 'zFlt']].forEach(([z, id]) => {
+    $(id).innerHTML = '';
+    L[z].forEach(c => {
+      const d = el('chip' + (NO_MORE.includes(c) && NO_OFF.includes(c) ? ' lock' : ''));
+      d.textContent = CTRL[c]; d.dataset.id = c; $(id).appendChild(d);
+    });
+  });
+  $('layNote').textContent = (S.LAYOUT_TOP || S.LAYOUT_MORE || S.LAYOUT_OFF)
+    ? 'Custom layout: it will be saved in site.csv.'
+    : 'Showing the built-in computer layout. Nothing changes until you move something.';
+  $('qwdV').textContent = S.SEARCH_WIDTH ? S.SEARCH_WIDTH + '%' : 'default';
+  $('qwpV').textContent = S.SEARCH_WIDTH_PHONE ? S.SEARCH_WIDTH_PHONE + '%' : 'default';
+}
+
+function saveBoard() {
+  const g = id => [...$(id).children].map(c => c.dataset.id).join(',');
+  S.LAYOUT_TOP = g('zTop'); S.LAYOUT_MORE = g('zMore'); S.LAYOUT_OFF = g('zOff'); S.LAYOUT_BOTTOM = g('zBot'); S.LAYOUT_FLOAT = g('zFlt');
+}
+
+$('board').addEventListener('pointerdown', e => {
+  const c = e.target.closest('.chip');
+  if (!c || !S) return;
+  e.preventDefault();
+  drag = { c, x: e.clientX, y: e.clientY, on: false };
+});
+window.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (!drag.on) {
+    if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 6) return;
+    drag.on = true; drag.c.classList.add('dragging');
+    drag.g = drag.c.cloneNode(true); drag.g.classList.remove('dragging'); drag.g.classList.add('ghost');
+    document.body.appendChild(drag.g);
+  }
+  drag.g.style.left = (e.clientX + 8) + 'px'; drag.g.style.top = (e.clientY + 8) + 'px';
+  document.querySelectorAll('#board .zone').forEach(z => z.classList.remove('hot'));
+  const hit = document.elementFromPoint(e.clientX, e.clientY);
+  const z = hit && hit.closest('#board .zone');
+  if (!z) return;
+  const id = drag.c.dataset.id;
+  if ((z.dataset.z === 'more' && NO_MORE.includes(id)) || (z.dataset.z === 'off' && NO_OFF.includes(id)) || (z.dataset.z === 'bottom' && NO_BOTTOM.includes(id)) || (z.dataset.z === 'flt' && id !== 'legend')) return;
+  z.classList.add('hot');
+  let before = null;
+  for (const k of z.querySelectorAll('.chip:not(.dragging)')) {
+    const r = k.getBoundingClientRect();
+    if (e.clientY < r.top || (e.clientY <= r.bottom && e.clientX < r.left + r.width / 2)) { before = k; break; }
+  }
+  z.insertBefore(drag.c, before);
+});
+function endDrag() {
+  if (!drag) return;
+  const d = drag; drag = null;
+  document.querySelectorAll('#board .zone').forEach(z => z.classList.remove('hot'));
+  if (d.g) d.g.remove();
+  d.c.classList.remove('dragging');
+  if (d.on) { saveBoard(); syncUI(); }
+}
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
+$('layReset').onclick = () => {
+  if (!S) return;
+  ['LAYOUT_TOP', 'LAYOUT_MORE', 'LAYOUT_OFF', 'LAYOUT_BOTTOM', 'LAYOUT_FLOAT', 'SEARCH_WIDTH', 'SEARCH_WIDTH_PHONE', 'BAR_STYLE'].forEach(k => S[k] = '');
+  syncUI();
+};
+
+// ---------- download ----------
+$('dlBtn').onclick = () => {
+  if (!S) return;
+  if (!boundsOk()) { alert('Fix the allowed area first: west must be less than east, and south less than north.'); return; }
+  const rows = ORDER.map(k => ({ KEY: k, VALUE: S[k] }))
+    .concat(Object.entries(extra).map(([KEY, VALUE]) => ({ KEY, VALUE })));
+  const csv = Papa.unparse(rows, { columns: ['KEY', 'VALUE'] });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'site.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  status('Downloaded site.csv. Upload it to your site next to the map page, replacing the old one.');
+};
+
+/* ---------- collapsible groups ---------- */
+(function () {
+  const side = $('side'), warn = $('warn');
+  const pw = side.querySelector('[data-k="SEARCH_WIDTH_PHONE"]');           // the phone search width belongs with the phone settings
+  if (pw && pw.previousElementSibling) { side.insertBefore(pw.previousElementSibling, warn); side.insertBefore(pw, warn); }
+  const secs = []; let cur = null;
+  [...side.children].forEach(n => {
+    if (n === warn) return;
+    if (n.tagName === 'H2') { cur = { title: n.textContent.trim(), nodes: [n] }; secs.push(cur); } else if (cur) cur.nodes.push(n);
+  });
+  const GROUPS = [
+    ['Look and Feel', 'The page title, colors, fonts and map style.', ['Page Name and Color', 'Fonts', 'Map Style']],
+    ['Buttons and Bars', 'Which buttons show, where they sit, and how they look.', ['Bar Layout', 'Passport Look', 'Sliders']],
+    ['Opening Intro', 'The welcome screen and what happens right after it.', ['Welcome Screen']],
+    ['Map Area', 'Where the map starts and how far visitors can roam.', ['Start View', 'Allowed Area']],
+    ['Passport and Prizes', 'The stamp collection and its rewards.', ['Passport', 'Prizes']],
+    ['Event Panel', 'A message about something happening now.', ['Event or focus panel']],
+    ['Phone Settings', 'Choices that only matter on a phone.', ['Phone Settings']]
+  ];
+  const used = new Set();
+  const make = (title, desc, titles, open) => {
+    const d = document.createElement('details'); d.className = 'grp'; d.open = !!open;
+    d.innerHTML = '<summary>' + title + '<small>' + desc + '</small></summary><div class="grp-body"></div>';
+    const body = d.querySelector('.grp-body');
+    titles.forEach(t => secs.filter(s => !used.has(s) && (s.title === t || s.title.startsWith(t + ' ('))).forEach(s => { used.add(s); s.nodes.forEach(n => body.appendChild(n)); }));
+    return d;
+  };
+  const frag = document.createDocumentFragment();
+  GROUPS.forEach((g, i) => frag.appendChild(make(g[0], g[1], g[2], i === 0)));
+  secs.filter(s => !used.has(s)).forEach(s => frag.appendChild(make(s.title, '', [s.title], false)));
+  side.insertBefore(frag, warn);
+})();
+
+/* ---------- live preview of the real page, using the settings as they are right now ---------- */
+const PREVIEW_PAGE = ((window.ETS_CONFIG&&window.ETS_CONFIG.LIVE_PAGE)||"Demo2a.html");
+const PV_SIZE = { phone: [390, 780], desk: [1280, 800] };
+let pvMode = '', pvTimer = null, pvBlob = '';
+function settingsCsv() {
+  const rows = ORDER.map(k => ({ KEY: k, VALUE: S[k] })).concat(Object.entries(extra).map(([KEY, VALUE]) => ({ KEY, VALUE })));
+  return Papa.unparse(rows, { columns: ['KEY', 'VALUE'] });
+}
+function pvFit() {
+  if (!pvMode) return;
+  const f = $('pvFrame'), w = $('pvWrap'), sz = PV_SIZE[pvMode];
+  f.style.width = sz[0] + 'px'; f.style.height = sz[1] + 'px';
+  f.classList.toggle('desk', pvMode === 'desk');
+  const k = Math.min((w.clientWidth - 16) / (sz[0] + 20), (w.clientHeight - 16) / (sz[1] + 20), 1);
+  f.style.transform = 'translate(-50%,-50%) scale(' + Math.max(k, 0.2) + ')';
+}
+function pvLoad(withIntro) {
+  if (!S || !pvMode) return;
+  const old = pvBlob;
+  pvBlob = URL.createObjectURL(new Blob([settingsCsv()], { type: 'text/csv' }));
+  $('pvFrame').src = PREVIEW_PAGE + '?preview=1&settings=' + encodeURIComponent(pvBlob) + (withIntro ? '' : '&skipWelcome');
+  if (old) setTimeout(() => URL.revokeObjectURL(old), 15000);
+}
+function pvSoon() { if (!pvMode) return; clearTimeout(pvTimer); pvTimer = setTimeout(() => pvLoad(false), 700); }
+function setView(mode) {
+  if (mode && !S) { status('Load site.csv or click Start from Defaults first, then the preview can show your changes.'); return; }
+  pvMode = mode;
+  $('map').style.display = mode ? 'none' : '';
+  $('pv').hidden = !mode;
+  ['viewMap', 'viewPhone', 'viewDesk'].forEach(id => $(id).classList.remove('on'));
+  $(mode === 'phone' ? 'viewPhone' : mode === 'desk' ? 'viewDesk' : 'viewMap').classList.add('on');
+  if (mode) { pvFit(); pvLoad(false); } else { try { map.resize(); } catch (e) {} }
+}
+$('viewMap').onclick = () => setView('');
+$('viewPhone').onclick = () => setView('phone');
+$('viewDesk').onclick = () => setView('desk');
+$('pvRefresh').onclick = () => pvLoad(false);
+$('pvIntro').onclick = () => pvLoad(true);
+window.addEventListener('resize', pvFit);
+const _syncUI = syncUI;
+syncUI = function (except) { _syncUI(except); pvSoon(); };
+</script>
+<script src="publish.js"></script>
+<script>GHPublish.attach({ buttons: ["dlBtn"] });</script>
+</body>
+</html>

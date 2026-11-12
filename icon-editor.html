@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Icon Editor — Mockup</title>
+<title>Icon Editor</title>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script src="editor-common.js"></script>
+<script>Workspace.block('Icons are shared by the whole site, not by one event. Go back to the live site to edit them.');</script>
 <style>
   :root{
     --ink:#1a202c; --muted:#6b7280; --line:#d7dde5;
@@ -184,17 +188,47 @@
     #body{grid-template-columns:1fr}
     #side{border-left:0;border-top:1px solid var(--line)}
   }
+
+  /* ---------- additions for the working editor ---------- */
+  [hidden]{display:none!important}
+  header .note{font-size:12px;color:var(--muted)}
+  button.go{background:#28a745;color:#fff;border-color:#28a745;font-weight:700}
+  button.go:hover{background:#218838}
+  #pane-header select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}
+  #pane-header input[readonly]{background:#f3f4f6;color:#555}
+  #pane-header .chk{flex-direction:row;align-items:center;gap:6px;padding-top:18px}
+  #pane-header .chk input{min-width:0!important;width:auto}
+  #code-wrap{position:absolute;inset:0}
+  #pane-header .chk label{margin:0;text-transform:none;letter-spacing:0;font-size:13px;color:var(--ink);font-weight:400}
+  #usage{padding:6px 16px;font-size:12px;color:var(--muted);background:#fff;border-bottom:1px solid var(--line)}
+  #usage b{color:var(--ink)}
+  #svg-canvas{width:min(86%,560px)}
+  #svg-canvas .handle{fill:#fff;stroke:var(--accent);stroke-width:1.5;vector-effect:non-scaling-stroke;cursor:grab}
+  #svg-canvas .bbox{fill:none;stroke:var(--accent);stroke-width:1;stroke-dasharray:4 3;vector-effect:non-scaling-stroke;pointer-events:none}
+  #svg-canvas .bounds{fill:none;stroke:#9aa3ad;stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke;pointer-events:none}
+  #svg-canvas .gridline{stroke:#e5e9ef;stroke-width:1;vector-effect:non-scaling-stroke;pointer-events:none}
+  #svg-canvas .pen{fill:none;stroke:var(--accent);stroke-width:1.5;vector-effect:non-scaling-stroke;pointer-events:none}
+  #svg-canvas.tool-pen,#svg-canvas.tool-rect,#svg-canvas.tool-circle{cursor:crosshair}
+  #svg-canvas.readonly{cursor:default;opacity:1}
+  #toolbar .tiny{padding:4px 8px;font-size:12px}
+  .preview-box.map{background:#fbfcfe}
+  .preview-box.map .disc{width:48px;height:48px;border-radius:50%;background:var(--c,#7B5EA7);border:3px solid #fff;box-shadow:0 0 0 1px #0003;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .preview-box.map .disc svg{width:34px;height:34px}
+  .preview-grid{grid-template-columns:repeat(2,1fr)}
+  #library .empty{padding:6px 10px;font-size:12px;color:#9aa3ad}
 </style>
 </head>
 <body>
 
 <header>
   <h1>Icon Editor</h1>
+  <span class="note" id="fileNote">Loading icons.js...</span>
   <span class="grow"></span>
-  <button id="newBtn">+ New Icon</button>
-  <button id="dupeBtn" disabled>Duplicate</button>
-  <button id="exportBtn">Export JSON</button>
-  <button id="resetBtn" class="danger">Reset Library</button>
+  <button id="newBtn" type="button">+ New Icon</button>
+  <button id="dupeBtn" type="button" disabled>Duplicate</button>
+  <button id="deleteBtn" type="button" class="danger" disabled>Delete</button>
+  <button id="resetBtn" type="button">Discard all changes</button>
+  <button id="dlBtn" type="button" class="go" disabled>Download Updated icons.js</button>
 </header>
 
 <main>
@@ -208,24 +242,32 @@
   <section id="pane">
     <div id="pane-header">
       <div class="field">
-        <label>Label</label>
+        <label for="labelInput">Label</label>
         <input id="labelInput" placeholder="e.g. Chicken">
       </div>
       <div class="field">
-        <label>Code</label>
-        <input id="codeInput" placeholder="e.g. chicken">
+        <label for="codeInput">Code</label>
+        <input id="codeInput" placeholder="e.g. chicken" style="min-width:140px">
       </div>
       <div class="field">
-        <label>ViewBox</label>
-        <input id="viewBoxInput" placeholder="0 0 24 24" style="min-width:120px">
+        <label for="viewBoxInput">ViewBox</label>
+        <input id="viewBoxInput" placeholder="0 0 60 60" style="min-width:120px">
       </div>
+      <div class="field">
+        <label for="sceneInput">Travel scenery</label>
+        <select id="sceneInput" title="Only used when this icon travels on a tour or sits on a passport stamp">
+          <option value="">None</option><option value="rail">Rail</option><option value="water">Water</option><option value="road">Road</option>
+        </select>
+      </div>
+      <div class="field chk"><input type="checkbox" id="puffInput"><label for="puffInput">Smoke puff</label></div>
       <span class="grow"></span>
-      <button id="saveBtn" class="primary" disabled>Save</button>
+      <button id="saveBtn" type="button" class="primary" disabled>Save icon</button>
     </div>
+    <div id="usage"></div>
 
     <div id="tabs">
-      <button data-tab="draw" class="on">Draw</button>
-      <button data-tab="code">Code</button>
+      <button type="button" data-tab="draw" class="on">Draw</button>
+      <button type="button" data-tab="code">Code</button>
     </div>
 
     <div id="banner"></div>
@@ -235,20 +277,25 @@
         <div id="editor-inner">
           <div id="toolbar">
             <div class="group">
-              <button data-tool="select" class="on" title="Select (V)">Select</button>
-              <button data-tool="pen" title="Pen (P)">Pen</button>
-              <button data-tool="rect" title="Rectangle (R)">Rect</button>
-              <button data-tool="circle" title="Circle (C)">Circle</button>
+              <button type="button" data-tool="select" class="on" title="Select (V)">Select</button>
+              <button type="button" data-tool="pen" title="Pen (P)">Pen</button>
+              <button type="button" data-tool="rect" title="Rectangle (R)">Rect</button>
+              <button type="button" data-tool="circle" title="Circle (C)">Circle</button>
             </div>
-            <label>Fill <input type="color" id="fillColor" value="#000000"></label>
+            <label>Fill <input type="color" id="fillColor" value="#333333"></label>
+            <label><input type="checkbox" id="noFill"> No fill</label>
             <label>Stroke <input type="color" id="strokeColor" value="#000000"></label>
-            <label>Width <input type="range" id="strokeWidth" min="0" max="4" step="0.25" value="0"></label>
+            <label>Width <input type="range" id="strokeWidth" min="0" max="8" step="0.25" value="0"></label>
+            <label><input type="checkbox" id="snap" checked> Snap</label>
             <span class="grow"></span>
-            <button id="undoBtn" disabled>Undo</button>
-            <button id="delBtn" disabled>Delete</button>
+            <button type="button" id="fwdBtn" class="tiny" disabled title="Bring forward">Forward</button>
+            <button type="button" id="backBtn" class="tiny" disabled title="Send backward">Back</button>
+            <button type="button" id="undoBtn" disabled>Undo</button>
+            <button type="button" id="redoBtn" disabled>Redo</button>
+            <button type="button" id="delBtn" disabled>Delete shape</button>
           </div>
           <div id="canvas-wrap">
-            <svg id="svg-canvas" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"></svg>
+            <svg id="svg-canvas" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"></svg>
           </div>
         </div>
         <div id="code-wrap" hidden>
@@ -263,16 +310,19 @@
           <div class="preview-box"><div class="preview-svg" data-size="16"></div><div class="size">16 px</div></div>
           <div class="preview-box"><div class="preview-svg" data-size="32"></div><div class="size">32 px</div></div>
           <div class="preview-box"><div class="preview-svg" data-size="64"></div><div class="size">64 px</div></div>
+          <div class="preview-box map"><div class="disc"><span id="discSvg"></span></div><div class="size">on the map</div></div>
         </div>
         <h3>How it works</h3>
         <div class="hint">
-          <b>Draw</b> supports straight paths, rectangles, circles, and ellipses. Curves, gradients, transforms, filters, and text are shown in the preview but not editable by the drawing tools.
+          <b>Draw</b> edits straight-edged paths, rectangles, circles and ellipses. Anything else (curves, groups, transforms) is kept exactly as it is. You can still move it, recolor it, reorder it or delete it, and reshape it in <b>Code</b>.
           <ul>
-            <li>Pen: click to place points. Click the first point to close the path.</li>
+            <li>Select: click a shape, drag it, drag its handles. Arrow keys nudge. Delete removes.</li>
+            <li>Pen: click points. Click the first point to close. Double-click or Enter to finish an open line. Esc cancels.</li>
             <li>Rect / Circle: click and drag.</li>
-            <li>Select: click a shape to select it, drag its handles to resize.</li>
+            <li>Change Fill, Stroke or Width with a shape selected to recolor it.</li>
           </ul>
-          <b>Code</b> accepts any valid inline SVG. No scripts, no external links, no <code>foreignObject</code>.
+          <b>Code</b> accepts inline SVG artwork. No scripts, no external links, no <code>foreignObject</code>.
+          <br><br>Nothing reaches the live map until you <b>Save icon</b>, then <b>Download Updated icons.js</b> (or Publish) and upload it.
         </div>
       </aside>
     </div>
@@ -281,458 +331,500 @@
 
 <div id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/dist/papaparse.min.js"></script>
 <script>
-/* ============================================================
-   Icon Editor — mockup
-   The store is a plain array of Icon objects. Every icon is
-   data; nothing about a specific icon is hard-coded anywhere.
-   ============================================================ */
-
-const STORAGE_KEY = "icon-editor-v1";
+"use strict";
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-
-/* ---------- seeded built-ins ---------- */
-const BUILTIN = [
-  { code:"courthouse", label:"Courthouse", viewBox:"0 0 24 24",
-    art:'<path d="M2 21h20v-2H2zM4 17h16v-2H4zM12 3L3 9h18zM6 10h2v6H6zM11 10h2v6h-2zM16 10h2v6h-2z" fill="#333"/>' },
-  { code:"store", label:"Store", viewBox:"0 0 24 24",
-    art:'<path d="M3 8l2-4h14l2 4v2h-1v11h-5v-6H9v6H4V10H3z" fill="#333"/>' },
-  { code:"house", label:"House", viewBox:"0 0 24 24",
-    art:'<path d="M12 3L2 12h3v9h6v-6h2v6h6v-9h3z" fill="#333"/>' },
-  { code:"factory", label:"Factory", viewBox:"0 0 24 24",
-    art:'<path d="M2 20h20V9l-6 4V9l-6 4V9L2 13z M6 4h2v4H6z" fill="#333"/>' },
-  { code:"train", label:"Train", viewBox:"0 0 24 24",
-    art:'<rect x="4" y="4" width="16" height="14" rx="3" fill="#333"/><circle cx="8" cy="20" r="1.5" fill="#333"/><circle cx="16" cy="20" r="1.5" fill="#333"/><rect x="7" y="7" width="4" height="4" fill="#fff"/><rect x="13" y="7" width="4" height="4" fill="#fff"/>' },
-  { code:"boat", label:"Boat", viewBox:"0 0 24 24",
-    art:'<path d="M3 16l2-4h14l2 4v2H3zM7 11V6h2v5zM11 11V4h2v7z" fill="#333"/>' },
-  { code:"chicken", label:"Chicken", viewBox:"0 0 24 24",
-    art:'<path d="M13 3c-2 0-3 1-4 2C7 6 6 8 6 10c-2 1-3 3-3 5 0 3 3 5 7 5 4 0 8-2 8-6 0-2-1-4-3-5 0-3-1-6-2-6zm2 4h1v1h-1z" fill="#333"/>' },
-];
-
-/* ---------- the store ---------- */
-let library = loadLibrary();
-let selected = library[0] || null;
-let draft = null;         // working copy of the selected icon
-let tab = "draw";
-let tool = "select";
-let drag = null;
-let history = [];         // undo stack for draw tab
-
-function loadLibrary(){
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr) && arr.length) return arr;
-    }
-  } catch(e) {}
-  return JSON.parse(JSON.stringify(BUILTIN.map(b => ({...b, builtin:true, editedIn:"code"}))));
-}
-function saveLibrary(){
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(library)); } catch(e) {}
-}
+const SVGNS = "http://www.w3.org/2000/svg";
+const r3 = v => Math.round(v * 1000) / 1000;
+const num = (v, d) => { const n = parseFloat(v); return isNaN(n) ? (d || 0) : n; };
 
 /* ============================================================
-   Parsing and serializing SVG
+   The library comes from icons.js. We keep the text before and
+   after the ICONS object so nothing else in that file is lost.
    ============================================================ */
-function parseSvg(art, viewBox){
-  // Wrap in a root so we can use DOMParser
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${esc(viewBox||"0 0 24 24")}">${art||""}</svg>`;
-  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+let SRC = { head: "", tail: "" };
+let library = [];            // { code, label, vb, scene, puff, custom, extra, art, existed }
+let usage = {};              // icon code (lower case) -> list of places that use it
+let sel = -1;                // index in library
+let draft = null;            // the working copy of the selected icon
+let tab = "draw", tool = "select";
+let items = [], itemsDirty = false;   // the Draw tab's model of draft.art
+let selItem = -1;
+let hist = [], redo = [];
+let drag = null, pen = null, colorSession = false, fileDirty = false, draftDirty = false;
+
+function parseIconsJs(text) {
+  const m = /const\s+ICONS\s*=\s*\{/.exec(text);
+  if (!m) throw new Error("Could not find \"const ICONS = {\" in icons.js.");
+  const start = m.index + m[0].length - 1;                 // the opening brace
+  const endRel = text.slice(start).search(/\n\};/);
+  if (endRel < 0) throw new Error("Could not find the end of the ICONS list in icons.js.");
+  const end = start + endRel + 1;                          // index of "};"
+  const objText = text.slice(start, end + 1);
+  const obj = new Function("return (" + objText + ");")();
+  const gaps = {}, starts = [], re = /\n  ([A-Za-z_$][\w$]*|"[^"]+"): \{/g; let mm;
+  while ((mm = re.exec(objText))) starts.push({ key: mm[1].replace(/^"|"$/g, ""), at: mm.index });
+  starts.forEach((s0, i) => { const chunk = objText.slice(s0.at, i + 1 < starts.length ? starts[i + 1].at : objText.length), g = /\},(\s*)$/.exec(chunk); if (g) gaps[s0.key] = g[1] + "\n"; });   // the next entry's own newline was consumed by the search
+  const list = Object.keys(obj).map(code => {
+    const o = obj[code], extra = {};
+    Object.keys(o).forEach(k => { if (!["label", "vb", "scene", "puff", "custom", "art"].includes(k)) extra[k] = o[k]; });
+    return { code, label: o.label || code, vb: o.vb || "0 0 60 60", scene: o.scene || "", puff: !!o.puff, custom: !!o.custom, extra, art: String(o.art || ""), existed: true, gap: gaps[code] };
+  });
+  return { head: text.slice(0, start + 1), tail: text.slice(end + 2), list };
+}
+const escTpl = s => String(s).replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+function entryText(ic) {
+  const props = ["label: " + JSON.stringify(ic.label), "vb: " + JSON.stringify(ic.vb)];
+  if (ic.scene) props.push("scene: " + JSON.stringify(ic.scene));
+  if (ic.puff) props.push("puff: true");
+  if (ic.custom) props.push("custom: true");
+  Object.keys(ic.extra || {}).forEach(k => props.push(k + ": " + JSON.stringify(ic.extra[k])));
+  const key = /^[A-Za-z_$][\w$]*$/.test(ic.code) ? ic.code : JSON.stringify(ic.code);
+  return "  " + key + ": { " + props.join(", ") + ", art: `" + escTpl(ic.art) + "` }";
+}
+function buildIconsJs() { return SRC.head + "\n\n" + library.map((ic, i) => entryText(ic) + (i < library.length - 1 ? "," + (ic.gap || "\n\n") : "")).join("") + "\n};" + SRC.tail; }
+
+/* ============================================================
+   Checking artwork
+   ============================================================ */
+function parseSvg(art, vb) {
+  const doc = new DOMParser().parseFromString('<svg xmlns="' + SVGNS + '" viewBox="' + esc(vb || "0 0 60 60") + '">' + (art || "") + "</svg>", "image/svg+xml");
   const err = doc.querySelector("parsererror");
-  if (err) return { error: "Invalid SVG: " + err.textContent.replace(/\s+/g," ").slice(0,140) };
-  const root = doc.documentElement;
-  return { root, viewBox: root.getAttribute("viewBox") || "0 0 24 24" };
+  if (err) return { error: "Invalid SVG: " + err.textContent.replace(/\s+/g, " ").slice(0, 140) };
+  return { root: doc.documentElement };
 }
-
-function validateArt(art){
-  const parsed = parseSvg(art, "0 0 24 24");
-  if (parsed.error) return parsed;
-  // content security
-  const banned = parsed.root.querySelectorAll("script,foreignObject,use[href^='http'],image,iframe,object,embed");
-  if (banned.length) return { error: "Contains elements the editor does not allow: " + Array.from(banned).map(e => e.tagName.toLowerCase()).join(", ") };
-  // event handlers and external links
+function validateArt(art) {
+  const p = parseSvg(art, "0 0 60 60");
+  if (p.error) return p;
+  const banned = p.root.querySelectorAll("script,foreignObject,image,iframe,object,embed,style");
+  if (banned.length) return { error: "Contains elements that are not allowed: " + Array.from(banned).map(e => e.tagName.toLowerCase()).join(", ") };
   let bad = false;
-  parsed.root.querySelectorAll("*").forEach(el => {
-    Array.from(el.attributes).forEach(a => {
-      if (/^on/i.test(a.name)) bad = true;
-      if ((a.name === "href" || a.name === "xlink:href") && !/^#/.test(a.value)) bad = true;
-    });
-  });
-  if (bad) return { error: "Contains event handlers or external links, which the editor does not allow." };
-  return { ok: true, root: parsed.root };
+  p.root.querySelectorAll("*").forEach(el => Array.from(el.attributes).forEach(a => {
+    if (/^on/i.test(a.name)) bad = true;
+    if ((a.name === "href" || a.name === "xlink:href") && !/^#/.test(a.value)) bad = true;
+  }));
+  if (bad) return { error: "Contains event handlers or external links, which are not allowed." };
+  return { ok: true, root: p.root };
 }
-
-function serializeArt(root){
-  // inner markup of the <svg> root
-  return Array.from(root.childNodes).map(n => {
-    if (n.nodeType === 3) return n.textContent.trim();
-    if (n.nodeType === 1) return new XMLSerializer().serializeToString(n);
-    return "";
-  }).filter(Boolean).join("");
-}
+const parseVb = vb => { const a = String(vb || "").trim().split(/[\s,]+/).map(Number); return a.length === 4 && a.every(isFinite) && a[2] > 0 && a[3] > 0 ? a : null; };
 
 /* ============================================================
-   Shape model for the Draw tab
+   The Draw model: a list of { tag, attrs, inner, kind, ... }
    ============================================================ */
-function artToShapes(art){
-  const v = validateArt(art);
-  if (v.error) return { shapes:[], error: v.error };
-  const shapes = [];
-  let hasUnsupported = false;
-  v.root.querySelectorAll("*").forEach(el => {
-    const tag = el.tagName.toLowerCase();
-    const fill = el.getAttribute("fill") || "#000";
-    const stroke = el.getAttribute("stroke") || "none";
-    const sw = parseFloat(el.getAttribute("stroke-width") || "0");
-    if (tag === "rect"){
-      shapes.push({kind:"rect",
-        x:parseFloat(el.getAttribute("x")||"0"),
-        y:parseFloat(el.getAttribute("y")||"0"),
-        w:parseFloat(el.getAttribute("width")||"10"),
-        h:parseFloat(el.getAttribute("height")||"10"),
-        rx:parseFloat(el.getAttribute("rx")||"0"),
-        fill, stroke, sw});
-    } else if (tag === "circle"){
-      const r = parseFloat(el.getAttribute("r")||"5");
-      const cx = parseFloat(el.getAttribute("cx")||"12");
-      const cy = parseFloat(el.getAttribute("cy")||"12");
-      shapes.push({kind:"circle", cx, cy, r, fill, stroke, sw});
-    } else if (tag === "ellipse"){
-      const rx = parseFloat(el.getAttribute("rx")||"5");
-      const ry = parseFloat(el.getAttribute("ry")||"5");
-      const cx = parseFloat(el.getAttribute("cx")||"12");
-      const cy = parseFloat(el.getAttribute("cy")||"12");
-      shapes.push({kind:"ellipse", cx, cy, rx, ry, fill, stroke, sw});
-    } else if (tag === "path"){
-      const d = el.getAttribute("d")||"";
-      // straight-line paths only: M, L, Z (case-insensitive)
-      if (/[csqta]/i.test(d)) { hasUnsupported = true; return; }
-      const points = parseStraightPath(d);
-      if (points && points.length >= 2){
-        shapes.push({kind:"path", points, closed: /z/i.test(d), fill, stroke, sw});
-      }
-    } else if (tag === "polygon"){
-      const pts = (el.getAttribute("points")||"").trim().split(/\s+/).map(p => p.split(",").map(parseFloat)).filter(a => a.length===2 && !a.some(isNaN));
-      if (pts.length >= 3) shapes.push({kind:"path", points:pts, closed:true, fill, stroke, sw});
-    } else if (tag === "polyline"){
-      const pts = (el.getAttribute("points")||"").trim().split(/\s+/).map(p => p.split(",").map(parseFloat)).filter(a => a.length===2 && !a.some(isNaN));
-      if (pts.length >= 2) shapes.push({kind:"path", points:pts, closed:false, fill, stroke, sw});
-    } else if (tag === "g"){
-      // groups with no transform are transparent; groups with transform mark the icon as unsupported
-      if (el.getAttribute("transform")) hasUnsupported = true;
-    } else if (tag !== "svg"){
-      hasUnsupported = true;
-    }
-  });
-  return { shapes, hasUnsupported };
-}
-
-function parseStraightPath(d){
-  const tokens = d.match(/[MLZmlz]|-?\d*\.?\d+/g) || [];
-  const pts = [];
-  let i = 0, cmd = null, x = 0, y = 0;
-  while (i < tokens.length){
-    const t = tokens[i++];
-    if (/^[MLZmlz]$/.test(t)) { cmd = t.toUpperCase(); continue; }
-    if (!cmd) continue;
-    const a = parseFloat(t);
-    const b = parseFloat(tokens[i++] || "0");
-    if (isNaN(a) || isNaN(b)) break;
-    if (cmd === "M" || cmd === "L") { x = a; y = b; pts.push([x,y]); }
+function parsePath(d) {
+  if (/[CcSsQqTtAa]/.test(d)) return null;                 // curves and arcs: leave alone
+  const re = /([MmLlHhVvZz])|([-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?)/g, toks = [];
+  let m; while ((m = re.exec(d))) toks.push(m[1] || parseFloat(m[2]));
+  const subs = []; let cur = null, x = 0, y = 0, sx = 0, sy = 0, cmd = null, i = 0;
+  const push = (a, b) => { if (!cur) { cur = { pts: [[sx, sy]], closed: false }; subs.push(cur); } cur.pts.push([r3(a), r3(b)]); x = a; y = b; };
+  while (i < toks.length) {
+    if (typeof toks[i] === "string") { cmd = toks[i++]; if (cmd === "Z" || cmd === "z") { if (cur) { cur.closed = true; } cur = null; x = sx; y = sy; } continue; }
+    if (!cmd) return null;
+    const rel = cmd === cmd.toLowerCase(), C = cmd.toUpperCase();
+    if (C === "M") { const a = toks[i++], b = toks[i++]; if (typeof b !== "number") return null; x = rel ? x + a : a; y = rel ? y + b : b; sx = x; sy = y; cur = { pts: [[r3(x), r3(y)]], closed: false }; subs.push(cur); cmd = rel ? "l" : "L"; }
+    else if (C === "L") { const a = toks[i++], b = toks[i++]; if (typeof b !== "number") return null; push(rel ? x + a : a, rel ? y + b : b); }
+    else if (C === "H") { const a = toks[i++]; push(rel ? x + a : a, y); }
+    else if (C === "V") { const b = toks[i++]; push(x, rel ? y + b : b); }
+    else return null;
   }
-  return pts;
+  return subs.length ? subs : null;
 }
+const pathD = subs => subs.map(s => s.pts.map((p, i) => (i ? "L" : "M") + r3(p[0]) + " " + r3(p[1])).join(" ") + (s.closed ? " Z" : "")).join(" ");
+function parsePoints(s) { const n = String(s || "").match(/[-+]?(?:\d*\.\d+|\d+\.?\d*)/g) || []; const out = []; for (let i = 0; i + 1 < n.length; i += 2) out.push([parseFloat(n[i]), parseFloat(n[i + 1])]); return out; }
 
-function shapesToArt(shapes){
-  return shapes.map(s => {
-    const attrs = [];
-    if (s.fill) attrs.push(`fill="${s.fill}"`);
-    if (s.stroke && s.stroke !== "none"){ attrs.push(`stroke="${s.stroke}"`); attrs.push(`stroke-width="${s.sw}"`); attrs.push(`stroke-linejoin="round"`); }
-    if (s.kind === "rect") return `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}"${s.rx ? ` rx="${s.rx}"` : ""} ${attrs.join(" ")}/>`;
-    if (s.kind === "circle") return `<circle cx="${s.cx}" cy="${s.cy}" r="${s.r}" ${attrs.join(" ")}/>`;
-    if (s.kind === "ellipse") return `<ellipse cx="${s.cx}" cy="${s.cy}" rx="${s.rx}" ry="${s.ry}" ${attrs.join(" ")}/>`;
-    if (s.kind === "path"){
-      const d = s.points.map((p,i) => (i===0?"M":"L") + p[0] + " " + p[1]).join(" ") + (s.closed ? " Z" : "");
-      return `<path d="${d}" ${attrs.join(" ")}/>`;
-    }
-    return "";
-  }).join("");
-}
+function innerXml(el) { return Array.from(el.childNodes).map(n => n.nodeType === 1 ? new XMLSerializer().serializeToString(n).replace(/ xmlns="http:\/\/www\.w3\.org\/2000\/svg"/g, "") : n.nodeType === 3 ? n.textContent.trim() : "").filter(Boolean).join(""); }
 
-/* ============================================================
-   Rendering the SVG for previews
-   ============================================================ */
-function renderPreviewSVG(art, viewBox, size){
+function parseItems(art, vb) {
   const v = validateArt(art);
-  if (v.error) return `<svg viewBox="${esc(viewBox)}"><text x="12" y="12" font-size="4" fill="#c33">err</text></svg>`;
-  return `<svg viewBox="${esc(viewBox || "0 0 24 24")}" xmlns="http://www.w3.org/2000/svg">${art}</svg>`;
-}
-
-function updatePreviews(){
-  document.querySelectorAll(".preview-svg").forEach(el => {
-    el.innerHTML = renderPreviewSVG(draft.art, draft.viewBox);
-    el.querySelector("svg").style.width = el.dataset.size + "px";
-    el.querySelector("svg").style.height = el.dataset.size + "px";
+  if (v.error) return { error: v.error, items: [] };
+  const out = [];
+  Array.from(v.root.children).forEach(el => {
+    const tag = el.tagName.toLowerCase(), attrs = {};
+    Array.from(el.attributes).forEach(a => attrs[a.name] = a.value);
+    const it = { tag, attrs, inner: innerXml(el), kind: "locked" };
+    if (tag === "rect") it.kind = "rect";
+    else if (tag === "circle") it.kind = "circle";
+    else if (tag === "ellipse") it.kind = "ellipse";
+    else if ((tag === "polygon" || tag === "polyline") && !attrs.transform) { it.kind = "poly"; it.pts = parsePoints(attrs.points); }
+    else if (tag === "path" && !attrs.transform) { const s = parsePath(attrs.d || ""); if (s) { it.kind = "path"; it.sub = s; } }
+    if (attrs.transform && tag !== "g") it.kind = "locked";
+    out.push(it);
   });
+  return { items: out };
+}
+function itemXml(it, withIndex, i) {
+  const a = Object.assign({}, it.attrs);
+  if (withIndex) a["data-i"] = i;
+  const s = Object.keys(a).map(k => " " + k + '="' + esc(a[k]) + '"').join("");
+  return it.inner ? "<" + it.tag + s + ">" + it.inner + "</" + it.tag + ">" : "<" + it.tag + s + "/>";
+}
+function itemsToArt() { return "\n" + items.map(it => "    " + itemXml(it)).join("\n") + "\n  "; }
+function syncGeometry(it) {                                  // write geometry back into attributes
+  if (it.kind === "path") it.attrs.d = pathD(it.sub);
+  else if (it.kind === "poly") it.attrs.points = it.pts.map(p => r3(p[0]) + "," + r3(p[1])).join(" ");
+}
+const clone = o => JSON.parse(JSON.stringify(o));
+
+/* ---------- geometry helpers ---------- */
+function translate(it, dx, dy) {
+  const a = it.attrs;
+  if (it.kind === "rect") { a.x = r3(num(a.x) + dx); a.y = r3(num(a.y) + dy); }
+  else if (it.kind === "circle" || it.kind === "ellipse") { a.cx = r3(num(a.cx) + dx); a.cy = r3(num(a.cy) + dy); }
+  else if (it.kind === "poly") { it.pts.forEach(p => { p[0] = r3(p[0] + dx); p[1] = r3(p[1] + dy); }); syncGeometry(it); }
+  else if (it.kind === "path") { it.sub.forEach(s => s.pts.forEach(p => { p[0] = r3(p[0] + dx); p[1] = r3(p[1] + dy); })); syncGeometry(it); }
+  else {                                                       // a curved or grouped element: move it with a transform, leaving its drawing untouched
+    const base = (it._t0 != null ? it._t0 : a.transform || "").trim(), one = /^translate\(\s*(-?[\d.]+)[\s,]+(-?[\d.]+)\s*\)$/.exec(base);
+    a.transform = one ? "translate(" + r3(+one[1] + dx) + " " + r3(+one[2] + dy) + ")" : ("translate(" + r3(dx) + " " + r3(dy) + ") " + base).trim();
+  }
+}
+function handlesFor(it) {
+  const a = it.attrs, h = [];
+  if (it.kind === "rect") { const x = num(a.x), y = num(a.y), w = num(a.width), ht = num(a.height); h.push({ id: "nw", x, y }, { id: "ne", x: x + w, y }, { id: "se", x: x + w, y: y + ht }, { id: "sw", x, y: y + ht }); }
+  else if (it.kind === "circle") h.push({ id: "r", x: num(a.cx) + num(a.r), y: num(a.cy) });
+  else if (it.kind === "ellipse") h.push({ id: "rx", x: num(a.cx) + num(a.rx), y: num(a.cy) }, { id: "ry", x: num(a.cx), y: num(a.cy) + num(a.ry) });
+  else if (it.kind === "poly") it.pts.forEach((p, i) => h.push({ id: "p:" + i, x: p[0], y: p[1] }));
+  else if (it.kind === "path") it.sub.forEach((s, si) => s.pts.forEach((p, pi) => h.push({ id: "p:" + si + ":" + pi, x: p[0], y: p[1] })));
+  return h;
+}
+function moveHandle(it, id, pt) {
+  const a = it.attrs;
+  if (it.kind === "rect") {
+    const x = num(a.x), y = num(a.y), w = num(a.width), ht = num(a.height);
+    const fx = id === "nw" || id === "sw" ? x + w : x, fy = id === "nw" || id === "ne" ? y + ht : y;   // the opposite corner stays put
+    a.x = r3(Math.min(pt.x, fx)); a.y = r3(Math.min(pt.y, fy)); a.width = r3(Math.abs(pt.x - fx)); a.height = r3(Math.abs(pt.y - fy));
+  } else if (it.kind === "circle") a.r = r3(Math.max(0.25, Math.hypot(pt.x - num(a.cx), pt.y - num(a.cy))));
+  else if (it.kind === "ellipse") { if (id === "rx") a.rx = r3(Math.max(0.25, Math.abs(pt.x - num(a.cx)))); else a.ry = r3(Math.max(0.25, Math.abs(pt.y - num(a.cy)))); }
+  else if (it.kind === "poly") { const i = +id.split(":")[1]; it.pts[i] = [pt.x, pt.y]; syncGeometry(it); }
+  else if (it.kind === "path") { const q = id.split(":"); it.sub[+q[1]].pts[+q[2]] = [pt.x, pt.y]; syncGeometry(it); }
 }
 
 /* ============================================================
-   List rendering
+   Colors for the toolbar
    ============================================================ */
-function renderList(){
-  const custom = library.filter(x => !x.builtin);
-  const built = library.filter(x => x.builtin);
-
-  $("customList").innerHTML = custom.length ? custom.map(rowHtml).join("") :
-    '<div style="padding:6px 10px;font-size:12px;color:#9aa3ad">No custom icons yet. Click "+ New Icon".</div>';
-  $("builtinList").innerHTML = built.map(rowHtml).join("");
-
-  document.querySelectorAll(".icn-row").forEach(el => {
-    el.onclick = () => selectByCode(el.dataset.code);
-  });
+const _cv = document.createElement("canvas").getContext("2d");
+function hexOf(v, fallback) {
+  v = String(v || "").trim();
+  if (!v || v === "none" || v === "currentColor" || /^url\(/.test(v)) return fallback;
+  _cv.fillStyle = "#000001"; _cv.fillStyle = v;
+  const out = _cv.fillStyle;
+  if (/^#[0-9a-f]{6}$/i.test(out)) return out;
+  const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(out);
+  return m ? "#" + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, "0")).join("") : fallback;
 }
-function rowHtml(x){
-  return `<div class="icn-row ${draft && draft.code===x.code ? 'sel':''}" data-code="${esc(x.code)}">
-    <div class="swatch">${renderPreviewSVG(x.art, x.viewBox)}</div>
-    <div class="name">${esc(x.label || x.code)}</div>
-    ${x.builtin ? '<span class="badge builtin">built-in</span>' : ''}
-  </div>`;
-}
-
-function selectByCode(code){
-  const it = library.find(x => x.code === code);
+function syncToolbar() {
+  const it = items[selItem];
+  $("delBtn").disabled = !it; $("fwdBtn").disabled = !it || selItem >= items.length - 1; $("backBtn").disabled = !it || selItem <= 0;
   if (!it) return;
-  selected = it;
-  draft = JSON.parse(JSON.stringify(it));
-  history = [];
-  $("labelInput").value = draft.label || "";
-  $("codeInput").value = draft.code || "";
-  $("viewBoxInput").value = draft.viewBox || "0 0 24 24";
-  $("saveBtn").disabled = true;
-  render();
+  const a = it.attrs;
+  $("noFill").checked = a.fill === "none";
+  $("fillColor").value = hexOf(a.fill, "#000000");
+  $("strokeColor").value = hexOf(a.stroke, $("strokeColor").value);
+  $("strokeWidth").value = a.stroke && a.stroke !== "none" ? num(a["stroke-width"], 1) : 0;
 }
+function applyStyleToSelected(kindChanged) {
+  const it = items[selItem]; if (!it) return false;
+  if (!colorSession) { pushHist(); colorSession = true; }
+  const a = it.attrs, w = num($("strokeWidth").value);
+  if ($("noFill").checked) a.fill = "none"; else a.fill = $("fillColor").value;
+  if (w > 0) { a.stroke = $("strokeColor").value; a["stroke-width"] = String(w); a["stroke-linejoin"] = a["stroke-linejoin"] || "round"; }
+  else { delete a.stroke; delete a["stroke-width"]; }
+  itemsChanged();
+  return true;
+}
+["fillColor", "noFill", "strokeColor", "strokeWidth"].forEach(id => {
+  $(id).addEventListener("input", () => applyStyleToSelected());
+  $(id).addEventListener("change", () => { colorSession = false; });
+});
 
 /* ============================================================
-   Main render
+   History
    ============================================================ */
-function render(){
-  renderList();
-  if (!draft) return;
-  if (tab === "draw"){ $("editor-inner").hidden = false; $("code-wrap").hidden = true; }
-  else { $("editor-inner").hidden = true; $("code-wrap").hidden = false; }
-  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
-  document.querySelectorAll("#toolbar [data-tool]").forEach(b => b.classList.toggle("on", b.dataset.tool === tool));
+function pushHist() { hist.push(clone(items)); if (hist.length > 80) hist.shift(); redo = []; updateHistBtns(); }
+function updateHistBtns() { $("undoBtn").disabled = !hist.length; $("redoBtn").disabled = !redo.length; }
+function undo() { if (!hist.length) return; redo.push(clone(items)); items = hist.pop(); selItem = Math.min(selItem, items.length - 1); itemsChanged(true); }
+function redoIt() { if (!redo.length) return; hist.push(clone(items)); items = redo.pop(); selItem = Math.min(selItem, items.length - 1); itemsChanged(true); }
+$("undoBtn").onclick = undo; $("redoBtn").onclick = redoIt;
 
-  if (tab === "draw"){
-    const parsed = artToShapes(draft.art);
-    const canvas = $("svg-canvas");
-    if (parsed.error){
-      $("banner").classList.add("on");
-      $("banner").textContent = parsed.error + " Switch to Code to fix.";
-      canvas.innerHTML = `<text x="50" y="50" text-anchor="middle" font-size="4" fill="#b42318">Invalid SVG</text>`;
-      canvas.classList.add("readonly");
-    } else if (parsed.hasUnsupported){
-      $("banner").classList.add("on");
-      $("banner").textContent = "This icon uses elements the drawing tools don't support (curves, transforms, or other elements). The preview shows it; switch to Code to edit it.";
-      canvas.classList.remove("readonly");
-      canvas.innerHTML = `<g opacity=".85">${draft.art}</g>`;
-      canvas.classList.add("readonly");
-    } else {
-      $("banner").classList.remove("on");
-      canvas.classList.remove("readonly");
-      canvas.innerHTML = `<g opacity=".9">${draft.art}</g>`;
-      bindCanvasHandlers();
-    }
-  } else {
-    $("code-input").value = draft.art || "";
-    const v = validateArt(draft.art);
-    const msg = $("code-msg");
-    if (v.error) { msg.className = "err"; msg.textContent = v.error; }
-    else { msg.className = "ok"; msg.textContent = "Valid."; }
+/* ============================================================
+   The Draw canvas
+   ============================================================ */
+function displayBox() {
+  const vb = parseVb(draft.vb) || [0, 0, 60, 60], m = Math.max(vb[2], vb[3]) * 0.12;
+  return { vb, box: [vb[0] - m, vb[1] - m, vb[2] + 2 * m, vb[3] + 2 * m], unit: Math.max(vb[2], vb[3]) / 60 };
+}
+const snapUnit = () => $("snap").checked ? (Math.max(...(parseVb(draft.vb) || [0, 0, 60, 60]).slice(2)) <= 30 ? 0.5 : 1) : 0;
+function pointerPt(ev) {
+  const c = $("svg-canvas"), p = c.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+  const q = p.matrixTransform(c.getScreenCTM().inverse()), u = snapUnit();
+  return { x: u ? Math.round(q.x / u) * u : r3(q.x), y: u ? Math.round(q.y / u) * u : r3(q.y) };
+}
+function renderCanvas() {
+  const c = $("svg-canvas"), { vb, box, unit } = displayBox();
+  c.setAttribute("viewBox", box.join(" "));
+  c.style.aspectRatio = box[2] + " / " + box[3];
+  c.className.baseVal = "tool-" + tool;
+  let g = "";
+  const step = unit * 5;
+  for (let x = Math.ceil(vb[0] / step) * step; x <= vb[0] + vb[2]; x += step) g += '<line class="gridline" x1="' + x + '" y1="' + vb[1] + '" x2="' + x + '" y2="' + (vb[1] + vb[3]) + '"/>';
+  for (let y = Math.ceil(vb[1] / step) * step; y <= vb[1] + vb[3]; y += step) g += '<line class="gridline" x1="' + vb[0] + '" y1="' + y + '" x2="' + (vb[0] + vb[2]) + '" y2="' + y + '"/>';
+  let h = g + items.map((it, i) => itemXml(it, true, i)).join("");
+  h += '<rect class="bounds" x="' + vb[0] + '" y="' + vb[1] + '" width="' + vb[2] + '" height="' + vb[3] + '"/>';
+  c.innerHTML = h;
+  const it = items[selItem];
+  if (it && tool === "select") {
+    const el = c.querySelector('[data-i="' + selItem + '"]');
+    let bb = null; try { bb = el && el.getBBox(); } catch (e) {}
+    if (bb) { const r = document.createElementNS(SVGNS, "rect"); r.setAttribute("class", "bbox"); r.setAttribute("x", bb.x); r.setAttribute("y", bb.y); r.setAttribute("width", bb.width); r.setAttribute("height", bb.height); c.appendChild(r); }
+    const hs = unit * 1.6;
+    handlesFor(it).forEach(p => { const r = document.createElementNS(SVGNS, "rect"); r.setAttribute("class", "handle"); r.setAttribute("data-h", p.id); r.setAttribute("x", p.x - hs); r.setAttribute("y", p.y - hs); r.setAttribute("width", hs * 2); r.setAttribute("height", hs * 2); c.appendChild(r); });
   }
-  updatePreviews();
+  if (pen && pen.pts.length) {
+    const pts = pen.pts.concat(pen.cursor ? [[pen.cursor.x, pen.cursor.y]] : []);
+    const p = document.createElementNS(SVGNS, "polyline"); p.setAttribute("class", "pen"); p.setAttribute("points", pts.map(q => q.join(",")).join(" ")); c.appendChild(p);
+    const hs = unit * 1.6; pen.pts.forEach((q, i) => { const r = document.createElementNS(SVGNS, "rect"); r.setAttribute("class", "handle"); r.setAttribute("x", q[0] - hs); r.setAttribute("y", q[1] - hs); r.setAttribute("width", hs * 2); r.setAttribute("height", hs * 2); if (i === 0) r.setAttribute("style", "fill:var(--accent)"); c.appendChild(r); });
+  }
+}
+function itemsChanged(fromHistory) {          // call after the model changes
+  itemsDirty = true; draft.art = itemsToArt(); markDraftDirty();
+  renderCanvas(); updatePreviews(); syncToolbar(); updateHistBtns(); updateBanner();
+}
+function updateBanner() {
+  const locked = items.filter(i => i.kind === "locked").length, b = $("banner");
+  if (tab === "draw" && locked) { b.classList.add("on"); b.textContent = locked + " element" + (locked === 1 ? "" : "s") + " in this icon use curves, groups or transforms. They are kept exactly as they are. You can move, recolor, reorder or delete them here, and reshape them in Code."; }
+  else b.classList.remove("on");
 }
 
-/* ============================================================
-   Canvas pointer handling (simplified)
-   The drawing tools work on a 100x100 coordinate system and
-   produce straight-line paths, rectangles, circles, ellipses.
-   ============================================================ */
-function bindCanvasHandlers(){
-  const canvas = $("svg-canvas");
-  canvas.onpointerdown = ev => {
-    if (canvas.classList.contains("readonly")) return;
-    const pt = pointerToSvg(ev, canvas);
-    if (tool === "pen"){
-      // Simple pen: click to add a point to a new path
-      pushHistory();
-      const parsed = artToShapes(draft.art);
-      if (parsed.error || parsed.hasUnsupported) return;
-      const shapes = parsed.shapes;
-      // Add a new tiny path with one point; subsequent clicks extend it
-      shapes.push({ kind:"path", points:[[pt.x, pt.y],[pt.x+0.01, pt.y+0.01]], closed:false, fill:"none", stroke:$("strokeColor").value || "#000", sw:parseFloat($("strokeWidth").value)||1 });
-      draft.art = shapesToArt(shapes);
-      markDirty(); render();
-    } else if (tool === "rect" || tool === "circle"){
-      drag = { kind:tool, start:pt };
-      canvas.setPointerCapture(ev.pointerId);
-    }
-  };
-  canvas.onpointermove = ev => {
-    if (!drag) return;
-    const pt = pointerToSvg(ev, canvas);
-    if (drag.kind === "rect"){
-      const x = Math.min(drag.start.x, pt.x), y = Math.min(drag.start.y, pt.y);
-      const w = Math.abs(pt.x - drag.start.x), h = Math.abs(pt.y - drag.start.y);
-      const parsed = artToShapes(draft.art);
-      if (parsed.error || parsed.hasUnsupported) return;
-      const shapes = parsed.shapes.slice(0, -1);
-      shapes.push({ kind:"rect", x, y, w, h, rx:0, fill:$("fillColor").value||"#000", stroke:$("strokeColor").value||"none", sw:parseFloat($("strokeWidth").value)||0 });
-      draft.art = shapesToArt(shapes);
-      markDirty(); render();
-    } else if (drag.kind === "circle"){
-      const cx = (drag.start.x + pt.x) / 2, cy = (drag.start.y + pt.y) / 2;
-      const r = Math.max(0.5, Math.min(Math.abs(pt.x - drag.start.x)/2, Math.abs(pt.y - drag.start.y)/2));
-      const parsed = artToShapes(draft.art);
-      if (parsed.error || parsed.hasUnsupported) return;
-      const shapes = parsed.shapes.slice(0, -1);
-      shapes.push({ kind:"circle", cx, cy, r, fill:$("fillColor").value||"#000", stroke:$("strokeColor").value||"none", sw:parseFloat($("strokeWidth").value)||0 });
-      draft.art = shapesToArt(shapes);
-      markDirty(); render();
-    }
-  };
-  canvas.onpointerup = () => { drag = null; };
-}
-function pointerToSvg(ev, svg){
-  const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
-  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
-  return { x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 };
-}
-
-/* ============================================================
-   Draft dirtiness and save
-   ============================================================ */
-function markDirty(){
-  $("saveBtn").disabled = false;
-  $("dupeBtn").disabled = !draft;
-}
-function pushHistory(){
-  history.push(draft.art);
-  $("undoBtn").disabled = false;
-}
-
-/* ============================================================
-   Inputs
-   ============================================================ */
-$("labelInput").oninput = e => { draft.label = e.target.value; markDirty(); };
-$("codeInput").oninput  = e => { draft.code = e.target.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,"-"); markDirty(); };
-$("viewBoxInput").oninput = e => { draft.viewBox = e.target.value; markDirty(); render(); };
-
-document.querySelectorAll("#tabs button").forEach(b => {
-  b.onclick = () => { tab = b.dataset.tab; render(); };
-});
-document.querySelectorAll("#toolbar [data-tool]").forEach(b => {
-  b.onclick = () => { tool = b.dataset.tool; document.querySelectorAll("#toolbar [data-tool]").forEach(x => x.classList.toggle("on", x===b)); };
-});
-
-$("code-input").oninput = () => {
-  const val = $("code-input").value;
-  draft.art = val;
-  const v = validateArt(val);
-  const msg = $("code-msg");
-  if (v.error) { msg.className = "err"; msg.textContent = v.error; $("saveBtn").disabled = true; }
-  else { msg.className = "ok"; msg.textContent = "Valid."; $("saveBtn").disabled = false; }
-  updatePreviews();
+const NEW_ATTRS = () => {
+  const a = {}, w = num($("strokeWidth").value);
+  if ($("noFill").checked) a.fill = "none"; else a.fill = $("fillColor").value;
+  if (w > 0) { a.stroke = $("strokeColor").value; a["stroke-width"] = String(w); a["stroke-linejoin"] = "round"; }
+  return a;
 };
+function addItem(it) { items.push(it); selItem = items.length - 1; }
 
-$("undoBtn").onclick = () => {
-  if (!history.length) return;
-  draft.art = history.pop();
-  $("undoBtn").disabled = !history.length;
-  markDirty(); render();
-};
+const canvas = $("svg-canvas");
+canvas.addEventListener("pointerdown", ev => {
+  if (tab !== "draw" || !draft) return;
+  const pt = pointerPt(ev), hEl = ev.target.closest && ev.target.closest("[data-h]"), iEl = ev.target.closest && ev.target.closest("[data-i]");
+  if (tool === "pen") {
+    if (!pen) { pushHist(); pen = { pts: [], cursor: pt }; selItem = -1; }
+    const first = pen.pts[0];
+    if (first && pen.pts.length >= 3 && Math.hypot(pt.x - first[0], pt.y - first[1]) <= displayBox().unit * 2.5) { finishPen(true); return; }
+    const last = pen.pts[pen.pts.length - 1];
+    if (!last || last[0] !== pt.x || last[1] !== pt.y) pen.pts.push([pt.x, pt.y]);
+    renderCanvas(); return;
+  }
+  if (tool === "rect" || tool === "circle") { pushHist(); drag = { kind: tool, start: pt, made: false }; canvas.setPointerCapture(ev.pointerId); return; }
+  // select tool
+  if (hEl && items[selItem]) { pushHist(); drag = { kind: "handle", id: hEl.getAttribute("data-h") }; canvas.setPointerCapture(ev.pointerId); return; }
+  if (iEl) {
+    selItem = +iEl.getAttribute("data-i"); pushHist();
+    drag = { kind: "move", start: pt, snap: clone(items[selItem]), moved: false };
+    canvas.setPointerCapture(ev.pointerId); syncToolbar(); renderCanvas(); return;
+  }
+  selItem = -1; syncToolbar(); renderCanvas();
+});
+canvas.addEventListener("pointermove", ev => {
+  if (pen) { pen.cursor = pointerPt(ev); renderCanvas(); return; }
+  if (!drag) return;
+  const pt = pointerPt(ev);
+  if (drag.kind === "rect" || drag.kind === "circle") {
+    if (!drag.made) { if (Math.hypot(pt.x - drag.start.x, pt.y - drag.start.y) < displayBox().unit * 1.2) return; drag.made = true;
+      const base = NEW_ATTRS();
+      addItem(drag.kind === "rect" ? { tag: "rect", kind: "rect", attrs: Object.assign({ x: 0, y: 0, width: 1, height: 1 }, base), inner: "" } : { tag: "circle", kind: "circle", attrs: Object.assign({ cx: 0, cy: 0, r: 1 }, base), inner: "" }); }
+    const it = items[selItem], a = it.attrs;
+    if (drag.kind === "rect") { a.x = Math.min(drag.start.x, pt.x); a.y = Math.min(drag.start.y, pt.y); a.width = Math.abs(pt.x - drag.start.x); a.height = Math.abs(pt.y - drag.start.y); }
+    else { const w = Math.abs(pt.x - drag.start.x), h = Math.abs(pt.y - drag.start.y), d = Math.max(w, h) / 2; a.cx = r3((drag.start.x + pt.x) / 2); a.cy = r3((drag.start.y + pt.y) / 2); a.r = r3(Math.max(0.5, Math.min(w, h) / 2 || d)); }
+    itemsChanged(); return;
+  }
+  if (drag.kind === "handle") { moveHandle(items[selItem], drag.id, pt); itemsChanged(); return; }
+  if (drag.kind === "move") {
+    const dx = pt.x - drag.start.x, dy = pt.y - drag.start.y;
+    if (!drag.moved && !dx && !dy) return; drag.moved = true;
+    const s = clone(drag.snap); items[selItem] = s;
+    if (s.kind === "locked") s._t0 = drag.snap.attrs.transform || "";
+    translate(items[selItem], dx, dy); delete items[selItem]._t0; itemsChanged();
+  }
+});
+const endDrag = () => { if (drag && drag.kind === "move" && !drag.moved) { hist.pop(); updateHistBtns(); } if (drag && (drag.kind === "rect" || drag.kind === "circle") && !drag.made) { hist.pop(); updateHistBtns(); } drag = null; };
+canvas.addEventListener("pointerup", endDrag); canvas.addEventListener("pointercancel", endDrag);
+canvas.addEventListener("dblclick", () => { if (pen) { if (pen.pts.length > 2) pen.pts.pop(); finishPen(false); } });
 
+function finishPen(closed) {
+  const p = pen; pen = null;
+  if (!p || p.pts.length < 2) { hist.pop(); updateHistBtns(); renderCanvas(); return; }
+  const attrs = NEW_ATTRS();
+  if (!closed) { attrs.fill = "none"; if (!attrs.stroke) { attrs.stroke = $("strokeColor").value; attrs["stroke-width"] = "1"; attrs["stroke-linejoin"] = "round"; } }
+  const it = { tag: "path", kind: "path", attrs, inner: "", sub: [{ pts: p.pts.map(q => [q[0], q[1]]), closed: !!closed }] };
+  syncGeometry(it); addItem(it); tool = "select"; setToolButtons(); itemsChanged();
+}
+function setToolButtons() { document.querySelectorAll("#toolbar [data-tool]").forEach(b => b.classList.toggle("on", b.dataset.tool === tool)); }
+document.querySelectorAll("#toolbar [data-tool]").forEach(b => b.onclick = () => { if (pen) { pen = null; hist.pop(); updateHistBtns(); } tool = b.dataset.tool; setToolButtons(); renderCanvas(); });
+
+function deleteSelected() { if (!items[selItem]) return; pushHist(); items.splice(selItem, 1); selItem = -1; itemsChanged(); }
+function reorder(d) { const i = selItem, j = i + d; if (!items[i] || j < 0 || j >= items.length) return; pushHist(); const t = items[i]; items[i] = items[j]; items[j] = t; selItem = j; itemsChanged(); }
+$("delBtn").onclick = deleteSelected; $("fwdBtn").onclick = () => reorder(1); $("backBtn").onclick = () => reorder(-1);
+document.addEventListener("keydown", ev => {
+  if (tab !== "draw" || /^(input|textarea|select)$/i.test((ev.target.tagName || ""))) return;
+  const k = ev.key;
+  if ((ev.ctrlKey || ev.metaKey) && k.toLowerCase() === "z") { ev.preventDefault(); ev.shiftKey ? redoIt() : undo(); return; }
+  if ((ev.ctrlKey || ev.metaKey) && k.toLowerCase() === "y") { ev.preventDefault(); redoIt(); return; }
+  if (pen) { if (k === "Escape") { pen = null; hist.pop(); updateHistBtns(); renderCanvas(); } else if (k === "Enter") finishPen(false); return; }
+  if (k === "Delete" || k === "Backspace") { ev.preventDefault(); deleteSelected(); return; }
+  const tk = { v: "select", p: "pen", r: "rect", c: "circle" }[k.toLowerCase()];
+  if (tk && !ev.ctrlKey && !ev.metaKey) { tool = tk; setToolButtons(); renderCanvas(); return; }
+  const step = snapUnit() || displayBox().unit * 0.5, mv = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[k];
+  if (mv && items[selItem]) { ev.preventDefault(); pushHist(); translate(items[selItem], mv[0], mv[1]); itemsChanged(); }
+});
+
+/* ============================================================
+   Previews and the list
+   ============================================================ */
+const svgOf = (art, vb) => '<svg viewBox="' + esc(vb || "0 0 60 60") + '" xmlns="' + SVGNS + '">' + art + "</svg>";
+function safeSvg(art, vb) { const v = validateArt(art); return v.error ? '<svg viewBox="0 0 60 60"><text x="30" y="34" font-size="12" text-anchor="middle" fill="#c33">err</text></svg>' : svgOf(art, vb); }
+function updatePreviews() {
+  document.querySelectorAll(".preview-svg").forEach(el => { el.innerHTML = safeSvg(draft.art, draft.vb); const s = el.querySelector("svg"); s.style.width = s.style.height = el.dataset.size + "px"; });
+  $("discSvg").innerHTML = safeSvg(draft.art, draft.vb);
+}
+function rowHtml(ic, i) {
+  return '<div class="icn-row' + (i === sel ? " sel" : "") + '" data-i="' + i + '"><div class="swatch">' + safeSvg(ic.art, ic.vb) + '</div><div class="name">' + esc(ic.label || ic.code) + "</div></div>";
+}
+function renderList() {
+  const cu = [], bu = [];
+  library.forEach((ic, i) => (ic.custom ? cu : bu).push(rowHtml(ic, i)));
+  $("customList").innerHTML = cu.length ? cu.join("") : '<div class="empty">No custom icons yet. Click "+ New Icon".</div>';
+  $("builtinList").innerHTML = bu.join("");
+  document.querySelectorAll(".icn-row").forEach(el => el.onclick = () => choose(+el.dataset.i));
+}
+function showUsage() {
+  const ic = draft, u = ic && usage[String(ic.code).toLowerCase()];
+  $("usage").innerHTML = !ic ? "" : u && u.length ? "<b>In use:</b> " + u.map(esc).join(", ") : "Not used by any category, stamp or tour stop yet.";
+}
+
+/* ============================================================
+   Selecting, editing, saving
+   ============================================================ */
+function markDraftDirty() { draftDirty = true; $("saveBtn").disabled = false; }
+function choose(i) {
+  if (draftDirty && !confirm("You have unsaved changes to this icon. Discard them?")) return;
+  sel = i; draft = clone(library[i]); draftDirty = false; hist = []; redo = []; pen = null; selItem = -1; itemsDirty = false;
+  loadDraftIntoForm(); renderList();
+}
+function loadDraftIntoForm() {
+  $("labelInput").value = draft.label; $("codeInput").value = draft.code; $("viewBoxInput").value = draft.vb;
+  $("sceneInput").value = draft.scene || ""; $("puffInput").checked = !!draft.puff;
+  $("codeInput").readOnly = !!draft.existed;
+  $("codeInput").title = draft.existed ? "The code cannot change after an icon exists, because categories, stamps and tours refer to it by this code." : "";
+  $("saveBtn").disabled = true; $("dupeBtn").disabled = false; $("deleteBtn").disabled = false;
+  reparse(); showUsage(); renderTab(); updatePreviews();
+}
+function reparse() { const p = parseItems(draft.art, draft.vb); items = p.items; itemsDirty = false; parseError = p.error || ""; }
+let parseError = "";
+function renderTab() {
+  $("editor-inner").hidden = tab !== "draw"; $("code-wrap").hidden = tab !== "code";
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  if (tab === "draw") {
+    if (parseError) { const b = $("banner"); b.classList.add("on"); b.textContent = parseError + " Switch to Code to fix it."; $("svg-canvas").innerHTML = ""; return; }
+    renderCanvas(); syncToolbar(); updateHistBtns(); updateBanner();
+  } else {
+    $("banner").classList.remove("on");
+    $("code-input").value = draft.art; codeCheck();
+  }
+}
+function codeCheck() { const v = validateArt($("code-input").value), m = $("code-msg"); if (v.error) { m.className = "err"; m.textContent = v.error; } else { m.className = "ok"; m.textContent = "Valid."; } return !v.error; }
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
+  if (!draft || tab === b.dataset.tab) return;
+  if (tab === "code") { draft.art = $("code-input").value; reparse(); }
+  if (pen) pen = null;
+  tab = b.dataset.tab; renderTab();
+});
+$("code-input").oninput = () => { draft.art = $("code-input").value; markDraftDirty(); const ok = codeCheck(); $("saveBtn").disabled = !ok; updatePreviews(); };
+$("labelInput").oninput = e => { draft.label = e.target.value; markDraftDirty(); };
+$("codeInput").oninput = e => { draft.code = e.target.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-"); markDraftDirty(); showUsage(); };
+$("viewBoxInput").oninput = e => { draft.vb = e.target.value; markDraftDirty(); if (parseVb(draft.vb)) { if (tab === "draw" && !parseError) renderCanvas(); updatePreviews(); } };
+$("sceneInput").onchange = e => { draft.scene = e.target.value; markDraftDirty(); };
+$("puffInput").onchange = e => { draft.puff = e.target.checked; markDraftDirty(); };
+
+function markFile() { fileDirty = true; $("dlBtn").disabled = false; const e = document.createEvent("Event"); e.initEvent("input", true, true); document.body.dispatchEvent(e); }
 $("saveBtn").onclick = () => {
-  const v = validateArt(draft.art);
-  if (v.error) { toast(v.error); return; }
-  if (!draft.code) { toast("Give the icon a code."); return; }
+  if (tab === "code") draft.art = $("code-input").value;
+  const v = validateArt(draft.art); if (v.error) return toast(v.error);
+  if (!draft.code) return toast("Give the icon a code.");
+  if (!parseVb(draft.vb)) return toast("The ViewBox needs four numbers, like 0 0 60 60.");
+  if (library.some((x, i) => x.code === draft.code && i !== sel)) return toast("An icon with that code already exists.");
   if (!draft.label) draft.label = draft.code;
-  // duplicates: refuse
-  const dupe = library.find(x => x.code === draft.code && x !== selected);
-  if (dupe) { toast("An icon with that code already exists."); return; }
-  selected = JSON.parse(JSON.stringify(draft));
-  selected.builtin = false;
-  const idx = library.findIndex(x => x.code === selected.code);
-  if (idx >= 0) library[idx] = selected; else library.push(selected);
-  saveLibrary();
-  $("saveBtn").disabled = true;
-  $("dupeBtn").disabled = false;
-  renderList();
-  toast("Saved " + selected.code);
+  library[sel] = Object.assign({}, clone(draft), { existed: library[sel].existed || draft.existed });
+  draftDirty = false; $("saveBtn").disabled = true; renderList(); markFile(); toast("Saved " + draft.code + ". Now download or publish icons.js.");
+  draft = clone(library[sel]); loadDraftIntoForm();
 };
-
+function uniqueCode(base) { let c = base, n = 2; while (library.some(x => x.code === c)) c = base + "-" + n++; return c; }
 $("newBtn").onclick = () => {
-  let n = 1, code;
-  do { code = "icon-" + String(n).padStart(3,"0"); n++; } while (library.find(x => x.code === code));
-  const it = { code, label:"New Icon", viewBox:"0 0 24 24", art:'<rect x="6" y="6" width="12" height="12" fill="#000"/>', builtin:false, editedIn:"draw" };
-  library.push(it);
-  saveLibrary();
-  selectByCode(code);
-  $("labelInput").focus();
+  if (!loaded) return;
+  if (draftDirty && !confirm("You have unsaved changes to this icon. Discard them?")) return;
+  const code = uniqueCode("new-icon");
+  library.push({ code, label: "New icon", vb: "0 0 60 60", scene: "", puff: false, custom: true, extra: {}, art: '\n    <circle cx="30" cy="30" r="18" fill="#8a6f4d"/>\n  ', existed: false });
+  sel = library.length - 1; draft = clone(library[sel]); draftDirty = false; hist = []; redo = []; selItem = -1; loadDraftIntoForm(); renderList(); markFile(); $("labelInput").focus(); $("labelInput").select();
 };
-
 $("dupeBtn").onclick = () => {
-  if (!selected) return;
-  let n = 1, code;
-  do { code = (selected.code || "icon") + "-copy" + (n>1?n:""); n++; } while (library.find(x => x.code === code));
-  const it = { code, label: (selected.label||"") + " copy", viewBox: selected.viewBox, art: selected.art, builtin:false, editedIn:"code" };
-  library.push(it);
-  saveLibrary();
-  selectByCode(code);
-  toast("Duplicated");
+  if (!draft) return;
+  const code = uniqueCode(draft.code + "-copy");
+  const copy = Object.assign(clone(draft), { code, label: draft.label + " copy", custom: true, existed: false });
+  library.push(copy); sel = library.length - 1; draft = clone(copy); draftDirty = false; hist = []; redo = []; selItem = -1; loadDraftIntoForm(); renderList(); markFile(); toast("Duplicated as " + code);
 };
+$("deleteBtn").onclick = () => {
+  if (sel < 0) return;
+  const code = library[sel].code, u = usage[code.toLowerCase()];
+  if (u && u.length) return toast("Cannot delete: " + code + " is used by " + u.join(", ") + ".");
+  if (!confirm('Delete the icon "' + library[sel].label + '"? This takes effect when you download or publish icons.js.')) return;
+  library.splice(sel, 1); sel = Math.min(sel, library.length - 1); draftDirty = false; markFile();
+  if (sel >= 0) { draft = clone(library[sel]); loadDraftIntoForm(); } else { draft = null; }
+  renderList();
+};
+$("resetBtn").onclick = async () => { if ((fileDirty || draftDirty) && !confirm("Throw away every change made since icons.js was loaded?")) return; draftDirty = false; fileDirty = false; await boot(); toast("Reloaded icons.js"); };
 
-$("exportBtn").onclick = () => {
-  const json = JSON.stringify(library.filter(x => !x.builtin), null, 2);
-  const blob = new Blob([json], { type:"application/json" });
+$("dlBtn").onclick = () => {
+  if (draftDirty && !confirm("The icon you are editing has unsaved changes that will NOT be in the download. Download anyway?")) return;
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "icons.json";
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast("Exported icons.json");
+  a.href = URL.createObjectURL(new Blob([buildIconsJs()], { type: "text/javascript" }));
+  a.download = "icons.js";
+  document.body.appendChild(a); a.click(); a.remove();
+  toast("Downloaded icons.js. Upload it to your site, replacing the old one. (Or use Publish.)");
 };
 
-$("resetBtn").onclick = () => {
-  if (!confirm("Reset the library to the built-ins? Custom icons will be lost.")) return;
-  localStorage.removeItem(STORAGE_KEY);
-  library = loadLibrary();
-  selected = library[0]; draft = JSON.parse(JSON.stringify(library[0]));
-  history = [];
-  $("labelInput").value = draft.label;
-  $("codeInput").value = draft.code;
-  $("viewBoxInput").value = draft.viewBox;
-  render();
-  toast("Reset");
-};
+let toastTimer = 0;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 3200); }
 
 /* ============================================================
-   Boot
+   Boot: read icons.js, then find out where each icon is used
    ============================================================ */
-function boot(){
-  renderList();
-  selectByCode(library[0].code);
+let loaded = false;
+async function getCsv(name) { try { const r = await fetch(name, { cache: "no-store" }); if (!r.ok || !window.Papa) return []; return Papa.parse((await r.text()).replace(/^\uFEFF/, ""), { header: true, skipEmptyLines: true }).data; } catch (e) { return []; } }
+async function boot() {
+  let text;
+  try { const r = await fetch("icons.js", { cache: "no-store" }); if (!r.ok) throw new Error("icons.js was not found next to this page."); text = await r.text(); }
+  catch (e) { $("fileNote").textContent = "Could not read icons.js. Open this page from your website, not from a file on your computer."; return; }
+  let parsed;
+  try { parsed = parseIconsJs(text); } catch (e) { $("fileNote").textContent = "icons.js could not be read: " + e.message; return; }
+  SRC = { head: parsed.head, tail: parsed.tail }; library = parsed.list; loaded = true;
+  $("fileNote").textContent = library.length + " icons in icons.js";
+  const [cats, stamps, stops] = await Promise.all([getCsv("categories.csv"), getCsv("stamps.csv"), getCsv("tourstops.csv")]);
+  usage = {};
+  const add = (code, text) => { const k = String(code || "").trim().toLowerCase(); if (k) (usage[k] = usage[k] || []).push(text); };
+  cats.forEach(r => add(r.ICON, "category " + (r.LABEL || r.CODE)));
+  stamps.forEach(r => add(r.VEHICLE, "stamp " + (r.TITLE || r.STAMP_ID)));
+  const seen = {}; stops.forEach(r => { const k = String(r.VEHICLE || "").trim().toLowerCase(), t = r.TOUR_ID; if (k && !seen[k + "|" + t]) { seen[k + "|" + t] = 1; add(k, "tour " + t); } });
+  Object.keys(usage).forEach(k => { const c = {}; usage[k].forEach(t => c[t] = 1); usage[k] = Object.keys(c); });
+  sel = -1; draft = null; renderList();
+  if (library.length) choose(0);
+  $("dlBtn").disabled = !fileDirty;
 }
-let toastTimer = 0;
-function toast(msg){
-  const t = $("toast");
-  t.textContent = msg; t.classList.add("on");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("on"), 2200);
-}
+window.addEventListener("beforeunload", e => { if (window.parent === window && (fileDirty || draftDirty)) { e.preventDefault(); e.returnValue = ""; } });
 boot();
 </script>
+<script src="publish.js"></script>
+<script>GHPublish.attach({ buttons: ["dlBtn"] });</script>
 </body>
 </html>

@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR Code Labels</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;font-family:Arial,sans-serif;color:#222;background:#fafafa}
+header{background:#333;color:#fff;padding:8px 12px}
+header h1{font-size:17px;margin:0}
+.layout{display:grid;grid-template-columns:minmax(300px,420px) 1fr;gap:18px;max-width:1100px;margin:0 auto;padding:14px}
+@media(max-width:820px){.layout{grid-template-columns:1fr}}
+fieldset{border:1px solid #ddd;border-radius:8px;background:#fff;margin:0 0 12px;padding:8px 12px 12px}
+legend{font-weight:bold;font-size:14px;padding:0 6px}
+label{display:block;font-size:12px;font-weight:bold;margin:9px 0 3px;color:#555}
+label.chk{font-weight:normal;font-size:13px;color:#222;display:flex;gap:6px;align-items:center;margin:6px 0}
+input[type=text],select,textarea{width:100%;padding:7px;font:inherit;font-size:14px;border:1px solid #bbb;border-radius:4px;background:#fff}
+textarea{resize:vertical;min-height:54px}
+input[type=color]{width:44px;height:30px;padding:0;border:1px solid #bbb;border-radius:4px;background:#fff}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.row>div{flex:1 1 120px}
+button{font:inherit;font-size:13px;padding:7px 11px;border:1px solid #bbb;border-radius:4px;background:#fff;color:#222;cursor:pointer}
+button:hover{background:#eee}
+button.go{background:#28a745;border-color:#28a745;color:#fff;font-weight:bold}
+button.go:hover{background:#218838}
+.presets button{margin:0 6px 6px 0}
+.sticky{position:sticky;top:8px;align-self:start}
+#preview{background:#fff;border:1px solid #ddd;border-radius:10px;padding:14px;text-align:center}
+#preview svg{max-width:100%;height:auto;max-height:78vh;box-shadow:0 1px 6px #0003;background:#fff}
+#info{font-size:13px;line-height:1.5;margin:10px 0}
+.msg{margin:6px 0;padding:7px 10px;border-radius:4px;font-size:13px;background:#fff3cd;color:#664d03}
+.msg.ok{background:#d1e7dd;color:#0f5132}.msg.err{background:#f8d7da;color:#842029}
+.msg:empty{display:none}
+.sub{font-size:12px;color:#777;margin-top:3px}
+code{background:#eee;padding:1px 4px;border-radius:3px;word-break:break-all}
+#sheetList{max-height:220px;overflow:auto;border:1px solid #e5e5e5;border-radius:6px;padding:4px 8px;margin:6px 0}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+#printArea{display:none}
+@media print{
+  html,body{background:#fff}
+  body>*:not(#printArea){display:none !important}
+  #printArea{display:block}
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,var(--cw));gap:8mm;justify-content:center}
+  .pcard{width:var(--cw);break-inside:avoid;page-break-inside:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .pcard svg{width:100%;height:auto;display:block}
+  @page{margin:12mm}
+}
+</style>
+<script src="ets-config.js"></script>
+</head>
+<body>
+<header><h1>QR Code Labels</h1></header>
+<div class="layout">
+  <div id="controls">
+    <div id="note" class="msg"></div>
+
+    <fieldset>
+      <legend>1. What should the code open?</legend>
+      <label for="kind">It opens</label>
+      <select id="kind">
+        <option value="spot">A spot or story</option>
+        <option value="site">A place on the map</option>
+        <option value="event">An event</option>
+        <option value="map">The main map</option>
+        <option value="custom">Another web address</option>
+      </select>
+      <div id="itemWrap"><label for="item">Which one</label><select id="item"></select></div>
+      <div id="evWrap"><label for="evSel" id="evLabel">Inside event</label><select id="evSel"></select></div>
+      <div id="customWrap" hidden><label for="custom">Web address</label><input type="text" id="custom" placeholder="https://"></div>
+      <label class="chk" id="skipWrap"><input type="checkbox" id="skipW"> Skip the welcome screen when scanned</label>
+      <div class="sub">Opens: <code id="addr"></code> <button type="button" id="copyAddr">Copy</button></div>
+      <details style="margin-top:8px"><summary style="font-size:12px;cursor:pointer">Site address (change only if the link above is wrong)</summary>
+        <input type="text" id="base" style="margin-top:6px"></details>
+    </fieldset>
+
+    <fieldset>
+      <legend>2. The words</legend>
+      <label for="title">Title (optional)</label>
+      <input type="text" id="title" placeholder="1937 Cord">
+      <label for="caption">Caption: say what they will find</label>
+      <textarea id="caption" placeholder="Scan to hear the story of this car."></textarea>
+      <div class="row">
+        <div style="flex:0 0 130px"><label for="srcLabel">Credit line</label>
+          <select id="srcLabel"><option>Source</option><option>Courtesy of</option><option>Photo</option><option>Provided by</option><option value="">No label</option></select></div>
+        <div><label for="source">Who</label><input type="text" id="source" placeholder="County Library"></div>
+      </div>
+      <label class="chk"><input type="checkbox" id="hintOn" checked> Show a how-to line</label>
+      <input type="text" id="hintText" value="Scan with your phone's camera">
+    </fieldset>
+
+    <fieldset>
+      <legend>3. The look</legend>
+      <div class="presets">
+        <button type="button" data-preset="classic">Classic</button>
+        <button type="button" data-preset="heritage">Heritage</button>
+        <button type="button" data-preset="river">River</button>
+        <button type="button" data-preset="forest">Forest</button>
+        <button type="button" data-preset="site">Match my site</button>
+      </div>
+      <div class="row">
+        <div><label for="dot">Squares</label><select id="dot"><option value="square">Square</option><option value="round">Rounded</option><option value="dot">Dots</option></select></div>
+        <div><label for="eye">Corner eyes</label><select id="eye"><option value="square">Square</option><option value="round">Slightly rounded</option></select></div>
+        <div><label for="frame">Border</label><select id="frame"><option value="none">None</option><option value="thin">Thin line</option><option value="bold">Bold line</option></select></div>
+      </div>
+      <div class="row">
+        <div style="flex:0 0 auto"><label for="fg">Code</label><input type="color" id="fg" value="#111111"></div>
+        <div style="flex:0 0 auto"><label for="bg">Paper</label><input type="color" id="bg" value="#ffffff"></div>
+        <div style="flex:0 0 auto"><label for="text">Words</label><input type="color" id="text" value="#111111"></div>
+        <div><label class="chk" style="margin-top:22px"><input type="checkbox" id="transparent"> Transparent paper</label></div>
+      </div>
+      <label for="logo">Picture in the middle (optional)</label>
+      <div class="row"><div><input type="file" id="logo" accept="image/*"></div><div style="flex:0 0 auto"><button type="button" id="logoClear" hidden>Remove picture</button></div></div>
+      <label for="ecl">Error correction</label>
+      <select id="ecl"><option value="auto">Automatic</option><option value="L">Low (simplest code)</option><option value="M">Medium</option><option value="Q">Quartile</option><option value="H">High (survives scuffs)</option></select>
+    </fieldset>
+
+    <fieldset>
+      <legend>4. Print and save</legend>
+      <label for="size">Printed width of the label</label>
+      <select id="size"><option value="5">5 cm (small sign)</option><option value="8" selected>8 cm</option><option value="10">10 cm</option><option value="14">14 cm (poster)</option></select>
+      <div class="actions">
+        <button type="button" class="go" id="dlPng">Download PNG</button>
+        <button type="button" id="dlSvg">Download SVG</button>
+        <button type="button" id="printOne">Print this label</button>
+      </div>
+      <div class="sub">If colors are missing in the print preview, turn on "Background graphics". Always scan a printed code with a phone before you put it up.</div>
+    </fieldset>
+
+    <fieldset id="sheetBox">
+      <legend>5. A whole sheet</legend>
+      <div class="sub">Make many labels at once with the words and look above. The title is each one's name.</div>
+      <label for="tpl">Caption for every label (use {TITLE})</label>
+      <input type="text" id="tpl" value="Scan to learn about {TITLE}.">
+      <div class="actions" style="margin-top:6px"><button type="button" id="selAll">Select all</button><button type="button" id="selNone">None</button></div>
+      <div id="sheetList"></div>
+      <button type="button" class="go" id="printSheet">Print the sheet</button>
+    </fieldset>
+  </div>
+
+  <div class="sticky">
+    <div id="preview"></div>
+    <div id="info"></div>
+  </div>
+</div>
+<div id="printArea"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="qrcode-lite.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const v = (r, k) => String(r && r[k] != null ? r[k] : "").trim();
+const lc = s => String(s || "").trim().toLowerCase();
+const slug = s => lc(s).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "qr";
+const TITLE_FONT = "Georgia,'Times New Roman',serif", BODY_FONT = "Arial,Helvetica,sans-serif";
+
+let DATA = { spots: [], places: [], kids: [], S: {} };
+let EVENTS = [];
+let logoData = "";
+const SAVE_KEY = "qr_settings_v1";
+const SAVED = ["dot","eye","frame","fg","bg","text","srcLabel","source","hintText","size","ecl","base","tpl"];
+const SAVED_CHK = ["transparent","hintOn","skipW"];
+
+/* ---------- reading the site's files (an event reads its own copy) ---------- */
+async function tryFetch(u){ try { return await fetch(u, { cache: "no-store" }); } catch (e) { return null; } }
+async function getText(file, slug, info){
+  if (slug) {
+    const listed = !!(info && Array.isArray(info.data));
+    if (!listed || info.data.includes(file)) { const r = await tryFetch("events/" + slug + "/" + file); if (r && r.ok) return await r.text(); }
+    if (listed) return "";
+  }
+  const r = await tryFetch(file);
+  return r && r.ok ? await r.text() : "";
+}
+async function loadData(slug){
+  let info = null;
+  if (slug) { const r = await tryFetch("events/" + slug + "/event.json"); if (r && r.ok) { try { info = await r.json(); } catch (e) {} } }
+  const [sp, lo, ch, st] = await Promise.all(["spots.csv","locations.csv","childmarkers.csv","site.csv"].map(f => getText(f, slug, info)));
+  const parse = t => t ? Papa.parse(t, { header: true, skipEmptyLines: "greedy" }).data : [];
+  DATA.spots = parse(sp).map(r => ({ id: v(r, "SPOT_ID"), title: v(r, "TITLE"), kind: lc(v(r, "KIND")) })).filter(x => x.id);
+  DATA.places = parse(lo).map(r => ({ id: v(r, "ID"), title: v(r, "NAME") })).filter(x => x.id);
+  DATA.kids = parse(ch).map(r => ({ id: v(r, "CHILD_ID"), title: v(r, "NAME") })).filter(x => x.id);
+  DATA.S = {}; parse(st).forEach(r => { DATA.S[v(r, "KEY")] = v(r, "VALUE"); });
+}
+
+/* ---------- what the code opens ---------- */
+const defaultBase = () => { try { return new URL(((window.ETS_CONFIG&&window.ETS_CONFIG.LIVE_PAGE)||"Demo2a.html"), location.href).href; } catch (e) { return ""; } };
+function items(){
+  const kind = $("kind").value;
+  if (kind === "spot") return DATA.spots.map(s => ({ id: s.id, title: s.title || s.id, label: (s.kind === "story" ? "Story: " : "Spot: ") + (s.title || s.id) + " (" + s.id + ")" }));
+  if (kind === "site") return DATA.places.concat(DATA.kids).map(s => ({ id: s.id, title: s.title || s.id, label: (s.title || s.id) + " (" + s.id + ")" }));
+  if (kind === "event") return EVENTS.map(e => ({ id: e.slug, title: e.name || e.slug, label: (e.name || e.slug) }));
+  return [];
+}
+const currentItem = () => items().find(i => i.id === $("item").value) || null;
+function buildUrl(){
+  const kind = $("kind").value;
+  if (kind === "custom") return $("custom").value.trim();
+  let u;
+  try { u = new URL($("base").value.trim() || defaultBase(), location.href); } catch (e) { return ""; }
+  u.search = ""; u.hash = "";
+  const it = currentItem();
+  if (kind === "event") { if (!it) return ""; u.searchParams.set("event", it.id); }
+  else {
+    if ($("evSel").value) u.searchParams.set("event", $("evSel").value);
+    if (kind === "spot") { if (!it) return ""; u.searchParams.set("spot", it.id); }
+    if (kind === "site") { if (!it) return ""; u.searchParams.set("site", it.id); }
+    if ($("skipW").checked && kind !== "site") u.searchParams.set("skipWelcome", "1");
+  }
+  return u.href;
+}
+function defaultsFor(it){
+  const kind = $("kind").value, place = DATA.S.PLACE || "";
+  if (kind === "event") return { title: it ? it.title : "", caption: "Scan to explore " + (it ? it.title : "the event") + "." };
+  if (kind === "map") return { title: place, caption: "Scan to explore " + (place ? place + "'s" : "our") + " history on the map." };
+  if (kind === "custom") return { title: "", caption: "" };
+  return { title: it ? it.title : "", caption: it ? "Scan to learn about " + it.title + "." : "" };
+}
+function fillWords(){ const d = defaultsFor(currentItem()); $("title").value = d.title; $("caption").value = d.caption; }
+
+function refreshKind(){
+  const kind = $("kind").value;
+  $("itemWrap").hidden = !(kind === "spot" || kind === "site");
+  $("customWrap").hidden = kind !== "custom";
+  $("evWrap").hidden = kind === "custom";
+  $("skipWrap").hidden = !(kind === "spot" || kind === "map" || kind === "event") || kind === "event";
+  $("evLabel").textContent = kind === "event" ? "Which event" : "Inside event";
+  const evOpts = EVENTS.map(e => '<option value="' + esc(e.slug) + '">' + esc(e.name || e.slug) + "</option>").join("");
+  const keep = $("evSel").value;
+  $("evSel").innerHTML = (kind === "event" ? "" : '<option value="">Live site</option>') + evOpts;
+  if ([...$("evSel").options].some(o => o.value === keep)) $("evSel").value = keep;
+  $("sheetBox").hidden = !(kind === "spot" || kind === "site" || kind === "event");
+  fillItems();
+}
+function fillItems(){
+  const kind = $("kind").value, list = items();
+  if (kind === "event") {   // an event is chosen with the event menu
+    $("itemWrap").hidden = true;
+    $("item").innerHTML = list.map(i => '<option value="' + esc(i.id) + '">' + esc(i.label) + "</option>").join("");
+    $("item").value = $("evSel").value || (list[0] && list[0].id) || "";
+  } else {
+    $("item").innerHTML = list.map(i => '<option value="' + esc(i.id) + '">' + esc(i.label) + "</option>").join("") || '<option value="">(none found)</option>';
+  }
+  $("sheetList").innerHTML = list.map(i => '<label class="chk"><input type="checkbox" class="sh" value="' + esc(i.id) + '" checked> ' + esc(i.label) + "</label>").join("") || "<em>Nothing to list.</em>";
+  fillWords();
+  render();
+}
+
+/* ---------- colors ---------- */
+function rgb(h){ h = String(h).replace("#", ""); if (h.length === 3) h = h.replace(/./g, "$&$&"); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+const hex = a => "#" + a.map(x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, "0")).join("");
+function lum(h){ const [r, g, b] = rgb(h).map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+function contrast(a, b){ const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+function darkenFor(color, on, need){ let c = rgb(color); for (let i = 0; i < 30 && contrast(hex(c), on) < need; i++) c = c.map(x => x * 0.9); return hex(c); }
+const PRESETS = {
+  classic:  { fg: "#111111", bg: "#ffffff", text: "#111111" },
+  heritage: { fg: "#4a2c12", bg: "#fbf3e4", text: "#4a2c12" },
+  river:    { fg: "#0b3d5c", bg: "#f2f8fb", text: "#0b3d5c" },
+  forest:   { fg: "#1f4d2b", bg: "#f4faf4", text: "#1f4d2b" }
+};
+function applyPreset(name){
+  let p = PRESETS[name];
+  if (name === "site") {
+    const bar = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(DATA.S.BAR_COLOR || "") ? DATA.S.BAR_COLOR : "#E47303";
+    const d = darkenFor(bar, "#ffffff", 7);
+    p = { fg: d, bg: "#ffffff", text: d };
+  }
+  Object.keys(p).forEach(k => { $(k).value = p[k]; });
+  $("transparent").checked = false;
+  render(); save();
+}
+
+/* ---------- drawing the QR ---------- */
+let DOT_R = 0.5, EYE_R = 0.18;   // dot size and corner rounding, tuned so phones can still read the code
+function shapePath(style, x, y, w, h, rf){
+  const f = n => (+n.toFixed(2));
+  if (style === "circle") { const r = w / 2; return "M" + f(x + r) + " " + f(y) + "a" + f(r) + " " + f(r) + " 0 1 0 0 " + f(h) + "a" + f(r) + " " + f(r) + " 0 1 0 0 " + f(-h) + "z"; }
+  if (style === "round") { const r = Math.min(w, h) * (rf || 0.3); return "M" + f(x + r) + " " + f(y) + "h" + f(w - 2 * r) + "a" + f(r) + " " + f(r) + " 0 0 1 " + f(r) + " " + f(r) + "v" + f(h - 2 * r) + "a" + f(r) + " " + f(r) + " 0 0 1 " + f(-r) + " " + f(r) + "h" + f(-(w - 2 * r)) + "a" + f(r) + " " + f(r) + " 0 0 1 " + f(-r) + " " + f(-r) + "v" + f(-(h - 2 * r)) + "a" + f(r) + " " + f(r) + " 0 0 1 " + f(r) + " " + f(-r) + "z"; }
+  return "M" + f(x) + " " + f(y) + "h" + f(w) + "v" + f(h) + "h" + f(-w) + "z";
+}
+function qrGroup(m, x0, y0, S, o){
+  const n = m.size, q = 4, u = S / (n + 2 * q), p = [];
+  if (o.paper) p.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + S + '" height="' + S + '" fill="' + o.bg + '"/>');
+  const X = i => x0 + (q + i) * u, Y = i => y0 + (q + i) * u;
+  const eye = (x, y) => (x < 7 && y < 7) || (x >= n - 7 && y < 7) || (x < 7 && y >= n - 7);
+  let d = "";
+  const f = k => (+k.toFixed(2));
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    if (!m.get(x, y) || eye(x, y)) continue;
+    if (o.dot === "dot") { const r = u * DOT_R; d += "M" + f(X(x) + u / 2 - r) + " " + f(Y(y) + u / 2) + "a" + f(r) + " " + f(r) + " 0 1 0 " + f(2 * r) + " 0a" + f(r) + " " + f(r) + " 0 1 0 " + f(-2 * r) + " 0z"; }
+    else d += shapePath(o.dot === "round" ? "round" : "square", X(x), Y(y), u, u);
+  }
+  p.push('<path d="' + d + '" fill="' + o.fg + '"/>');
+  let e = "";
+  [[0, 0], [n - 7, 0], [0, n - 7]].forEach(([ex, ey]) => {
+    e += shapePath(o.eye, X(ex), Y(ey), 7 * u, 7 * u, EYE_R) + shapePath(o.eye, X(ex + 1), Y(ey + 1), 5 * u, 5 * u, EYE_R) + shapePath(o.eye, X(ex + 2), Y(ey + 2), 3 * u, 3 * u, EYE_R);
+  });
+  p.push('<path d="' + e + '" fill="' + o.fg + '" fill-rule="evenodd"/>');
+  if (o.logo) {
+    let lm = Math.floor(n * 0.22); if (lm % 2 === 0) lm++;
+    const plate = (lm + 2) * u, cx = x0 + S / 2 - plate / 2, cy = y0 + S / 2 - plate / 2, pad = u;
+    p.push('<rect x="' + f(cx) + '" y="' + f(cy) + '" width="' + f(plate) + '" height="' + f(plate) + '" rx="' + f(plate * 0.16) + '" fill="#ffffff"/>');
+    p.push('<image x="' + f(cx + pad) + '" y="' + f(cy + pad) + '" width="' + f(plate - 2 * pad) + '" height="' + f(plate - 2 * pad) + '" href="' + o.logo + '" preserveAspectRatio="xMidYMid meet"/>');
+  }
+  return p.join("");
+}
+
+let measureCtx = null;
+function textWidth(str, font){
+  if (typeof document === "undefined") return str.length * 14;
+  measureCtx = measureCtx || document.createElement("canvas").getContext("2d");
+  measureCtx.font = font;
+  return measureCtx.measureText(str).width;
+}
+function wrap(text, font, maxW){
+  const out = [];
+  String(text || "").split(/\n/).forEach(par => {
+    let line = "";
+    par.split(/\s+/).filter(Boolean).forEach(w => {
+      const t = line ? line + " " + w : w;
+      if (textWidth(t, font) <= maxW || !line) line = t; else { out.push(line); line = w; }
+    });
+    if (line) out.push(line);
+  });
+  return out;
+}
+function options(){
+  const logo = logoData;
+  let ecl = $("ecl").value;
+  if (ecl === "auto") ecl = logo ? "H" : "M";
+  else if (logo && ecl !== "H") ecl = "H";
+  return { dot: $("dot").value, eye: $("eye").value === "round" ? "round" : "square", frame: $("frame").value, fg: $("fg").value, bg: $("bg").value, text: $("text").value,
+    paper: !$("transparent").checked, logo, ecl,
+    srcLabel: $("srcLabel").value, source: $("source").value.trim(), hintOn: $("hintOn").checked, hint: $("hintText").value.trim() };
+}
+// the finished label as an SVG string
+function labelSvg(url, words, o){
+  const W = 600, pad = 44, inner = W - 2 * pad, Q = 372;
+  const m = QR.encode(url, o.ecl);
+  const parts = [];
+  let y = pad;
+  const tFont = "bold 40px " + TITLE_FONT, cFont = "27px " + BODY_FONT, sFont = "italic 22px " + BODY_FONT, hFont = "20px " + BODY_FONT;
+  const text = (s, yy, size, font, weight, style, color) => '<text x="' + (W / 2) + '" y="' + yy + '" text-anchor="middle" font-family="' + font + '" font-size="' + size + '" font-weight="' + weight + '" font-style="' + style + '" fill="' + color + '">' + esc(s) + "</text>";
+  const body = [];
+  wrap(words.title, tFont, inner).forEach(l => { y += 42; body.push(text(l, y, 40, TITLE_FONT, "bold", "normal", o.text)); y += 6; });
+  if (words.title) y += 8;
+  body.push('<g>' + qrGroup(m, (W - Q) / 2, y, Q, o) + "</g>");
+  y += Q + 8;
+  if (o.hintOn && o.hint) { y += 22; body.push(text(o.hint, y, 20, BODY_FONT, "normal", "normal", o.text)); y += 12; }
+  const cap = wrap(words.caption, cFont, inner);
+  if (cap.length) y += 8;
+  cap.forEach(l => { y += 35; body.push(text(l, y, 27, BODY_FONT, "normal", "normal", o.text)); });
+  if (o.source) {
+    const line = (o.srcLabel ? o.srcLabel + ": " : "") + o.source;
+    wrap(line, sFont, inner).forEach(l => { y += 33; body.push(text(l, y, 22, BODY_FONT, "normal", "italic", o.text)); });
+  }
+  const H = y + pad;
+  const border = o.frame === "none" ? "" : '<rect x="' + (o.frame === "bold" ? 8 : 4) + '" y="' + (o.frame === "bold" ? 8 : 4) + '" width="' + (W - (o.frame === "bold" ? 16 : 8)) + '" height="' + (H - (o.frame === "bold" ? 16 : 8)) + '" rx="26" fill="none" stroke="' + o.fg + '" stroke-width="' + (o.frame === "bold" ? 12 : 4) + '"/>';
+  const bgRect = o.paper ? '<rect width="' + W + '" height="' + H + '" rx="30" fill="' + o.bg + '"/>' : "";
+  return { svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + " " + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="' + esc("QR code. " + (words.caption || words.title || "")) + '">' + bgRect + body.join("") + border + "</svg>", W, H, version: m.version, modules: m.size };
+}
+
+/* ---------- showing it ---------- */
+let current = null;
+function render(){
+  const url = buildUrl();
+  $("addr").textContent = url || "(choose what it should open)";
+  const info = $("info");
+  if (!url) {
+    $("preview").innerHTML = '<div class="msg">' + ($("kind").value === "event" ? "No events are in the switcher yet. Save one in the Events tab and keep &ldquo;Show in the event switcher&rdquo; ticked." : "Choose what the code should open.") + "</div>";
+    info.innerHTML = ""; current = null; return;
+  }
+  const o = options();
+  try {
+    current = labelSvg(url, { title: $("title").value.trim(), caption: $("caption").value.trim() }, o);
+  } catch (e) { $("preview").innerHTML = '<div class="msg err">' + esc(e.message) + "</div>"; current = null; return; }
+  $("preview").innerHTML = current.svg;
+  const cm = +$("size").value, qrCm = cm * 372 / 600, mm = qrCm * 10 / (current.modules + 8);
+  const msgs = [];
+  msgs.push("<b>" + current.modules + " &times; " + current.modules + "</b> squares. Printed " + cm + " cm wide, each square is about <b>" + mm.toFixed(2) + " mm</b>.");
+  if (mm < 0.6) msgs.push('<div class="msg err">Too small to scan reliably. Print it larger, or use a shorter address.</div>');
+  else if (mm < 0.9) msgs.push('<div class="msg">Small. Test it with a few phones, or print it larger.</div>');
+  const c = contrast(o.fg, o.bg);
+  if (o.paper && lum(o.fg) > lum(o.bg)) msgs.push('<div class="msg err">The code is lighter than the paper. Many phones cannot read light-on-dark codes. Swap the colors.</div>');
+  else if (o.paper && c < 4) msgs.push('<div class="msg">Low contrast (' + c.toFixed(1) + ":1). Choose a darker code color for reliable scanning.</div>");
+  if (o.dot !== "square" || o.eye !== "square") msgs.push('<div class="msg">Fancy shapes are tested to scan, but plain squares are the most forgiving on old phones. Scan your printed label with two phones before you put it up.</div>');
+  if (o.logo) msgs.push('<div class="msg ok">Picture in the middle: error correction is set to High so the code still scans.</div>');
+  if (location.protocol === "file:") msgs.push('<div class="msg err">This page is open from a file on your computer, so the address is not your website. Open it from your site (or the editing hub) instead.</div>');
+  info.innerHTML = msgs.join("");
+}
+function save(){
+  const o = {};
+  SAVED.forEach(k => { o[k] = $(k).value; });
+  SAVED_CHK.forEach(k => { o[k] = $(k).checked; });
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(o)); } catch (e) {}
+}
+function restore(){
+  let o = {};
+  try { o = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}"); } catch (e) {}
+  SAVED.forEach(k => { if (o[k] != null && k !== "base") $(k).value = o[k]; });
+  SAVED_CHK.forEach(k => { if (o[k] != null) $(k).checked = o[k]; });
+  if (o.base) $("base").value = o.base;
+}
+
+/* ---------- saving and printing ---------- */
+function download(name, blob){ const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
+const fileBase = () => "qr-" + slug($("title").value || (currentItem() && currentItem().id) || $("kind").value);
+async function toPng(svg, w, h, scale){
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+  const img = new Image();
+  await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error("Could not draw the image")); img.src = url; });
+  const c = document.createElement("canvas");
+  c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  URL.revokeObjectURL(url);
+  return await new Promise(res => c.toBlob(res, "image/png"));
+}
+function say(t, cls){ $("note").className = "msg " + (cls || ""); $("note").textContent = t; }
+function printCards(cards){
+  const cw = $("size").value + "cm";
+  $("printArea").innerHTML = '<div class="pgrid" style="--cw:' + cw + '">' + cards.map(c => '<div class="pcard">' + c + "</div>").join("") + "</div>";
+  window.print();
+}
+
+/* ---------- wiring ---------- */
+["title","caption","custom","source","hintText","dot","eye","frame","fg","bg","text","transparent","hintOn","srcLabel","size","ecl","skipW","base"].forEach(id => {
+  $(id).addEventListener("input", () => { render(); save(); });
+  $(id).addEventListener("change", () => { render(); save(); });
+});
+$("tpl").addEventListener("input", save);
+$("kind").onchange = refreshKind;
+$("item").onchange = () => { if ($("kind").value === "event") $("evSel").value = $("item").value; fillWords(); render(); };
+$("evSel").onchange = async () => {
+  if ($("kind").value === "event") { $("item").value = $("evSel").value; fillWords(); render(); return; }
+  await loadData($("evSel").value);
+  fillItems();
+};
+document.querySelectorAll("[data-preset]").forEach(b => { b.onclick = () => applyPreset(b.dataset.preset); });
+$("copyAddr").onclick = async () => { try { await navigator.clipboard.writeText(buildUrl()); say("Address copied.", "ok"); } catch (e) { say("Could not copy. Select the address and copy it yourself."); } };
+$("logo").onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (f.size > 1.5 * 1024 * 1024) { say("That picture is large (" + (f.size / 1048576).toFixed(1) + " MB). Use one under 1.5 MB.", "err"); e.target.value = ""; return; }
+  const r = new FileReader();
+  r.onload = () => { logoData = r.result; $("logoClear").hidden = false; render(); };
+  r.readAsDataURL(f);
+};
+$("logoClear").onclick = () => { logoData = ""; $("logo").value = ""; $("logoClear").hidden = true; render(); };
+$("dlSvg").onclick = () => { if (current) download(fileBase() + ".svg", new Blob([current.svg], { type: "image/svg+xml" })); };
+$("dlPng").onclick = async () => {
+  if (!current) return;
+  try { download(fileBase() + ".png", await toPng(current.svg, current.W, current.H, 3)); say("Saved a PNG about 1800 pixels wide.", "ok"); }
+  catch (e) { say("Could not make the PNG: " + e.message + ". Try the SVG instead.", "err"); }
+};
+$("printOne").onclick = () => { if (current) printCards([current.svg]); };
+$("selAll").onclick = () => document.querySelectorAll("#sheetList .sh").forEach(c => { c.checked = true; });
+$("selNone").onclick = () => document.querySelectorAll("#sheetList .sh").forEach(c => { c.checked = false; });
+$("printSheet").onclick = () => {
+  const ids = [...document.querySelectorAll("#sheetList .sh:checked")].map(c => c.value);
+  if (!ids.length) { say("Tick at least one item for the sheet."); return; }
+  const kind = $("kind").value, o = options(), cards = [];
+  try {
+    ids.forEach(id => {
+      const it = items().find(i => i.id === id); if (!it) return;
+      const u = new URL($("base").value.trim() || defaultBase(), location.href);
+      u.search = ""; u.hash = "";
+      if (kind === "event") u.searchParams.set("event", id);
+      else { if ($("evSel").value) u.searchParams.set("event", $("evSel").value); u.searchParams.set(kind === "spot" ? "spot" : "site", id); if ($("skipW").checked && kind === "spot") u.searchParams.set("skipWelcome", "1"); }
+      cards.push(labelSvg(u.href, { title: it.title, caption: $("tpl").value.replace(/\{TITLE\}/g, it.title) }, o).svg);
+    });
+  } catch (e) { say("Could not make the sheet: " + e.message, "err"); return; }
+  printCards(cards);
+};
+
+(async function init(){
+  $("base").value = defaultBase();
+  restore();
+  const r = await tryFetch("events/index.json");
+  if (r && r.ok) { try { const a = await r.json(); EVENTS = Array.isArray(a) ? a.filter(e => e && e.slug) : []; } catch (e) {} }
+  await loadData("");
+  refreshKind();
+})();
+</script>
+</body>
+</html>

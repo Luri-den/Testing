@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opening the map...</title>
+<!-- The map lives in the page named by LIVE_PAGE in ets-config.js. This page only forwards visitors to it,
+     keeping the rest of the address (?spot=..., ?event=..., #...) so QR codes and shared links still work. -->
+<script src="ets-config.js"></script>
+<script>
+  location.replace(((window.ETS_CONFIG && ETS_CONFIG.LIVE_PAGE) || "Demo2a.html") + location.search + location.hash);
+</script>
+<noscript><meta http-equiv="refresh" content="0;url=Demo2a.html"></noscript>
+</head>
+<body style="font-family:Arial,sans-serif;padding:24px">
+<p><a href="Demo2a.html">Open the map</a></p>
+</body>
+</html>

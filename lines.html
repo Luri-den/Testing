@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lines and Trails Editor</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script src="editor-common.js"></script>
+<script>Workspace.block('Drawn lines are shared by every event. Go back to the live site to edit them.');</script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;height:100vh;display:flex;font:14px Arial,sans-serif;color:#3f3528}
+aside{width:320px;max-width:45vw;overflow:auto;padding:12px;border-right:1px solid #ccc;background:#faf8f3}
+#map{flex:1}
+h2{margin:0 0 6px;font-size:18px}
+label{display:block;margin:10px 0 2px;font-weight:bold;font-size:12px}
+input:not([type=color]):not([type=range]),select{width:100%;padding:6px;border:1px solid #aaa;border-radius:4px;font:inherit}
+input[type=range]{width:100%}
+button{padding:7px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;font:inherit;margin:2px 4px 2px 0}
+button.primary{background:#01796F;color:#fff;border-color:#01796F}
+button.primary:disabled{opacity:.4}
+button.bad{color:#8B0000}
+.list{max-height:170px;overflow:auto;border:1px solid #ccc;background:#fff;margin:8px 0}
+.list div{padding:6px 8px;border-bottom:1px solid #eee;cursor:pointer}
+.list div.on{background:#d7ebe8;font-weight:bold}
+small{color:#6b6258}
+#msg{min-height:18px;margin:6px 0;font-size:12px}
+.vtx{width:12px;height:12px;background:#fff;border:2px solid #000;cursor:move}
+.mid{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.7);border:1px solid #000;cursor:copy}
+@media(max-width:700px){body{flex-direction:column-reverse}aside{width:100%;max-width:none;height:50vh}#map{height:50vh}}
+</style>
+</head>
+<body>
+<aside>
+  <h2>Lines and Trails</h2>
+  <small>Draw routes, trails, canals or railroads. Click a line to edit it.</small>
+  <div id="msg">Loading…</div>
+  <label style="margin-top:4px"><input type="checkbox" id="showPlaces" checked> Show Places</label>
+  <label style="margin:0"><input type="checkbox" id="showSpots" checked> Show Spots and Stories</label>
+  <small>Hover over a dot to see its name. Gold rings mark the stops of tours that use the selected line.</small>
+  <button id="draw" class="primary">+ Draw New Line</button>
+  <button id="extend">Extend Line</button>
+  <button id="finish">Finish</button>
+  <div class="list" id="list"></div>
+  <div id="form"></div>
+  <p><button id="publishBtn" class="primary" disabled>Download Updated Lines</button></p>
+  <small><b>Solid</b> and <b>Dashed</b> are single lines. <b>Rail</b> is two thin lines with a see-through band between them, good for a trail that is too narrow to see as one line. Drag a white square to move a point, double-click it to delete it, and click a small dot to add a point.</small>
+</aside>
+<div id="map"></div>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="lines-style.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const DEFAULTS = { solid:{ OPACITY:1, WIDTH:4 }, dashed:{ OPACITY:1, WIDTH:4 }, rail:{ OPACITY:0.25, WIDTH:16 } };
+let doc = { type:"FeatureCollection", features:[] }, sel = null, drawing = false, marks = [], seq = 0, ready = false;
+const say = t => { $("msg").textContent = t; };
+const touch = () => { $("publishBtn").disabled = false; };
+const clean = () => ({ type:"FeatureCollection", features:doc.features.filter(f => f.geometry.coordinates.length >= 2) });   // a line needs two points
+const el = (t, p, k) => { const e = document.createElement(t); Object.assign(e, p || {}); (k || []).forEach(c => e.append(c)); return e; };
+
+const map = new maplibregl.Map({ container:"map", center:[-98.58, 39.83], zoom:4,
+  style:{ version:8, sources:{ osm:{ type:"raster", tiles:["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize:256, maxzoom:19, attribution:"&copy; OpenStreetMap contributors" } }, layers:[{ id:"osm", type:"raster", source:"osm" }] } });
+if (window.ETSCommon) ETSCommon.applySiteView(map);
+map.addControl(new maplibregl.NavigationControl({ showCompass:false }), "bottom-right");
+map.on("load", () => { map.addSource("lines", { type:"geojson", data:clean() }); ETSLines.add(map, "lines"); initRefs(); ready = true; render(); });
+
+(async () => {   // open the existing lines from this site
+  try {
+    const r = await fetch("lines.geojson", { cache:"no-store" });
+    if (r.ok) { doc = await r.json(); doc.features.forEach(f => { f.properties = f.properties || {}; if (!f.properties.ID) f.properties.ID = "L-" + (++seq); seq = Math.max(seq, parseInt(String(f.properties.ID).replace(/\D/g, ""), 10) || 0); }); say(doc.features.length + " lines loaded."); }
+    else say("No lines yet. Press + Draw New Line.");
+  } catch (e) { say("Couldn't read lines.geojson. You can still draw new lines."); }
+  const want = new URLSearchParams(location.search).get("line");
+  if (want) { sel = doc.features.find(f => f.properties.ID === want) || null; if (sel && sel.geometry.coordinates.length > 1) { const b = new maplibregl.LngLatBounds(); sel.geometry.coordinates.forEach(p => b.extend(p)); map.once("load", () => map.fitBounds(b, { padding:60, maxZoom:17 })); if (map.loaded()) map.fitBounds(b, { padding:60, maxZoom:17 }); } }
+  render();
+})();
+
+function mk(pos, cls, onDrag, onDbl, onClick) {
+  const e = el("div", { className:cls });
+  e.addEventListener("dblclick", ev => { ev.stopPropagation(); if (onDbl) onDbl(); });
+  e.addEventListener("click", ev => { ev.stopPropagation(); if (onClick) onClick(); });
+  const m = new maplibregl.Marker({ element:e, draggable:!!onDrag }).setLngLat(pos).addTo(map);
+  if (onDrag) m.on("dragend", () => { const p = m.getLngLat(); onDrag([+p.lng.toFixed(6), +p.lat.toFixed(6)]); });
+  marks.push(m);
+}
+function render() {
+  if (!ready) return;
+  map.getSource("lines").setData(clean());
+  marks.forEach(m => m.remove()); marks = [];
+  if (sel) {
+    const c = sel.geometry.coordinates;
+    c.forEach((p, i) => mk(p, "vtx", q => { c[i] = q; touch(); render(); }, () => { if (c.length > 2) { c.splice(i, 1); touch(); render(); } }));
+    for (let i = 0; i < c.length - 1; i++) { const mid = [(c[i][0] + c[i + 1][0]) / 2, (c[i][1] + c[i + 1][1]) / 2]; mk(mid, "mid", null, null, () => { c.splice(i + 1, 0, mid); touch(); render(); }); }
+  }
+  drawList(); drawForm(); drawHl();
+}
+function drawList() {
+  const l = $("list"); l.textContent = "";
+  doc.features.forEach(f => l.append(el("div", { className:f === sel ? "on" : "", textContent:(f.properties.NAME || "Untitled") + " (" + (f.properties.STYLE || "solid") + ")",
+    onclick:() => { sel = f; drawing = false; render(); const c = f.geometry.coordinates; if (c.length > 1) { const b = new maplibregl.LngLatBounds(); c.forEach(p => b.extend(p)); map.fitBounds(b, { padding:60, maxZoom:17 }); } } })));
+}
+function drawForm() {
+  const box = $("form"); box.textContent = ""; if (!sel) return;
+  const p = sel.properties, put = (k, v) => { p[k] = v; touch(); map.getSource("lines").setData(clean()); drawList(); };
+  const field = (label, input) => box.append(el("label", { textContent:label }), input);
+  field("Name", el("input", { value:p.NAME || "", oninput:e => put("NAME", e.target.value) }));
+  const st = el("select", { onchange:e => { Object.assign(p, DEFAULTS[e.target.value]); put("STYLE", e.target.value); drawForm(); } }, [["solid", "Solid Line"], ["dashed", "Dashed Line"], ["rail", "Rail (Two Lines With a Band)"]].map(o => el("option", { value:o[0], textContent:o[1], selected:(p.STYLE || "solid") === o[0] })));
+  field("Style", st);
+  field("Color", el("input", { type:"color", value:p.COLOR || "#D55E00", oninput:e => put("COLOR", e.target.value) }));
+  field((p.STYLE === "rail" ? "Width of the Whole Trail" : "Thickness") + " (Pixels)", el("input", { type:"range", min:1, max:40, value:p.WIDTH || 4, oninput:e => put("WIDTH", +e.target.value) }));
+  field(p.STYLE === "rail" ? "Opacity of the Band" : "Opacity", el("input", { type:"range", min:0.05, max:1, step:0.05, value:p.OPACITY == null ? 1 : p.OPACITY, oninput:e => put("OPACITY", +e.target.value) }));
+  field("Tour or Event ID (Optional)", el("input", { value:p.TOUR_ID || "", oninput:e => put("TOUR_ID", e.target.value) }));
+  box.append(el("p", {}, [el("small", { id:"usedBy" })]));
+  box.append(el("button", { className:"bad", textContent:"Delete This Line", onclick:() => { if (confirm("Delete this line?")) { doc.features = doc.features.filter(f => f !== sel); sel = null; touch(); render(); } } }));
+}
+
+/* ---- reference dots: places, spots, stories and tour stops, so lines can be drawn to meet them ---- */
+const ITEMS = new Map(); let TOURS = [], STOPS = [];
+const keyOf = v => String(v || "").trim().toLowerCase();
+function initRefs() {
+  map.addSource("refs", { type:"geojson", data:{ type:"FeatureCollection", features:[] } });
+  map.addSource("hl", { type:"geojson", data:{ type:"FeatureCollection", features:[] } });
+  map.addLayer({ id:"refs", type:"circle", source:"refs", paint:{ "circle-radius":5, "circle-stroke-width":1.5, "circle-stroke-color":"#fff",
+    "circle-color":["match", ["get", "type"], "story", "#D55E00", "spot", "#333333", "#1f6f9f"] } });
+  map.addLayer({ id:"hl", type:"circle", source:"hl", paint:{ "circle-radius":10, "circle-color":"rgba(255,215,0,0.25)", "circle-stroke-width":3, "circle-stroke-color":"#FFD700" } });
+  const tip = el("div", { style:"position:fixed;pointer-events:none;background:#222;color:#fff;padding:3px 7px;border-radius:4px;font-size:12px;display:none;z-index:9" }); document.body.append(tip);
+  const show = e => { const f = map.queryRenderedFeatures(e.point, { layers:["refs", "hl"] })[0]; if (!f) { tip.style.display = "none"; return; } tip.textContent = f.properties.name; tip.style.cssText += ";display:block;left:" + (e.originalEvent.clientX + 12) + "px;top:" + (e.originalEvent.clientY + 12) + "px"; };
+  map.on("mousemove", show);
+  loadRefs();
+}
+async function loadRefs() {
+  const get = async f => { try { const r = await fetch(f, { cache:"no-store" }); return r.ok ? Papa.parse(await r.text(), { header:true, skipEmptyLines:"greedy" }).data : []; } catch (e) { return []; } };
+  const [loc, kid, sp, tr, ts] = await Promise.all(["locations.csv", "childmarkers.csv", "spots.csv", "tours.csv", "tourstops.csv"].map(get));
+  const add = (id, name, lat, lng, type) => { const ll = [parseFloat(lng), parseFloat(lat)]; if (keyOf(id) && !ll.some(isNaN)) ITEMS.set(keyOf(id), { name:name || id, ll, type }); };
+  loc.forEach(r => add(r.ID, r.NAME, r.LAT, r.LONG, "place")); kid.forEach(r => add(r.CHILD_ID, r.NAME, r.LAT, r.LONG, "place"));
+  sp.forEach(r => add(r.SPOT_ID, r.TITLE, r.LAT, r.LONG, keyOf(r.KIND) === "story" ? "story" : "spot"));
+  TOURS = tr; STOPS = ts; drawRefs(); drawHl();
+}
+function drawRefs() {
+  if (!map.getSource("refs")) return;
+  const p = $("showPlaces").checked, s = $("showSpots").checked, feats = [];
+  ITEMS.forEach(it => { if ((it.type === "place" && p) || (it.type !== "place" && s)) feats.push({ type:"Feature", properties:{ name:it.name, type:it.type }, geometry:{ type:"Point", coordinates:it.ll } }); });
+  map.getSource("refs").setData({ type:"FeatureCollection", features:feats });
+}
+$("showPlaces").onchange = drawRefs; $("showSpots").onchange = drawRefs;
+function toursUsing(line) { return line ? TOURS.filter(t => String(t.ROUTE || "").split(/[|;,]/).map(x => x.trim()).includes(String(line.properties.ID))) : []; }
+function drawHl() {   // ring the stops of every tour that uses the selected line
+  if (!map.getSource("hl")) return;
+  const feats = [], used = toursUsing(sel);
+  used.forEach(t => STOPS.filter(x => keyOf(x.TOUR_ID) === keyOf(t.TOUR_ID)).forEach(x => { const it = ITEMS.get(keyOf(x.ITEM_ID)); if (it) feats.push({ type:"Feature", properties:{ name:"Stop " + x.STEP + ": " + it.name }, geometry:{ type:"Point", coordinates:it.ll } }); }));
+  map.getSource("hl").setData({ type:"FeatureCollection", features:feats });
+  const note = $("usedBy"); if (note) note.textContent = used.length ? "Used by: " + used.map(t => t.TITLE || t.TOUR_ID).join(", ") : "Not used by any tour yet.";
+}
+
+$("draw").onclick = () => {
+  sel = { type:"Feature", properties:{ ID:"L-" + (++seq), NAME:"New Line", STYLE:"solid", COLOR:"#D55E00", WIDTH:4, OPACITY:1 }, geometry:{ type:"LineString", coordinates:[] } };
+  doc.features.push(sel); drawing = true; say("Click the map to add points. Press Finish when you're done."); render();
+};
+$("extend").onclick = () => { if (!sel) return say("Click a line first."); drawing = true; say("Click the map to add points to the end of this line."); };
+$("finish").onclick = () => {
+  drawing = false;
+  if (sel && sel.geometry.coordinates.length < 2) { doc.features = doc.features.filter(f => f !== sel); sel = null; }
+  say("Done."); render();
+};
+map.on("click", e => {
+  if (e.originalEvent.target.closest(".maplibregl-marker")) return;
+  if (drawing && sel) { sel.geometry.coordinates.push([+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)]); touch(); return render(); }
+  const b = [[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]];
+  const hit = map.queryRenderedFeatures(b, { layers:ETSLines.layers("lines") })[0];
+  sel = hit ? doc.features.find(f => f.properties.ID === hit.properties.ID) || null : null; render();
+});
+
+$("publishBtn").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(clean(), null, 1)], { type:"application/geo+json" }));
+  a.download = "lines.geojson"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  say("Downloaded lines.geojson (" + clean().features.length + " lines).");
+};
+</script>
+<script src="publish.js"></script>
+<script>GHPublish.attach({ buttons:["publishBtn"] });</script>
+</body>
+</html>

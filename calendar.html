@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calendar</title>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script>Workspace.block('The calendar shows the whole site, not one event. Go back to the live site to use it.');</script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:Arial,sans-serif;color:#222}
+body{display:flex;flex-direction:column}
+header{background:#333;color:#fff;padding:8px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+header h1{font-size:17px;margin:0 8px 0 0}
+button{font:inherit;font-size:13px;padding:7px 11px;border:0;border-radius:4px;background:#fff;color:#222;cursor:pointer}
+button:hover{background:#eee}
+button.on{background:#0072B2;color:#fff}
+header label{font-size:13px;display:inline-flex;gap:4px;align-items:center;cursor:pointer}
+select{font:inherit;font-size:13px;padding:6px;border-radius:4px;border:0}
+#banner{padding:8px 12px;font-size:13px;line-height:1.5}
+#banner:empty{display:none}
+#banner .c{background:#f8d7da;color:#842029;border-radius:4px;padding:6px 10px;margin-bottom:4px;cursor:pointer}
+#banner .w{background:#fff3cd;color:#664d03;border-radius:4px;padding:6px 10px;margin-bottom:4px;cursor:pointer}
+#banner .ok{color:#146c43}
+main{flex:1;display:flex;min-height:0}
+#view{flex:1;overflow:auto;padding:10px 12px}
+#detail{width:320px;flex:none;border-left:1px solid #ddd;background:#fafafa;overflow:auto;padding:12px 14px;font-size:14px;line-height:1.45}
+#detail:empty::before{content:"Click anything on the calendar to see its details here.";color:#777}
+.nav{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.nav b{font-size:18px;min-width:170px;text-align:center}
+.nav button{background:#e7e7e7}
+.grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid #ccc;border-left:1px solid #ccc}
+.dow{background:#f0f0f0;font-size:12px;font-weight:bold;text-align:center;padding:4px;border-right:1px solid #ccc;border-bottom:1px solid #ccc}
+.day{min-height:96px;padding:3px;border-right:1px solid #ccc;border-bottom:1px solid #ccc;background:#fff;overflow:hidden;position:relative}
+.day.out{background:#f6f6f6;color:#999}
+.day.today{background:#fffbe6;box-shadow:inset 0 0 0 2px #E47303}
+.day .n{font-size:12px;font-weight:bold;display:flex;justify-content:space-between;cursor:pointer}
+.day .n i{font-style:normal;font-size:11px}
+.chip{display:block;width:100%;text-align:left;margin-top:2px;padding:2px 5px;border-radius:3px;border:0;font-size:11px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;cursor:pointer}
+.chip.off{opacity:.45;text-decoration:line-through}
+.chip.ev{border-left:4px solid #fff;box-shadow:inset 0 0 0 1px #0003}
+.more{font-size:11px;color:#0072B2;cursor:pointer;margin-top:2px;background:none;padding:0}
+.flag{color:#b3261e;font-weight:bold}
+.warn{color:#b07300;font-weight:bold}
+.ag{width:100%;border-collapse:collapse;font-size:14px}
+.ag th{text-align:left;background:#f0f0f0;padding:6px 8px;font-size:12px;position:sticky;top:0}
+.ag td{padding:7px 8px;border-bottom:1px solid #e3e3e3;vertical-align:top}
+.ag tr.mh td{background:#e9eef5;font-weight:bold;font-size:13px}
+.ag tr.row{cursor:pointer}
+.ag tr.row:hover{background:#f4f8ff}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:#e7e7e7;color:#333;margin-left:4px}
+.badge.live{background:#d1e7dd;color:#0f5132}
+.badge.bad{background:#f8d7da;color:#842029}
+.badge.mid{background:#fff3cd;color:#664d03}
+#detail h3{margin:0 0 4px;font-size:17px}
+#detail .pill{display:inline-block;padding:2px 10px;border-radius:999px;font:700 11px/1.5 system-ui;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+#detail button{margin:8px 6px 0 0;background:#0072B2;color:#fff}
+#detail button.alt{background:#e3e3e3;color:#222}
+#detail ul{padding-left:18px;margin:4px 0}
+.empty{padding:20px;color:#666}
+@media(max-width:820px){main{flex-direction:column}#detail{width:auto;max-height:36vh;border-left:0;border-top:1px solid #ddd}.day{min-height:64px}.chip{font-size:10px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Calendar</h1>
+  <button id="vMonth" type="button" class="on">Month</button>
+  <button id="vAgenda" type="button">Agenda</button>
+  <span style="flex:1"></span>
+  <label><input type="checkbox" id="fAnn" checked> Announcements</label>
+  <label><input type="checkbox" id="fEv" checked> Events</label>
+  <label><input type="checkbox" id="fHid"> Hidden ones</label>
+</header>
+<div id="banner"></div>
+<main>
+  <div id="view"></div>
+  <div id="detail"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/dist/papaparse.min.js"></script>
+<script src="schedule.js"></script>
+<script src="announcements.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const DAY = 864e5, EVENT_COLOR = "#2F6F73", TZ = Announcements.DEFAULT_TZ;
+const fmtDay = ms => new Date(ms).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+const fmtTime = ms => new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC" }).replace(":00", "");
+const fmtMonth = (y, m) => new Date(Date.UTC(y, m, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+const dayKey = ms => new Date(ms).toISOString().slice(0, 10);
+
+let ITEMS = [], NAMES = {}, view = "month", agendaDays = 90;
+let today = EventSchedule.wallNow(TZ), cur = { y: new Date(today).getUTCFullYear(), m: new Date(today).getUTCMonth() };
+
+/* ---------- loading ---------- */
+async function getJson(url) { try { const r = await fetch(url, { cache: "no-store" }); return r.ok ? await r.json() : []; } catch (e) { return []; } }
+async function getCsv(name) {
+  try { const r = await fetch(name, { cache: "no-store" }); if (!r.ok) return []; return Papa.parse((await r.text()).replace(/^\uFEFF/, ""), { header: true, skipEmptyLines: true }).data; }
+  catch (e) { return []; }
+}
+async function init() {
+  const [ann, idx, locs, kids] = await Promise.all([Announcements.load(), getJson("events/index.json"), getCsv("locations.csv"), getCsv("childmarkers.csv")]);
+  locs.forEach(r => NAMES[String(r.ID || "").trim()] = r.NAME); kids.forEach(r => NAMES[String(r.CHILD_ID || "").trim()] = r.NAME);
+  const events = (Array.isArray(idx) ? idx : []).filter(e => e && e.slug && e.schedule).map(e => ({
+    id: "event:" + e.slug, slug: e.slug, name: e.name || e.slug, color: EVENT_COLOR, blurb: e.note || "", venues: [], enabled: e.public !== false || !!e.auto,
+    auto: !!e.auto, schedule: e.schedule, kind: "event" }));
+  ITEMS = ann.filter(a => a.schedule).concat(events);
+  render();
+}
+
+/* ---------- what is shown ---------- */
+function visibleItems() {
+  return ITEMS.filter(a => (a.kind === "event" ? $("fEv").checked : $("fAnn").checked) && (a.enabled || $("fHid").checked));
+}
+function segments(from, to, items) {
+  const out = [];
+  (items || visibleItems()).forEach(a => EventSchedule.range(a.schedule, from, to).forEach(o => out.push({ a, start: o.start, end: o.end })));
+  return out.sort((x, y) => (x.start - y.start) || x.a.name.localeCompare(y.a.name));
+}
+const overlaps = (p, q) => p.start < q.end && q.start < p.end;
+
+/* conflicts: two events that both open themselves at the same time. crowded: more than 3 announcements on one day. */
+function analyze(from, to) {
+  const all = segments(from, to, ITEMS.filter(a => a.enabled));
+  const conflicts = [], crowded = {};
+  for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
+    const p = all[i], q = all[j];
+    if (q.start >= p.end) continue;
+    if (p.a.kind === "event" && q.a.kind === "event" && p.a.auto && q.a.auto && p.a !== q.a && overlaps(p, q)) conflicts.push({ p, q, at: Math.max(p.start, q.start) });
+  }
+  const perDay = {};
+  all.filter(s => s.a.kind === "announcement").forEach(s => { for (let d = Math.floor(s.start / DAY) * DAY; d < s.end; d += DAY) (perDay[dayKey(d)] = perDay[dayKey(d)] || new Set()).add(s.a.id); });
+  Object.keys(perDay).forEach(k => { if (perDay[k].size > 3) crowded[k] = perDay[k].size; });
+  return { conflicts, crowded };
+}
+function conflictDays(conf) { const s = new Set(); conf.forEach(c => { const end = Math.min(c.p.end, c.q.end); for (let d = Math.floor(c.at / DAY) * DAY; d < end; d += DAY) s.add(dayKey(d)); }); return s; }
+
+function renderBanner() {
+  const { conflicts, crowded } = analyze(today - DAY, today + 365 * DAY);
+  const crowdedKeys = Object.keys(crowded).sort();
+  let h = "";
+  conflicts.slice(0, 5).forEach((c, i) => {
+    h += '<div class="c" data-jump="' + c.at + '"><b>Conflict:</b> ' + esc(c.p.a.name) + " and " + esc(c.q.a.name) + " both open themselves on the main map around " + esc(fmtDay(c.at)) + ". Only the one that started last opens. Change the dates or untick \u201cOpen automatically\u201d on one of them.</div>";
+  });
+  if (conflicts.length > 5) h += '<div class="c">\u2026and ' + (conflicts.length - 5) + " more conflicts.</div>";
+  if (crowdedKeys.length) h += '<div class="w" data-jump="' + Date.parse(crowdedKeys[0] + "T00:00:00Z") + '"><b>Busy:</b> ' + crowdedKeys.length + " day" + (crowdedKeys.length === 1 ? " has" : "s have") + " more than 3 announcements (first: " + esc(fmtDay(Date.parse(crowdedKeys[0] + "T00:00:00Z"))) + "). The welcome screen shows them one at a time, so visitors may only see some.</div>";
+  if (!h) h = '<span class="ok">\u2713 No conflicts in the next 12 months.</span>';
+  $("banner").innerHTML = h;
+  $("banner").querySelectorAll("[data-jump]").forEach(el => el.onclick = () => { const d = new Date(+el.dataset.jump); cur = { y: d.getUTCFullYear(), m: d.getUTCMonth() }; setView("month"); });
+}
+
+/* ---------- month view ---------- */
+function renderMonth() {
+  const first = Date.UTC(cur.y, cur.m, 1), startDow = new Date(first).getUTCDay(), gridStart = first - startDow * DAY;
+  const gridEnd = gridStart + 42 * DAY, segs = segments(gridStart, gridEnd);
+  const A = analyze(gridStart, gridEnd), cdays = conflictDays(A.conflicts);
+  let h = '<div class="nav"><button id="pv" type="button">\u25C0</button><b>' + esc(fmtMonth(cur.y, cur.m)) + '</b><button id="nx" type="button">\u25B6</button><button id="td" type="button">Today</button></div><div class="grid">' +
+    ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => '<div class="dow">' + d + "</div>").join("");
+  for (let i = 0; i < 42; i++) {
+    const d = gridStart + i * DAY, dt = new Date(d), k = dayKey(d), inM = dt.getUTCMonth() === cur.m;
+    const here = segs.filter(s => s.end > d && s.start < d + DAY);
+    const flags = (cdays.has(k) ? '<i class="flag" title="Two events open themselves on this day">\u26A0</i>' : "") + (A.crowded[k] ? '<i class="warn" title="More than 3 announcements">\u25CF</i>' : "");
+    h += '<div class="day' + (inM ? "" : " out") + (k === dayKey(Math.floor(today / DAY) * DAY) ? " today" : "") + '" data-d="' + k + '"><div class="n" data-day="' + k + '"><span>' + dt.getUTCDate() + "</span>" + flags + "</div>";
+    here.slice(0, 3).forEach(s => { h += '<button type="button" class="chip' + (s.a.kind === "event" ? " ev" : "") + (s.a.enabled ? "" : " off") + '" data-a="' + esc(s.a.id) + '" data-s="' + s.start + '" title="' + esc(s.a.name + ": " + fmtDay(s.start) + " " + fmtTime(s.start) + " to " + fmtDay(s.end) + " " + fmtTime(s.end)) + '" style="background:' + esc(s.a.color) + ";color:" + Announcements.readable(s.a.color) + '">' + esc(s.a.name) + "</button>"; });
+    if (here.length > 3) h += '<button type="button" class="more" data-day="' + k + '">+' + (here.length - 3) + " more</button>";
+    h += "</div>";
+  }
+  $("view").innerHTML = h + "</div>";
+  $("pv").onclick = () => { cur.m--; if (cur.m < 0) { cur.m = 11; cur.y--; } render(); };
+  $("nx").onclick = () => { cur.m++; if (cur.m > 11) { cur.m = 0; cur.y++; } render(); };
+  $("td").onclick = () => { const d = new Date(today); cur = { y: d.getUTCFullYear(), m: d.getUTCMonth() }; render(); };
+  $("view").querySelectorAll(".chip").forEach(b => b.onclick = e => { e.stopPropagation(); showItem(b.dataset.a, +b.dataset.s); });
+  $("view").querySelectorAll("[data-day]").forEach(b => b.onclick = () => showDay(b.dataset.day));
+}
+
+/* ---------- agenda view ---------- */
+function renderAgenda() {
+  const from = Math.floor(today / DAY) * DAY, to = from + agendaDays * DAY;
+  const segs = segments(from, to), A = analyze(from, to);
+  const bad = new Set(); A.conflicts.forEach(c => { bad.add(c.p.a.id); bad.add(c.q.a.id); });
+  let h = '<div class="nav"><b style="min-width:0">Coming up</b><select id="rangeSel">' +
+    [[30, "next 30 days"], [90, "next 3 months"], [365, "next 12 months"]].map(o => '<option value="' + o[0] + '"' + (agendaDays === o[0] ? " selected" : "") + ">" + o[1] + "</option>").join("") + "</select></div>";
+  if (!segs.length) h += '<div class="empty">Nothing is scheduled in this range. Add an announcement, or set dates on an event.</div>';
+  else {
+    h += '<table class="ag"><thead><tr><th>When</th><th>What</th><th>Status</th></tr></thead><tbody>';
+    let month = "";
+    segs.forEach(s => {
+      const m = fmtMonth(new Date(Math.max(s.start, from)).getUTCFullYear(), new Date(Math.max(s.start, from)).getUTCMonth());
+      if (m !== month) { month = m; h += '<tr class="mh"><td colspan="3">' + esc(m) + "</td></tr>"; }
+      const live = s.start <= today && today < s.end;
+      const multi = dayKey(s.start) !== dayKey(s.end - 1);
+      const when = (live ? "Now until " : "") + (live ? fmtDay(s.end) + " " + fmtTime(s.end) : (multi ? fmtDay(s.start) + " to " + fmtDay(s.end - 1) : fmtDay(s.start) + ", " + fmtTime(s.start) + "\u2013" + fmtTime(s.end)));
+      h += '<tr class="row" data-a="' + esc(s.a.id) + '" data-s="' + s.start + '"><td>' + esc(when) + '</td><td><span class="dot" style="background:' + esc(s.a.color) + '"></span><b>' + esc(s.a.name) + "</b>" +
+        '<span class="badge">' + (s.a.kind === "event" ? "event map" : "announcement") + "</span>" + (s.a.kind === "event" && s.a.auto ? '<span class="badge">opens itself</span>' : "") + (bad.has(s.a.id) ? '<span class="badge bad">conflict</span>' : "") + (s.a.enabled ? "" : '<span class="badge">hidden</span>') +
+        "</td><td>" + (live ? '<span class="badge live">On now</span>' : esc(Math.ceil((s.start - today) / DAY) <= 0 ? "Today" : "in " + Math.ceil((s.start - today) / DAY) + " day" + (Math.ceil((s.start - today) / DAY) === 1 ? "" : "s"))) + "</td></tr>";
+    });
+    h += "</tbody></table>";
+  }
+  $("view").innerHTML = h;
+  $("rangeSel").onchange = () => { agendaDays = +$("rangeSel").value; renderAgenda(); };
+  $("view").querySelectorAll("tr.row").forEach(r => r.onclick = () => showItem(r.dataset.a, +r.dataset.s));
+}
+
+/* ---------- detail panel ---------- */
+const byId = id => ITEMS.find(a => a.id === id);
+function openIn(tab, payload) {
+  if (window.parent && window.parent !== window) window.parent.postMessage({ type: "ets-open-tab", tab, payload }, location.origin);
+  else if (tab === "p14") location.href = "announce.html" + (payload && payload.id ? "#" + encodeURIComponent(payload.id) : "");
+  else location.href = "events.html";
+}
+function showItem(id, startAt) {
+  const a = byId(id); if (!a) return;
+  const st = EventSchedule.status(a.schedule);
+  const same = segments(startAt - 1, startAt + 1, ITEMS.filter(x => x.enabled)).filter(s => s.a.id !== a.id);
+  const alsoOn = segments(startAt, startAt + 1, ITEMS.filter(x => x.enabled && x.id !== a.id));
+  let h = '<span class="pill" style="background:' + esc(a.color) + ";color:" + Announcements.readable(a.color) + '">' + esc(a.kind === "event" ? "Event map" : (a.tag || "Announcement")) + "</span><h3>" + esc(a.name) + "</h3>" +
+    "<div>" + esc(EventSchedule.describe(a.schedule)) + "</div><div><b>" + esc(EventSchedule.statusText(st) || "") + "</b></div>";
+  if (a.kind === "event") h += "<p>" + (a.auto ? "This event <b>opens itself</b> on the main map while it is on." : "This event does not open itself. Visitors choose it from the Events button.") + "</p>";
+  if (a.blurb) h += "<p>" + esc(a.blurb) + "</p>";
+  if (a.venues && a.venues.length) h += "<div><b>Where:</b> " + a.venues.map(v => esc(NAMES[v] || v)).join(", ") + "</div>";
+  if (!a.enabled) h += "<p><i>Hidden: visitors do not see this.</i></p>";
+  if (alsoOn.length) h += "<p><b>Also on then:</b></p><ul>" + alsoOn.map(s => "<li>" + esc(s.a.name) + "</li>").join("") + "</ul>";
+  h += a.kind === "event"
+    ? '<button type="button" id="dEdit">Change its dates (Events tab)</button><button type="button" class="alt" id="dView">Preview its map</button>'
+    : '<button type="button" id="dEdit">Edit this announcement</button>';
+  $("detail").innerHTML = h;
+  $("dEdit").onclick = () => openIn(a.kind === "event" ? "p9" : "p14", { type: "ets-select", id: a.id });
+  if ($("dView")) $("dView").onclick = () => window.open((ETS_CONFIG.LIVE_PAGE || "index.html") + "?event=" + encodeURIComponent(a.slug), "_blank", "noopener");
+}
+function showDay(k) {
+  const d = Date.parse(k + "T00:00:00Z"), segs = segments(d, d + DAY);
+  let h = "<h3>" + esc(fmtDay(d)) + "</h3>";
+  h += segs.length ? "<ul>" + segs.map(s => '<li><a href="#" data-a="' + esc(s.a.id) + '" data-s="' + s.start + '">' + esc(s.a.name) + "</a> (" + esc(s.start <= d && s.end >= d + DAY ? "all day" : fmtTime(Math.max(s.start, d)) + (s.end >= d + DAY ? " on" : "\u2013" + fmtTime(s.end))) + ")</li>").join("") + "</ul>" : "<p>Nothing scheduled.</p>";
+  h += '<button type="button" id="dNew">+ Add an announcement on this day</button>';
+  $("detail").innerHTML = h;
+  $("detail").querySelectorAll("a[data-a]").forEach(x => x.onclick = e => { e.preventDefault(); showItem(x.dataset.a, +x.dataset.s); });
+  $("dNew").onclick = () => openIn("p14", { type: "ets-new", date: k });
+}
+
+/* ---------- plumbing ---------- */
+function setView(v) { view = v; $("vMonth").classList.toggle("on", v === "month"); $("vAgenda").classList.toggle("on", v === "agenda"); render(); }
+function render() { renderBanner(); if (view === "month") renderMonth(); else renderAgenda(); }
+$("vMonth").onclick = () => setView("month");
+$("vAgenda").onclick = () => setView("agenda");
+["fAnn", "fEv", "fHid"].forEach(id => $(id).onchange = render);
+init();
+</script>
+</body>
+</html>

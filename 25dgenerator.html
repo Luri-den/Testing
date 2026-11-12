@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>2.5D Ken Burns Animator</title>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<style>
+:root{--bg:#f4f4f2;--panel:#fff;--text:#1c1c1c;--muted:#6b6b6b;--line:#ddd;--accent:#2563eb;--accent-t:#fff;--stage:#e9e9e6;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161616;--panel:#222;--text:#eee;--muted:#999;--line:#3a3a3a;--accent:#3b82f6;--stage:#101010}}
+:root[data-theme="dark"]{--bg:#161616;--panel:#222;--text:#eee;--muted:#999;--line:#3a3a3a;--accent:#3b82f6;--stage:#101010}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:16px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:14px;margin:0 0 16px}
+.wrap{display:flex;gap:16px;flex-wrap:wrap;max-width:1200px;margin:auto}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.left{flex:2 1 520px;min-width:0}
+.right{flex:1 1 280px;display:flex;flex-direction:column;gap:14px}
+.scroller{overflow:auto;max-height:70vh;background:var(--stage);border-radius:6px;border:1px solid var(--line)}
+.stage{position:relative;margin:auto;display:none;touch-action:none;cursor:crosshair}
+.stage.panning{cursor:grabbing}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%}
+.m{opacity:.5}
+.empty{padding:80px 20px;text-align:center;color:var(--muted)}
+label{display:block;font-size:13px;font-weight:600;margin-bottom:4px}
+.row{display:flex;gap:8px;align-items:center}
+.row span{min-width:40px;text-align:right;font-size:12px;color:var(--muted)}
+input[type=range]{width:100%}
+button,select{font:inherit;font-size:14px;padding:8px 12px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-t);border-color:var(--accent);font-weight:600}
+button.on{outline:2px solid var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.status{font-size:13px;color:var(--muted);margin-top:10px;min-height:18px}
+.hint{font-size:12px;color:var(--muted);margin-top:8px}
+h2{font-size:14px;margin:0 0 10px}
+.hide{display:none!important}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+</style>
+</head>
+<body>
+<h1>2.5D Ken Burns Animator</h1>
+<p class="sub">Mark up to two layers in front of the background, then animate each at its own speed.</p>
+
+<div class="wrap">
+  <div class="card left">
+    <input type="file" id="file" accept="image/*">
+    <div class="scroller" style="margin-top:12px" id="scroller">
+      <div class="empty" id="empty">Choose an image (or drop one here) to begin</div>
+      <div class="stage" id="stage">
+        <canvas id="view"></canvas>
+        <canvas id="maskM" class="m"></canvas>
+        <canvas id="maskF" class="m"></canvas>
+      </div>
+    </div>
+    <div class="hint">Left-drag paints. <b>Scroll wheel zooms</b> toward the cursor. <b>Right-drag (or middle-drag) pans</b>.</div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="right">
+    <div class="card">
+      <h2>1. Mark the layers</h2>
+      <div class="btns" style="margin-bottom:10px">
+        <button id="layF" class="on"><span class="dot" style="background:#ff2d2d"></span>Front</button>
+        <button id="layM"><span class="dot" style="background:#2d7dff"></span>Middle</button>
+      </div>
+      <div class="hint" style="margin:-2px 0 10px">Everything unpainted is the background. Leave Middle empty for a simple two-layer effect.</div>
+      <label>Brush size</label>
+      <div class="row"><input type="range" id="brush" min="3" max="120" value="30"><span id="brushV">30</span></div>
+      <label style="margin-top:10px">View zoom</label>
+      <div class="row"><input type="range" id="vz" min="1" max="8" step="any" value="1"><span id="vzV">1x</span></div>
+      <div class="btns" style="margin-top:12px">
+        <button id="paintBtn" class="on">Paint</button>
+        <button id="eraseBtn">Erase</button>
+        <button id="clearBtn">Clear layer</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. Motion</h2>
+      <div class="btns" style="margin-bottom:12px">
+        <button id="playBtn" class="primary" disabled>Preview animation</button>
+        <button id="backBtn" class="hide">Back to masking</button>
+      </div>
+      <label>Front zoom</label>
+      <div class="row"><input type="range" id="fgZ" min="0" max="40" value="16"><span id="fgZV"></span></div>
+      <label style="margin-top:8px">Middle zoom</label>
+      <div class="row"><input type="range" id="mdZ" min="0" max="40" value="9"><span id="mdZV"></span></div>
+      <label style="margin-top:8px">Background zoom</label>
+      <div class="row"><input type="range" id="bgZ" min="0" max="40" value="3"><span id="bgZV"></span></div>
+      <label style="margin-top:8px">Sideways drift</label>
+      <div class="row"><input type="range" id="drift" min="0" max="8" step="0.5" value="2"><span id="driftV"></span></div>
+      <label style="margin-top:8px">Duration</label>
+      <div class="row"><input type="range" id="dur" min="2" max="10" step="0.5" value="5"><span id="durV"></span></div>
+      <label style="margin-top:8px">Style</label>
+      <div class="btns">
+        <select id="loopMode"><option value="pp">Seamless loop (in and out)</option><option value="one">One-way push</option></select>
+        <label style="display:flex;gap:6px;align-items:center;margin:0;font-weight:400"><input type="checkbox" id="rev"> Reverse</label>
+      </div>
+      <button id="presetBtn" style="margin-top:10px">Preset: pull-out that ends on the original photo</button>
+    </div>
+
+    <div class="card">
+      <h2>3. Export</h2>
+      <label for="animName" style="display:block;margin:0 0 4px">File name</label>
+      <input type="text" id="animName" value="parallax-loop" autocomplete="off" style="width:100%;box-sizing:border-box;margin-bottom:10px">
+      <button id="expBtn" class="primary" disabled>Record video (one loop)</button>
+      <button id="pubGrab" type="button" hidden></button>
+      <div class="hint">Exports WebM (MP4 in Safari). Takes the duration plus a short hold on the final frame, in real time. After recording, use <b>Publish to GitHub</b> to put it in the <b>anims</b> folder.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const view = $('view'), maskM = $('maskM'), maskF = $('maskF'), stage = $('stage'), scroller = $('scroller');
+const vctx = view.getContext('2d'), mctxM = maskM.getContext('2d'), mctxF = maskF.getContext('2d');
+const mk = (w = W, h = H) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; };
+
+let img = null, W = 0, H = 0, mode = 'edit', raf = 0, t0 = 0;
+let layer = 'f', erasing = false, painting = false, last = null, recording = false;
+let hasM = false, hasF = false;
+let panning = false, ps = null;
+let layersBuilt = null;
+
+const status = t => $('status').textContent = t;
+const active = () => layer === 'f' ? [maskF, mctxF, '#ff2d2d'] : [maskM, mctxM, '#2d7dff'];
+
+[['brush','px'],['fgZ','%'],['mdZ','%'],['bgZ','%'],['drift','%'],['dur','s']].forEach(([id, u]) => {
+  const upd = () => $(id + 'V').textContent = $(id).value + u;
+  $(id).addEventListener('input', upd); upd();
+});
+
+// ---------- loading ----------
+$('file').addEventListener('change', e => e.target.files[0] && loadFile(e.target.files[0]));
+document.body.addEventListener('dragover', e => e.preventDefault());
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) loadFile(f);
+});
+function loadFile(file) {
+  suggestAnimName(file.name);
+  const url = URL.createObjectURL(file);
+  const im = new Image();
+  im.onload = () => { img = im; URL.revokeObjectURL(url); setup(); };
+  im.onerror = () => status('Could not read that image.');
+  im.src = url;
+}
+function setup() {
+  stopLoop();
+  const s = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight));
+  W = Math.round(img.naturalWidth * s);
+  H = Math.round(img.naturalHeight * s);
+  [view, maskM, maskF].forEach(c => { c.width = W; c.height = H; });
+  $('empty').classList.add('hide');
+  stage.style.display = 'block';
+  stage.style.aspectRatio = W + ' / ' + H;
+  $('vz').value = 1; $('vzV').textContent = '1x';
+  applyViewZoom();
+  mctxM.clearRect(0, 0, W, H); mctxF.clearRect(0, 0, W, H);
+  hasM = hasF = false; updatePlay();
+  setMode('edit');
+  status('Paint the nearest subject on Front. Optionally paint a second object on Middle.');
+}
+function applyViewZoom() {
+  const base = Math.min(W, scroller.clientWidth - 2);
+  stage.style.width = (base * parseFloat($('vz').value)) + 'px';
+}
+// Zoom while keeping the point under (cx, cy) fixed on screen
+function setZoom(z, cx, cy) {
+  z = Math.max(1, Math.min(8, z));
+  const r = stage.getBoundingClientRect();
+  const fx = Math.max(0, Math.min(1, (cx - r.left) / r.width));
+  const fy = Math.max(0, Math.min(1, (cy - r.top) / r.height));
+  $('vz').value = z;
+  $('vzV').textContent = z.toFixed(1) + 'x';
+  applyViewZoom();
+  const n = stage.getBoundingClientRect();
+  scroller.scrollLeft += (n.left + fx * n.width) - cx;
+  scroller.scrollTop  += (n.top  + fy * n.height) - cy;
+}
+// Slider zooms around the middle of the visible box
+$('vz').addEventListener('input', () => {
+  const r = scroller.getBoundingClientRect();
+  setZoom(parseFloat($('vz').value), r.left + r.width / 2, r.top + r.height / 2);
+});
+// Mouse wheel / trackpad zooms toward the cursor
+scroller.addEventListener('wheel', e => {
+  if (!img) return;
+  e.preventDefault();
+  setZoom(parseFloat($('vz').value) * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY);
+}, { passive: false });
+window.addEventListener('resize', () => img && applyViewZoom());
+
+// ---------- pointer: paint (left) / pan (right or middle) ----------
+stage.addEventListener('contextmenu', e => e.preventDefault());
+function pos(e) {
+  const r = stage.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
+}
+function stroke(a, b) {
+  const [c, ctx, col] = active();
+  ctx.save();
+  ctx.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+  ctx.strokeStyle = col;
+  ctx.lineWidth = $('brush').value * (W / stage.getBoundingClientRect().width);
+  ctx.lineCap = ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.restore();
+}
+stage.addEventListener('pointerdown', e => {
+  if (e.button === 1 || e.button === 2) {
+    panning = true;
+    ps = { x: e.clientX, y: e.clientY, l: scroller.scrollLeft, t: scroller.scrollTop };
+    stage.setPointerCapture(e.pointerId);
+    stage.classList.add('panning');
+    e.preventDefault();
+    return;
+  }
+  if (e.button !== 0 || mode !== 'edit') return;
+  stage.setPointerCapture(e.pointerId);
+  painting = true; last = pos(e); stroke(last, last);
+  if (!erasing) { if (layer === 'f') hasF = true; else hasM = true; updatePlay(); }
+});
+stage.addEventListener('pointermove', e => {
+  if (panning) {
+    scroller.scrollLeft = ps.l - (e.clientX - ps.x);
+    scroller.scrollTop = ps.t - (e.clientY - ps.y);
+  } else if (painting) {
+    const p = pos(e); stroke(last, p); last = p;
+  }
+});
+['pointerup', 'pointercancel'].forEach(t => stage.addEventListener(t, () => {
+  painting = false; panning = false; stage.classList.remove('panning');
+}));
+
+// ---------- tool buttons ----------
+function setLayer(l) {
+  layer = l;
+  $('layF').classList.toggle('on', l === 'f');
+  $('layM').classList.toggle('on', l === 'm');
+}
+$('layF').onclick = () => setLayer('f');
+$('layM').onclick = () => setLayer('m');
+$('paintBtn').onclick = () => { erasing = false; $('paintBtn').classList.add('on'); $('eraseBtn').classList.remove('on'); };
+$('eraseBtn').onclick = () => { erasing = true; $('eraseBtn').classList.add('on'); $('paintBtn').classList.remove('on'); };
+$('clearBtn').onclick = () => {
+  const has = layer === 'f' ? hasF : hasM;
+  if (has && !confirm('Clear the ' + (layer === 'f' ? 'Front' : 'Middle') + ' layer?')) return;
+  const [c, ctx] = active();
+  ctx.clearRect(0, 0, W, H);
+  if (layer === 'f') hasF = false; else hasM = false;
+  updatePlay();
+};
+function updatePlay() { $('playBtn').disabled = !(hasF || hasM); }
+
+// ---------- modes ----------
+function setMode(m) {
+  mode = m;
+  const edit = m === 'edit';
+  maskM.style.display = maskF.style.display = edit ? 'block' : 'none';
+  stage.style.cursor = edit ? 'crosshair' : 'grab';
+  $('playBtn').classList.toggle('hide', !edit);
+  $('backBtn').classList.toggle('hide', edit);
+  $('expBtn').disabled = edit;
+  if (edit) { stopLoop(); vctx.clearRect(0, 0, W, H); vctx.drawImage(img, 0, 0, W, H); }
+}
+$('backBtn').onclick = () => { if (!recording) { setMode('edit'); status('Back to masking.'); } };
+
+// ---------- layer building ----------
+function dilate(src) {
+  const [d, dx] = mk();
+  const r = Math.max(3, W / 250);
+  for (let i = 0; i < 16; i++) {
+    const a = i / 16 * Math.PI * 2;
+    dx.drawImage(src, Math.cos(a) * r, Math.sin(a) * r);
+  }
+  dx.drawImage(src, 0, 0);
+  return d;
+}
+// Returns the photo with the masked area filled in by progressively blurrier copies
+function fillHoles(holeMask) {
+  const [hole, hx] = mk();
+  hx.drawImage(img, 0, 0, W, H);
+  hx.globalCompositeOperation = 'destination-out';
+  hx.drawImage(dilate(holeMask), 0, 0);
+  const [out, ox] = mk();
+  ox.imageSmoothingQuality = 'high';
+  for (let k = 7; k >= 1; k--) {
+    const [c, cx] = mk(Math.max(2, Math.ceil(W / 2 ** k)), Math.max(2, Math.ceil(H / 2 ** k)));
+    cx.imageSmoothingQuality = 'high';
+    cx.drawImage(hole, 0, 0, c.width, c.height);
+    ox.drawImage(c, 0, 0, W, H);
+  }
+  ox.drawImage(hole, 0, 0);
+  return out;
+}
+function cutOut(src, maskCanvas) {
+  const [c, x] = mk();
+  x.drawImage(src, 0, 0, W, H);
+  x.globalCompositeOperation = 'destination-in';
+  x.filter = 'blur(1.5px)';
+  x.drawImage(maskCanvas, 0, 0);
+  x.filter = 'none';
+  return c;
+}
+function buildLayers() {
+  const [union, ux] = mk();
+  ux.drawImage(maskM, 0, 0); ux.drawImage(maskF, 0, 0);
+  const [plain, px] = mk(); px.drawImage(img, 0, 0, W, H);
+
+  const back = fillHoles(union);
+  // Middle layer also includes what is hidden behind the front layer, so no gaps appear
+  const mid = hasM ? cutOut(hasF ? fillHoles(maskF) : plain, union) : null;
+  const front = hasF ? cutOut(plain, maskF) : null;
+  layersBuilt = [
+    { c: back, zid: 'bgZ', k: 0.3 },
+    mid && { c: mid, zid: 'mdZ', k: 0.65 },
+    front && { c: front, zid: 'fgZ', k: 1 }
+  ].filter(Boolean);
+}
+
+// ---------- rendering ----------
+function ease(p) {
+  const e = $('loopMode').value === 'pp' ? 0.5 - 0.5 * Math.cos(p * Math.PI * 2) : p * p * (3 - 2 * p);
+  return $('rev').checked ? 1 - e : e;
+}
+function drawFrame(p) {
+  const e = ease(p), drift = $('drift').value / 100;
+  vctx.clearRect(0, 0, W, H);
+  for (const L of layersBuilt) {
+    // At e=0 the frame is exactly the original photo; overscan and drift grow with e
+    const s = (1 + 2 * drift * e) * (1 + e * $(L.zid).value / 100);
+    const dx = e * drift * W * L.k;
+    vctx.save();
+    vctx.translate(W / 2 + dx, H / 2);
+    vctx.scale(s, s);
+    vctx.drawImage(L.c, -W / 2, -H / 2);
+    vctx.restore();
+  }
+}
+function loop(now) {
+  const dur = parseFloat($('dur').value), el = (now - t0) / 1000;
+  // While recording a one-way move, hold on the final frame instead of restarting
+  const p = (recording && $('loopMode').value === 'one') ? Math.min(el / dur, 1) : (el % dur) / dur;
+  drawFrame(p);
+  raf = requestAnimationFrame(loop);
+}
+function stopLoop() { cancelAnimationFrame(raf); raf = 0; }
+
+$('playBtn').onclick = () => {
+  if (!(hasF || hasM)) return;
+  buildLayers();
+  setMode('play');
+  t0 = performance.now();
+  raf = requestAnimationFrame(loop);
+  status('Live preview. Drag the sliders to adjust. Best look: Front zoom > Middle > Background.');
+};
+
+$('presetBtn').onclick = () => {
+  $('loopMode').value = 'one';
+  $('rev').checked = true;
+  status('Preset on: one-way pull-out. The last frame is the untouched original photo.');
+};
+
+// ---------- name + hand-off for publishing ----------
+let lastRecording = null;   // { blob, ext } from the most recent recording
+
+function cleanAnimName(n) {
+  return String(n || '').trim().replace(/\.(mp4|webm|mov)$/i, '')
+    .replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'parallax-loop';
+}
+function suggestAnimName(photoName) {
+  const base = String(photoName || '').replace(/\.[^.]*$/, '');
+  if (base) $('animName').value = cleanAnimName(base);
+}
+function sendRecording() {             // saves lastRecording as a download (publish.js catches this too)
+  if (!lastRecording) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(lastRecording.blob);
+  a.download = cleanAnimName($('animName').value) + '.' + lastRecording.ext;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+// publish.js "presses" this button and catches the file it downloads
+$('pubGrab').onclick = () => {
+  if (!lastRecording) { status('Record a video first, then publish.'); return; }
+  sendRecording();
+};
+
+// ---------- export ----------
+$('expBtn').onclick = () => {
+  if (typeof MediaRecorder === 'undefined') { status('This browser cannot record video from a canvas.'); return; }
+  const types = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  const mime = types.find(t => MediaRecorder.isTypeSupported(t));
+  if (!mime) { status('No supported video format found.'); return; }
+  const dur = parseFloat($('dur').value);
+  const rec = new MediaRecorder(view.captureStream(30), { mimeType: mime, videoBitsPerSecond: 5e6 });
+  const chunks = [];
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = () => {
+    lastRecording = { blob: new Blob(chunks, { type: mime }), ext: mime.includes('mp4') ? 'mp4' : 'webm' };
+    sendRecording();   // normal download, as before
+    recording = false; $('expBtn').disabled = false;
+    status('Saved to your downloads. To put it in the anims folder, click Publish to GitHub.');
+  };
+  recording = true; $('expBtn').disabled = true;
+  status('Recording ' + dur + 's...');
+  t0 = performance.now();
+  rec.start();
+  setTimeout(() => rec.stop(), dur * 1000 + 600); // 0.6s hold on the last frame
+};
+
+if (!('filter' in CanvasRenderingContext2D.prototype)) {
+  status('Note: this browser ignores canvas blur, so layer edges will be hard.');
+}
+</script>
+<script src="publish.js"></script>
+<script>GHPublish.attach({ buttons: ["pubGrab"] });</script>
+</body>
+</html>

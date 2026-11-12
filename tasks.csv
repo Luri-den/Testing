@@ -1,0 +1,8 @@
+TASK_ID,LABEL,HINT,BTN,SCOPE,TARGET,COUNT
+find-story,Find a Story,Find a sparkle on the map!,Show Stories,behavior,story,
+find-spot,Find a Photo Spot,"Scan a QR sign around town, or find a camera on the map!",Show Spots,behavior,spot,
+ride-any,Ride Any Tour,Take any tour to its last stop!,Take a Tour,behavior,tour,
+any-rail,Explore Railroad Sites,Visit any railroad site!,Show Rail Sites,category,RAIL,
+any-canal,Explore Canal Sites,Visit any canal site!,Show Canal Sites,category,CANAL,
+any-downtown,Explore Downtown,Visit any downtown place!,Show Downtown,category,DOWNTOWN,
+downtown-3,Visit 3 Downtown Places,Visit three different downtown places!,Show Downtown,category,DOWNTOWN,3

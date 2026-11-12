@@ -1,0 +1,1031 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stories &amp; Spots Editor</title>
+<script src="ets-config.js"></script>
+<script src="workspace.js"></script>
+<script src="editor-common.js"></script>
+<script>Workspace.install();</script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+  :root{
+    --line:#d7dde5; --accent:#2b6cb0; --ink:#1a202c;
+    --bg:#eef1f5; --panel:#fff; --muted:#6b7280;
+    --story:#D55E00; --spot:#333333;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font:14px system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}
+
+  #top{position:absolute;z-index:20;top:0;left:0;right:0;height:52px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 12px}
+  #top h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+  #top .grow{flex:1}
+  #top .status{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
+  button{font:inherit;padding:6px 12px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;color:var(--ink)}
+  button:hover{background:#f6f8fb}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.primary:hover{background:#245a94}
+  button.warn{background:#fff5f5;border-color:#f3c2c2;color:#a33}
+  button.warn:hover{background:#ffecec}
+  button.small{padding:3px 8px;font-size:12px}
+
+  #layout{position:absolute;top:52px;left:0;right:0;bottom:0;display:grid;grid-template-columns:220px 1fr 360px}
+
+  #left{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding-bottom:20px}
+  .sec{padding:10px 12px 4px}
+  .sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:8px 0 6px;font-weight:600}
+  .palette{display:flex;flex-direction:column;gap:6px;padding:0 12px}
+  .chip{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px;background:#fbfcfe;cursor:grab;user-select:none;font-size:13px}
+  .chip:active{cursor:grabbing}
+  .chip svg{flex:none;display:block}
+  .chip .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .list{padding:0 6px}
+  .row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px}
+  .row:hover{background:#f4f7fb}
+  .row.sel{background:#e6effa}
+  .row svg{flex:none;display:block}
+  .row .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .id{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+
+  .hint{padding:10px 14px;font-size:11px;line-height:1.55;color:var(--muted)}
+  .hint b{color:#333}
+
+  #stage{position:relative;min-width:0}
+  #map{position:absolute;inset:0}
+
+  /* markers, matching Demo2.html */
+  /* marker size, icons and animations live in spot-markers.js (shared with the public map) */
+  .kmark.sel{outline:3px solid #ff9800;outline-offset:3px;border-radius:50%}
+  .fxtoggle{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;white-space:nowrap;user-select:none}
+
+  /* ---------- right panel ---------- */
+  #right{background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding-bottom:30px}
+  .empty{padding:24px 16px;color:#9aa3ad;font-size:13px;text-align:center;line-height:1.6}
+  .empty kbd{font:11px ui-monospace,Menlo,monospace;background:#f1f3f7;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px}
+
+  .form{padding:12px}
+  .form .badge{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:2px 6px;border-radius:999px;background:#f0fff0;color:#2f855a;margin-bottom:8px;font-weight:600}
+  .form .badge.story{background:#fff3e6;color:#a35400}
+
+  .field{margin-bottom:10px}
+  .field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-weight:600}
+  .field input[type=text],.field input[type=number],.field textarea,.field select{
+    width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff;color:var(--ink)}
+  .field textarea{min-height:90px;resize:vertical;line-height:1.45}
+  .field input:focus,.field textarea:focus,.field select:focus{outline:2px solid #cfe0f3;border-color:#9dbde3}
+  .field .sub{font-size:11px;color:var(--muted);margin-top:3px}
+
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+  .catrow{display:flex;align-items:center;gap:8px}
+  .catrow select{flex:1}
+  .catrow .sw{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);flex:none}
+
+  .photo{margin-top:6px;display:flex;gap:10px;align-items:flex-start}
+  .photo .thumb{width:80px;height:80px;border-radius:8px;background:#f1f3f7;border:1px solid var(--line);object-fit:cover;flex:none;display:block}
+  .photo .thumb.missing{display:flex;align-items:center;justify-content:center;font-size:11px;color:#9aa3ad;text-align:center;padding:6px}
+  .photo .meta{flex:1;font-size:12px;color:var(--muted);line-height:1.5;min-width:0}
+  .photo .meta code{font:11px ui-monospace,Menlo,monospace;color:#4a5568;background:#f1f3f7;padding:1px 4px;border-radius:3px;word-break:break-all}
+  .photo .meta .actions{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+
+  .actions{margin-top:14px;display:flex;gap:6px;flex-wrap:wrap}
+  .actions .grow{flex:1}
+
+  .divider{height:1px;background:var(--line);margin:14px 0}
+
+  details.staff{margin-top:8px;border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:#fafbfd}
+  details.staff summary{cursor:pointer;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  details.staff .field{margin-top:8px;margin-bottom:0}
+
+  details.future{margin-top:8px;border:1px solid #e8e0cc;border-radius:6px;padding:8px 10px;background:#fffcf3}
+  details.future summary{cursor:pointer;font-size:11px;font-weight:600;color:#a37a2b;text-transform:uppercase;letter-spacing:.04em}
+
+  #staged{position:absolute;z-index:15;left:220px;right:360px;bottom:0;background:#fffef6;border-top:1px solid #f0e0b0;padding:6px 12px;font-size:12px;display:none;align-items:center;gap:10px}
+  #staged.on{display:flex}
+  #staged .files{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#7a5c00}
+  #staged .files code{font:11px ui-monospace,Menlo,monospace}
+
+  #toast{position:fixed;z-index:100;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .18s, transform .18s;pointer-events:none;max-width:80vw;text-align:center}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left{z-index:6}
+</style>
+</head>
+<body>
+
+<div id="top">
+  <h1>Stories &amp; Spots</h1>
+  <button id="pickFile">Pick spots.csv…</button>
+  <input id="fileInput" type="file" accept=".csv,text/csv" hidden>
+  <button id="pickPhotos" title="Captions, credits and extra photos">Pick photos.csv…</button>
+  <input id="filePhotos" type="file" accept=".csv,text/csv" hidden>
+  <span class="status" id="status">Loading…</span>
+  <label class="fxtoggle" title="Preview marker animations while you edit. Only affects this screen; nothing is saved to the CSV."><input type="checkbox" id="fxToggle"> Marker effects</label>
+  <span class="grow"></span>
+  <button id="reloadBtn" title="Re-fetch from this folder">↻ Reload</button>
+  <button id="publishBtn" class="primary" disabled>Download updated spots.csv</button>
+</div>
+
+<div id="layout">
+  <aside id="left">
+    <div class="sec">
+      <h2>Add</h2>
+      <div class="palette">
+        <div class="chip" draggable="true" data-add="spot">
+          <svg viewBox="0 0 24 24" width="22" height="22"><rect x="8" y="3" width="8" height="4" rx="1" fill="#333"/><rect x="2" y="6" width="20" height="14" rx="3" fill="#333" stroke="#fff" stroke-width="1.2"/><circle cx="12" cy="13" r="4" fill="#fff"/></svg>
+          <span class="lbl">New Photo Spot</span>
+        </div>
+        <div class="chip" draggable="true" data-add="story">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 1l2.6 7.4L22 11l-7.4 2.6L12 21l-2.6-7.4L2 11l7.4-2.6z" fill="#D55E00" stroke="#fff" stroke-width="1.2"/></svg>
+          <span class="lbl">New Story Spot</span>
+        </div>
+      </div>
+      <div class="hint">Drag onto the map. Click any marker to edit. The site shows these only at high zoom or with "Show All Stories and Spots" on. The editor always shows them.</div>
+    </div>
+
+    <div class="sec">
+      <h2>All <span id="allCount" style="color:#9aa3ad"></span></h2>
+    </div>
+    <div class="list" id="allList"></div>
+  </aside>
+
+  <div id="stage">
+    <div id="map"></div>
+  </div>
+
+  <aside id="right">
+    <div id="form"><div class="empty">Nothing selected.<br><br>Click a marker, or drag <kbd>New Photo Spot</kbd> / <kbd>New Story Spot</kbd> onto the map.</div></div>
+  </aside>
+</div>
+
+<div id="staged">
+  <span>📎 Staged photos:</span>
+  <span class="files" id="stagedFiles"></span>
+  <button class="small" id="downloadPhotos">Download all</button>
+  <button class="small warn" id="clearStaged">Clear</button>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="spot-markers.js"></script>
+
+<script>
+/* ============================================================
+   Stories & Spots Editor
+   ============================================================ */
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const key = s => String(s||"").trim().toLowerCase();
+
+if (!window.SpotMarkers) {
+  document.getElementById("status").textContent = "spot-markers.js is missing. Upload it next to this page.";
+  throw new Error("spot-markers.js not found");
+}
+
+const CATEGORIES = {
+  CIV:   { label:"Civic",          color:"#E2E1E0" },
+  COMM:  { label:"Commercial",     color:"#E47303" },
+  RES:   { label:"Residential",    color:"#BDD76B" },
+  IND:   { label:"Industry",       color:"#AF350A" },
+  RAIL:  { label:"Rail",           color:"#8B6F47" },  // ← your choice
+  CANAL: { label:"Canal",          color:"#4A7C8C" }   // ← your choice
+};
+const DEFAULT_CAT = "COMM";
+
+/* Exact header order */
+const CHECKIN_OPTS = v => [["", "Just open it (default)"], ["gps", "Be near it (GPS)"], ["qr", "Scan its QR sign"], ["either", "Scan or be near"], ["both", "Scan while standing there"], ["none", "No stamp"]]
+  .map(([k, t]) => `<option value="${k}" ${String(v || "") === k ? "selected" : ""}>${t}</option>`).join("");
+const SPOT_COLS = ["SPOT_ID","TITLE","LAT","LONG","YEAR","PHOTO","DETAILS","BLURB","INTRO","CREDIT","KIND","CATEGORY","SERIES","ORDER","SOURCE","STAFF_NOTE","ICON","ICON_COLOR","EFFECT","CHECKIN","RADIUS"];
+
+/* ---------- State ---------- */
+window.PhotoResize = window.PhotoResize || {   // stand-in so uploads still work if photo-resize.js was not uploaded
+  process: async f => ({ blob: f, ext: ((String(f.name || "").split(".").pop() || "jpg").toLowerCase()), resized: false, why: "off" }),
+  describe: () => "download when you publish", controlHtml: () => "", wire(){}, settings: () => ({ on: false })
+};
+let spots = [];         // {row, ll, marker, el, kind}
+let headers = SPOT_COLS.slice();
+let loaded = false;
+let selected = null;    // spot ref
+let stagedPhotos = [];  // {name, blob}
+
+/* ---------- Map ---------- */
+const map = new maplibregl.Map({
+  container: "map",
+  style: {
+    version: 8,
+    sources: {
+      osm: {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }
+    },
+    layers: [{ id:"osm", type:"raster", source:"osm" }]
+  },
+  center: [-98.5795, 39.8283],
+  zoom: 4
+});
+if (window.ETSCommon) ETSCommon.applySiteView(map);
+map.addControl(new maplibregl.NavigationControl({ showCompass:false }), "bottom-right");
+map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+
+/* ============================================================
+   Loading
+   ============================================================ */
+
+$("pickFile").onclick = () => $("fileInput").click();
+$("fileInput").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => ingest(r.result, f.name);
+  r.readAsText(f);
+};
+
+// Auto-load from same folder (GitHub Pages); falls back to picker on file://
+(async () => {
+  try {
+    const res = await fetch("spots.csv", { cache: "no-store" });
+    if (res.ok) ingest(await res.text(), "spots.csv");
+    else setStatus("Click 'Pick spots.csv…' to begin");
+  } catch (e) {
+    setStatus("Click 'Pick spots.csv…' to begin");
+  }
+})();
+
+$("reloadBtn").onclick = async () => {
+  if (!confirm("Reload spots.csv from the server? Unsaved edits will be lost.")) return;
+  try {
+    const res = await fetch("spots.csv", { cache:"no-store" });
+    if (!res.ok) throw new Error(res.status + " " + res.statusText);
+    ingest(await res.text(), "spots.csv");
+    selected = null;
+    await loadPhotoRows();
+    toast("Reloaded from server");
+  } catch (e) {
+    toast("Reload failed: " + e.message);
+  }
+};
+
+/* ============================================================
+   photos.csv  (ITEM_ID, ORDER, PATH, CAPTION, CREDIT)
+   Row 1 per item = caption/credit for the main photo; rows 2+ = extra photos.
+   Loaded automatically from this folder, so saving never drops other rows.
+   ============================================================ */
+const PHOTO_COLS = ["ITEM_ID","ORDER","PATH","CAPTION","CREDIT"];
+let photoRows = [];
+let photosLoaded = false;
+const rowsFor = id => photoRows.filter(x => x.ITEM_ID === id).sort((a, b) => (parseFloat(a.ORDER) || 0) - (parseFloat(b.ORDER) || 0));
+const renumber = id => rowsFor(id).forEach((x, i) => { x.ORDER = String(i + 1); });
+function renameItem(oldId, newId){ photoRows.forEach(x => { if (x.ITEM_ID === oldId) x.ITEM_ID = newId; }); }
+function ingestPhotos(text, name){
+  photoRows = Papa.parse(text, { header: true, skipEmptyLines: "greedy" }).data.map(x => ({
+    ITEM_ID: String(x.ITEM_ID || "").trim(), ORDER: String(x.ORDER || "").trim(), PATH: String(x.PATH || "").trim(),
+    CAPTION: String(x.CAPTION || "").trim(), CREDIT: String(x.CREDIT || "").trim()
+  })).filter(x => x.ITEM_ID);
+  photosLoaded = true;
+  if (name) toast("Loaded " + name + " (" + photoRows.length + " rows)");
+}
+async function loadPhotoRows(){
+  try {
+    const res = await fetch("photos.csv", { cache: "no-store" });
+    if (res.ok) ingestPhotos(await res.text());
+    else if (res.status === 404) { photoRows = []; photosLoaded = true; }   // no photos.csv on the site yet
+  } catch (e) { /* opened from a file: use Pick photos.csv */ }
+  if (typeof selected !== "undefined" && selected) renderForm();
+}
+$("pickPhotos").onclick = () => $("filePhotos").click();
+$("filePhotos").onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { ingestPhotos(r.result, f.name); if (selected) renderForm(); };
+  r.readAsText(f);
+  e.target.value = "";
+};
+
+function renderGalEditor(scope, id){
+  const box = scope.querySelector("#galEditor");
+  if (!box) return;
+  const idNow = () => (scope.querySelector("#f-SPOT_ID") || {}).value || id;
+  const list = rowsFor(idNow());
+  box.innerHTML = '<div class="sub" style="margin:10px 0 4px"><b>Captions, credits and extra photos</b></div>' + list.map((x, i) => `
+    <div class="galrow" data-i="${i}" style="border:1px solid #d9dde2;border-radius:8px;padding:6px;margin-bottom:6px">
+      <div style="font-size:11px;color:#667;margin-bottom:3px">${i === 0 ? "Main photo (its file is the Photo path above; the Credit above is used if this credit is blank)" : "Extra photo " + i}</div>
+      ${i === 0 ? "" : '<div style="display:flex;gap:6px"><input type="text" class="g-path" placeholder="folder/photo.jpg" value="' + esc(x.PATH || "") + '" style="flex:1"><button class="small g-fbtn" type="button">Upload…</button><input type="file" class="g-file" accept="image/*" hidden></div>'}
+      <input type="text" class="g-cap" placeholder="Caption" value="${esc(x.CAPTION || "")}" style="margin-top:4px">
+      <input type="text" class="g-cred" placeholder="Credit (who took it or owns it)" value="${esc(x.CREDIT || "")}" style="margin-top:4px">
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <button class="small g-up" type="button" ${i < 2 ? "disabled" : ""}>↑</button>
+        <button class="small g-dn" type="button" ${i === 0 || i === list.length - 1 ? "disabled" : ""}>↓</button>
+        <span style="flex:1"></span>
+        <button class="small warn g-del" type="button" ${i === 0 && list.length > 1 ? "disabled title='Remove the extra photos first'" : ""}>Remove</button>
+      </div>
+    </div>`).join("") + `<button class="small" id="galAdd" type="button">＋ ${list.length ? "Add extra photo" : "Add caption / credit"}</button>`;
+
+  box.querySelectorAll(".galrow").forEach(rowEl => {
+    const i = +rowEl.dataset.i, x = list[i];
+    const bind = (sel, key) => { const el = rowEl.querySelector(sel); if (el) el.oninput = () => { x[key] = el.value.trim(); }; };
+    bind(".g-cap", "CAPTION"); bind(".g-cred", "CREDIT");
+    const pathEl = rowEl.querySelector(".g-path");
+    if (pathEl) {
+      let t = null;
+      pathEl.oninput = () => {
+        x.PATH = pathEl.value.trim();
+        clearTimeout(t);
+        t = setTimeout(() => {
+          pathEl.style.borderColor = ""; pathEl.title = "";
+          if (!x.PATH) return;
+          if (stagedPhotos.some(p => p.name === x.PATH)) { pathEl.title = "Staged upload, not published yet"; return; }
+          const im = new Image();
+          im.onerror = () => { pathEl.style.borderColor = "#b42318"; pathEl.title = "Not found: check the folder, spelling and extension"; };
+          im.src = x.PATH;
+        }, 400);
+      };
+      pathEl.oninput();
+      const fb = rowEl.querySelector(".g-fbtn"), fi = rowEl.querySelector(".g-file");
+      fb.onclick = () => fi.click();
+      fi.onchange = async () => {
+        const picked = fi.files[0];
+        if (!picked) return;
+        const r = await PhotoResize.process(picked), f = r.blob;
+        const sp = spots.find(z => z.row.SPOT_ID === idNow());
+        const folder = sp && sp.kind === "story" ? "stories" : "spots";
+        const ext = r.ext;
+        const suggested = folder + "/" + String(idNow()).toLowerCase().replace(/[^a-z0-9_-]+/g, "_") + "-" + Date.now().toString(36).slice(-4) + "." + ext;
+        const chosen = prompt("Photo path (relative to site root):", suggested);
+        if (chosen == null || !chosen.trim()) return;
+        const path = chosen.trim();
+        stagedPhotos = stagedPhotos.filter(p => p.name !== path);
+        stagedPhotos.push({ name: path, blob: f });
+        stageThumb(path, f);
+        pathEl.value = path;
+        pathEl.oninput();
+        renderStaged();
+        toast("Staged " + path + ": " + PhotoResize.describe(r));
+        fi.value = "";
+      };
+    }
+    const move = dir => { const o = list[i + dir]; const tmp = x.ORDER; x.ORDER = o.ORDER; o.ORDER = tmp; renumber(idNow()); renderGalEditor(scope, id); };
+    rowEl.querySelector(".g-up").onclick = () => move(-1);
+    rowEl.querySelector(".g-dn").onclick = () => move(1);
+    rowEl.querySelector(".g-del").onclick = () => { photoRows = photoRows.filter(r => r !== x); renumber(idNow()); renderGalEditor(scope, id); };
+  });
+  box.querySelector("#galAdd").onclick = () => {
+    if (!photosLoaded && !photoRows.length) toast("If you already have a photos.csv, use Pick photos.csv first. Otherwise downloading will replace it.");
+    photoRows.push({ ITEM_ID: idNow(), ORDER: String(list.length + 1), PATH: "", CAPTION: "", CREDIT: "" });
+    renderGalEditor(scope, id);
+  };
+}
+
+loadPhotoRows();   // after everything above is defined
+
+function ingest(csvText, filename){
+  const parsed = Papa.parse(csvText, { header:true, skipEmptyLines:"greedy" });
+  if (parsed.errors && parsed.errors.length){
+    const hard = parsed.errors.filter(e => !/TooFewFields|TooManyFields/.test(e.code));
+    if (hard.length) console.warn("CSV warnings for " + filename, hard);
+  }
+  const rows = parsed.data.filter(r => Object.values(r).some(v => String(v||"").trim() !== ""));
+  if (!rows.length){ toast(filename + " has no rows."); return; }
+
+  headers = parsed.meta.fields && parsed.meta.fields.length
+    ? parsed.meta.fields.slice()
+    : SPOT_COLS.slice();
+  // ensure known columns exist in headers
+  for (const c of SPOT_COLS) if (!headers.includes(c)) headers.push(c);
+
+  spots = rows.map(r => mkSpot(r));
+  loaded = true;
+  selected = null;
+
+  $("publishBtn").disabled = false;
+  setStatus("Loaded " + filename + " · " + spots.length + " items");
+
+  render();
+  fitAll();
+}
+
+function mkSpot(row){
+  const lat = parseFloat(row.LAT), lng = parseFloat(row.LONG);
+  return {
+    row,
+    ll: (isNaN(lat)||isNaN(lng)) ? null : [lng, lat],
+    marker: null, el: null,
+    kind: key(row.KIND) === "story" ? "story" : "spot"
+  };
+}
+
+function fitAll(){
+  const pts = spots.filter(s => s.ll);
+  if (!pts.length) return;
+  const b = new maplibregl.LngLatBounds();
+  pts.forEach(s => b.extend(s.ll));
+  map.fitBounds(b, { padding: 80, maxZoom: 17, duration: 0 });
+}
+
+function setStatus(s){ $("status").textContent = s; }
+
+/* ============================================================
+   Icons, colors and effects come from spot-markers.js
+   (the same file the public map uses)
+   ============================================================ */
+
+function iconOf(s){
+  const r = SpotMarkers.resolve(s.row, s.kind);
+  return SpotMarkers.svg(r.icon, r.color);
+}
+
+/* Redraw one marker after its look changed, without rebuilding the whole map */
+function refreshLook(s){
+  if (s.el){
+    SpotMarkers.fill(s.el, s.row, s.kind);
+    if (selected === s) s.el.classList.add("sel");
+  }
+  renderList();
+}
+
+/* The three "Marker look" dropdowns. A blank value means "the default for this kind". */
+function lookSelects(r, kind){
+  const g = SpotMarkers.GROUPS[kind], S = SpotMarkers;
+  const opts = (vals, labelOf, def, cur) =>
+    `<option value="">${esc(labelOf(def))} (default)</option>` +
+    vals.filter(v => v !== def).map(v => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(labelOf(v))}</option>`).join("");
+
+  const ic = String(r.ICON||"").trim().toLowerCase();
+  const iconCur = g.icons.includes(ic) && ic !== g.def ? ic : "";
+
+  const raw = String(r.ICON_COLOR||"").trim();
+  const rawL = raw.toLowerCase();
+  const pal = g.colors.map(c => c.toLowerCase());
+  const colorCur = pal.includes(rawL) && rawL !== g.defColor.toLowerCase() ? rawL : "";
+  const custom = /^#[0-9a-f]{6}$/i.test(raw) && !pal.includes(rawL);
+
+  const ef = String(r.EFFECT||"").trim().toLowerCase();
+  const effCur = S.EFFECT_LABELS[ef] && ef !== g.defEffect ? ef : "";
+
+  return {
+    icon:   opts(g.icons, v => S.ICON_LABELS[v], g.def, iconCur),
+    color:  opts(pal, v => S.COLOR_NAMES[v], g.defColor.toLowerCase(), colorCur) +
+            (custom ? `<option value="${esc(raw)}" selected>Custom ${esc(raw)}</option>` : ""),
+    effect: opts(Object.keys(S.EFFECT_LABELS), v => S.EFFECT_LABELS[v], g.defEffect, effCur)
+  };
+}
+
+/* Editor-only switch: preview animations on or off */
+const fxMotion = SpotMarkers.motion("kfx-editor");
+$("fxToggle").checked = fxMotion.on;
+$("fxToggle").onchange = e => fxMotion.set(e.target.checked);
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+
+function render(){
+  renderMarkers();
+  renderList();
+  renderForm();
+  renderStaged();
+}
+
+function renderMarkers(){
+  spots.forEach(s => { if (s.marker) s.marker.remove(); s.marker = null; s.el = null; });
+
+  spots.forEach(s => {
+    if (!s.ll) return;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.title = s.row.TITLE || s.row.SPOT_ID || "";
+    SpotMarkers.fill(b, s.row, s.kind);
+    b.addEventListener("click", e => { e.stopPropagation(); select(s); });
+
+    const marker = new maplibregl.Marker({ element: b, draggable: true })
+      .setLngLat(s.ll).addTo(map);
+
+    marker.on("dragstart", () => b.classList.add("dragging"));
+    marker.on("dragend", () => {
+      b.classList.remove("dragging");
+      const ll = marker.getLngLat();
+      s.ll = [ll.lng, ll.lat];
+      s.row.LAT = fmt(ll.lat);
+      s.row.LONG = fmt(ll.lng);
+      if (selected === s) renderForm();
+      toast((s.row.TITLE || s.row.SPOT_ID) + " moved");
+    });
+
+    s.marker = marker;
+    s.el = b;
+
+    if (selected === s) b.classList.add("sel");
+  });
+}
+
+function fmt(n){ return (+n).toFixed(13).replace(/0+$/,"").replace(/\.$/,""); }
+
+function renderList(){
+  $("allCount").textContent = spots.length ? "(" + spots.length + ")" : "";
+  const list = $("allList");
+  list.innerHTML = "";
+  // sort: stories first, then spots, each alphabetically by title
+  const sorted = spots.slice().sort((a,b) => {
+    if (a.kind !== b.kind) return a.kind === "story" ? -1 : 1;
+    return String(a.row.TITLE||"").localeCompare(String(b.row.TITLE||""));
+  });
+  for (const s of sorted){
+    const row = document.createElement("div");
+    row.className = "row" + (selected === s ? " sel" : "");
+    row.innerHTML =
+      iconOf(s) +
+      `<span class="name">${esc(s.row.TITLE || "(untitled)")}</span>` +
+      `<span class="id">${esc(s.row.SPOT_ID||"")}</span>`;
+    row.onclick = () => select(s);
+    list.appendChild(row);
+  }
+}
+
+function select(s){
+  selected = s;
+  render();
+  if (s.ll) map.easeTo({ center: s.ll, zoom: Math.max(map.getZoom(), 16) });
+}
+
+map.on("click", () => { selected = null; render(); });
+
+/* ============================================================
+   Form
+   ============================================================ */
+
+function renderForm(){
+  const box = $("form");
+  if (!selected){
+    box.innerHTML = `<div class="empty">Nothing selected.<br><br>Click a marker, or drag <kbd>New Photo Spot</kbd> / <kbd>New Story</kbd> onto the map.</div>`;
+    return;
+  }
+  const s = selected;
+  const r = s.row;
+  const kind = s.kind;
+  const cat = String(r.CATEGORY||"").trim().toUpperCase() || DEFAULT_CAT;
+
+  const look = lookSelects(r, kind);
+  box.innerHTML = `
+    <div class="form">
+      <span class="badge ${kind === 'story' ? 'story' : ''}">${kind === "story" ? "Story" : "Photo spot"}</span>
+
+      <div class="field">
+        <label>SPOT_ID</label>
+        <input type="text" id="f-SPOT_ID" value="${esc(r.SPOT_ID||"")}">
+        <div class="sub">Referenced by tours via ITEM_ID. Renaming breaks those references.</div>
+      </div>
+
+      <div class="field">
+        <label>Kind</label>
+        <select id="f-KIND">
+          <option value="spot"  ${kind==="spot"?"selected":""}>Spot: Shows an Area, such as Before / After</option>
+          <option value="story" ${kind==="story"?"selected":""}>Story: What Happened Here, a Story / Photo</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Marker look</label>
+        <div class="pair">
+          <select id="f-ICON" title="Icon">${look.icon}</select>
+          <div style="display:flex;gap:6px">
+            <select id="f-ICON_COLOR" title="Color" style="flex:1;min-width:0">${look.color}</select>
+            <input type="color" id="f-COLORPICK" title="Pick any color" value="${esc(SpotMarkers.resolve(r, kind).color.toLowerCase())}" style="width:38px;height:34px;padding:2px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;flex:none">
+          </div>
+        </div>
+        <select id="f-EFFECT" title="Effect" style="margin-top:8px">${look.effect}</select>
+        <div class="sub">Icon, color, effect. Blank means the default for a ${kind}. The square picks any color. Spots and stories keep their own icon sets, so they stay distinguishable. Very pale colors fade into the white outline.</div>
+      </div>
+
+      <div class="field">
+        <label>Title</label>
+        <input type="text" id="f-TITLE" value="${esc(r.TITLE||"")}">
+      </div>
+
+      <div class="pair">
+        <div class="field">
+          <label>Category</label>
+          <div class="catrow">
+            <select id="f-CATEGORY">
+              <option value="">—</option>
+              ${Object.entries(CATEGORIES).map(([k,v]) =>
+                `<option value="${k}" ${k===cat?"selected":""}>${k} — ${esc(v.label)}</option>`).join("")}
+            </select>
+            <span class="sw" id="catSw" style="background:${cat ? (CATEGORIES[cat]||{}).color : '#ccc'}"></span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Year</label>
+          <input type="text" id="f-YEAR" value="${esc(r.YEAR||"")}" placeholder="e.g. 1907 or 1940s">
+        </div>
+      </div>
+
+      <div class="pair">
+        <div class="field"><label>Latitude</label><input type="text" id="f-LAT" value="${esc(r.LAT||"")}"></div>
+        <div class="field"><label>Longitude</label><input type="text" id="f-LONG" value="${esc(r.LONG||"")}"></div>
+      </div>
+
+      <div class="field">
+        <label>Photo path</label>
+        <input type="text" id="f-PHOTO" value="${esc(r.PHOTO||"")}" placeholder="spots/foo.jpg or stories/bar.jpg">
+        <div class="sub">Relative to the site root. No leading slash.</div>
+        ${photoBlock(r.PHOTO, kind)}
+      </div>
+
+      <div class="field">
+        <label>Blurb (short preview)</label>
+        <textarea id="f-BLURB" rows="2" maxlength="220" placeholder="One or two sentences for the opening preview. Leave blank to use the first sentence of Details.">${esc(r.BLURB||"")}</textarea>
+      </div>
+
+      <div class="field">
+        <label>Show in the opening intro</label>
+        <select id="f-INTRO">
+          <option value="" ${r.INTRO==="no"?"":"selected"}>Yes</option>
+          <option value="no" ${r.INTRO==="no"?"selected":""}>No, leave it out</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Details</label>
+        <textarea id="f-DETAILS">${esc(r.DETAILS||"")}</textarea>
+      </div>
+
+      <div class="field">
+        <label>Credit</label>
+        <input type="text" id="f-CREDIT" value="${esc(r.CREDIT||"")}">
+      </div>
+
+      <div class="field">
+        <label>Source</label>
+        <input type="text" id="f-SOURCE" value="${esc(r.SOURCE||"")}">
+      </div>
+
+      <div class="field">
+        <label>Passport Stamp</label>
+        <div class="pair"><div><label>How to earn the stamp</label><select id="f-CHECKIN">${CHECKIN_OPTS(r.CHECKIN)}</select></div><div><label>Check-in radius (m)</label><input type="text" id="f-RADIUS" value="${esc(r.RADIUS||"")}" placeholder="50"></div></div>
+      </div>
+
+      <div id="galEditor"></div>
+
+      <details class="future">
+        <summary>Series &amp; Order (future)</summary>
+        <div class="field" style="margin-top:8px">
+          <label>Series</label>
+          <input type="text" id="f-SERIES" value="${esc(r.SERIES||"")}" placeholder="Group name for multi-photo sets">
+        </div>
+        <div class="field">
+          <label>Order</label>
+          <input type="text" id="f-ORDER" value="${esc(r.ORDER||"")}" placeholder="Position within series">
+        </div>
+        <div class="sub" style="margin-top:4px">Not yet used by the site. Fill in now, wire up later.</div>
+      </details>
+
+      <details class="staff">
+        <summary>Staff note (internal)</summary>
+        <div class="field">
+          <textarea id="f-STAFF_NOTE" style="min-height:60px">${esc(r.STAFF_NOTE||"")}</textarea>
+        </div>
+      </details>
+
+      <div class="actions">
+        <button id="dupSpot" class="small">Duplicate</button>
+        <span class="grow"></span>
+        <button id="delSpot" class="small warn">Delete</button>
+      </div>
+    </div>
+  `;
+
+  bindText(box, "f-SPOT_ID",    v => { renameItem(r.SPOT_ID, v); r.SPOT_ID = v; renderList(); });
+  bindText(box, "f-TITLE",      v => { r.TITLE = v; renderList(); if (s.marker) s.marker.getElement().title = v; });
+  bindText(box, "f-YEAR",       v => { r.YEAR = v; });
+  bindText(box, "f-LAT",        v => { r.LAT = v; syncLL(s, v, r.LONG); });
+  bindText(box, "f-LONG",       v => { r.LONG = v; syncLL(s, r.LAT, v); });
+  bindText(box, "f-PHOTO",      v => { r.PHOTO = v; refreshPhotoPreview(box, v); });
+  bindText(box, "f-DETAILS",    v => { r.DETAILS = v; });
+  bindText(box, "f-BLURB",      v => { r.BLURB = v; });
+  bindText(box, "f-INTRO",      v => { r.INTRO = v; });
+  bindText(box, "f-CREDIT",     v => { r.CREDIT = v; });
+  bindText(box, "f-SOURCE",     v => { r.SOURCE = v; });
+  box.querySelector("#f-CHECKIN").onchange = e => { r.CHECKIN = e.target.value; };
+  bindText(box, "f-RADIUS", v => { r.RADIUS = v; });
+  bindText(box, "f-SERIES",     v => { r.SERIES = v; });
+  bindText(box, "f-ORDER",      v => { r.ORDER = v; });
+  renderGalEditor(box, r.SPOT_ID);
+  bindText(box, "f-STAFF_NOTE", v => { r.STAFF_NOTE = v; });
+
+  box.querySelector("#f-KIND").onchange = e => {
+    r.KIND = e.target.value;
+    s.kind = e.target.value === "story" ? "story" : "spot";
+    // each kind has its own icon set: clear an icon that belongs to the other kind (a color you chose stays)
+    const g = SpotMarkers.GROUPS[s.kind];
+    if (!g.icons.includes(String(r.ICON||"").trim().toLowerCase())) r.ICON = "";
+    render();
+  };
+
+  const picker = box.querySelector("#f-COLORPICK");
+  ["ICON", "ICON_COLOR", "EFFECT"].forEach(col => {
+    box.querySelector("#f-" + col).onchange = e => {
+      r[col] = e.target.value;
+      picker.value = SpotMarkers.resolve(r, s.kind).color.toLowerCase();   // keep the square in sync with the dropdown
+      refreshLook(s);
+    };
+  });
+  // the color square: any color, shown in the dropdown as "Custom #rrggbb"
+  picker.oninput = e => {
+    const hex = e.target.value;
+    r.ICON_COLOR = hex;
+    const sel = box.querySelector("#f-ICON_COLOR");
+    let o = sel.querySelector("option[data-custom]");
+    if (!o) { o = document.createElement("option"); o.dataset.custom = "1"; sel.appendChild(o); }
+    o.value = hex; o.textContent = "Custom " + hex; o.selected = true;
+    refreshLook(s);
+  };
+
+  box.querySelector("#f-CATEGORY").onchange = e => {
+    r.CATEGORY = e.target.value;
+    const sw = box.querySelector("#catSw");
+    sw.style.background = r.CATEGORY ? (CATEGORIES[r.CATEGORY]||{}).color : "#ccc";
+  };
+
+  box.querySelector("#dupSpot").onclick = () => {
+    const nr = Object.assign({}, r);
+    nr.SPOT_ID = proposeNewId(s.kind);
+    nr.TITLE = (r.TITLE||"") + " (copy)";
+    const n = mkSpot(nr);
+    // offset slightly so it doesn't hide behind the original
+    if (n.ll){ n.ll = [n.ll[0] + 0.00015, n.ll[1] + 0.00015]; nr.LAT = fmt(n.ll[1]); nr.LONG = fmt(n.ll[0]); }
+    spots.push(n);
+    selected = n;
+    render();
+    toast("Duplicated as " + nr.SPOT_ID);
+  };
+
+  box.querySelector("#delSpot").onclick = () => {
+    if (!confirm("Delete " + (r.SPOT_ID||"") + "? This removes it from spots.csv.")) return;
+    photoRows = photoRows.filter(x => x.ITEM_ID !== r.SPOT_ID);
+    spots = spots.filter(x => x !== s);
+    selected = null;
+    render();
+    toast("Deleted " + (r.SPOT_ID||""));
+  };
+
+  wirePhotoBlock(box, s);
+}
+
+function bindText(scope, id, onInput){
+  const el = scope.querySelector("#" + CSS.escape(id));
+  if (!el) return;
+  el.oninput = () => onInput(el.value);
+}
+
+function syncLL(s, latStr, lngStr){
+  const lat = parseFloat(latStr), lng = parseFloat(lngStr);
+  if (isNaN(lat) || isNaN(lng)) return;
+  s.ll = [lng, lat];
+  if (s.marker) s.marker.setLngLat(s.ll);
+}
+
+/* ============================================================
+   Photo
+   ============================================================ */
+
+function photoBlock(path, kind){
+  return `
+    <div class="photo">
+      <div class="thumb missing" id="photoThumb">no photo</div>
+      <div class="meta">
+        <div id="photoInfo">${path ? `<code>${esc(path)}</code>` : "Set a photo path above, or upload a file below."}</div>
+        ${PhotoResize.controlHtml()}
+        <div class="actions">
+          <button class="small" id="uploadPhoto" type="button">Upload photo…</button>
+          <input type="file" id="photoInput" accept="image/*" hidden>
+        </div>
+      </div>
+    </div>`;
+}
+
+function refreshPhotoPreview(scope, path){
+  const thumb = scope.querySelector("#photoThumb");
+  const info  = scope.querySelector("#photoInfo");
+  if (!thumb) return;
+  thumb.classList.add("missing");
+  thumb.textContent = path ? "loading…" : "no photo";
+  thumb.innerHTML = path ? "loading…" : "no photo";
+  if (info) info.innerHTML = path ? `<code>${esc(path)}</code>` : "Set a photo path above, or upload a file below.";
+
+  if (!path) return;
+  const im = new Image();
+  im.onload = () => {
+    thumb.classList.remove("missing");
+    thumb.innerHTML = "";
+    im.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:8px";
+    thumb.appendChild(im);
+  };
+  im.onerror = () => {
+    thumb.classList.add("missing");
+    thumb.textContent = "not found";
+  };
+  // add a cache-bust so re-uploads refresh
+  im.src = path + (path.includes("?") ? "&" : "?") + "v=" + Date.now();
+}
+
+function wirePhotoBlock(scope, s){
+  const btn = scope.querySelector("#uploadPhoto");
+  const input = scope.querySelector("#photoInput");
+  if (!btn || !input) return;
+
+  // initial preview if the row already has a path
+  refreshPhotoPreview(scope, s.row.PHOTO || "");
+
+  btn.onclick = () => input.click();
+  PhotoResize.wire(scope);
+  input.onchange = async () => {
+    const picked = input.files[0]; if (!picked) return;
+    const r = await PhotoResize.process(picked), f = r.blob;
+    const ext = r.ext;
+    // derive a filename from the uploaded file's name
+    const base = (picked.name.replace(/\.[^.]+$/, "") || "photo").replace(/[^a-z0-9_-]+/gi, "_");
+    const folder = s.kind === "story" ? "stories" : "spots";
+    const suggested = folder + "/" + base + "." + ext;
+
+    const chosen = prompt("Photo path (relative to site root):", s.row.PHOTO || suggested);
+    if (chosen == null) return;
+    const path = chosen.trim();
+    if (!path) return;
+
+    s.row.PHOTO = path;
+    stagedPhotos = stagedPhotos.filter(p => p.name !== path);
+    stagedPhotos.push({ name: path, blob: f });
+    stageThumb(path, f);
+
+    // update form field + preview
+    const field = scope.querySelector("#f-PHOTO");
+    if (field) field.value = path;
+    refreshPhotoPreview(scope, path);
+    renderStaged();
+    toast("Staged " + path + ": " + PhotoResize.describe(r));
+    input.value = "";
+  };
+}
+
+/* ---------- Staged photos ---------- */
+
+function renderStaged(){
+  const bar = $("staged");
+  if (!stagedPhotos.length){ bar.classList.remove("on"); return; }
+  bar.classList.add("on");
+  $("stagedFiles").innerHTML = stagedPhotos.map(p => `<code>${esc(p.name)}</code>`).join(", ");
+}
+
+$("downloadPhotos").onclick = () => {
+  stagedPhotos.forEach(p => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(p.blob);
+    // keep folder in the suggested name but browsers may flatten it — user can move file manually
+    a.download = p.dl || p.name.split("/").pop();
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+};
+$("clearStaged").onclick = () => { stagedPhotos = []; renderStaged(); };
+
+/* ============================================================
+   Add via palette drag
+   ============================================================ */
+
+let dragKind = null;
+document.querySelectorAll(".chip").forEach(chip => {
+  chip.addEventListener("dragstart", e => {
+    dragKind = chip.dataset.add;
+    e.dataTransfer.effectAllowed = "copy";
+    e.dataTransfer.setData("text/plain", dragKind);
+  });
+  chip.addEventListener("dragend", () => { dragKind = null; });
+});
+
+const stage = $("stage");
+stage.addEventListener("dragover", e => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+stage.addEventListener("drop", e => {
+  e.preventDefault();
+  const kind = e.dataTransfer.getData("text/plain") || dragKind;
+  dragKind = null;
+  if (!kind) return;
+  if (!loaded) return toast("Load spots.csv first.");
+
+  const rect = map.getContainer().getBoundingClientRect();
+  const ll = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+
+  const row = {
+    SPOT_ID: proposeNewId(kind),
+    TITLE: kind === "story" ? "New Story" : "New Photo Spot",
+    LAT: fmt(ll.lat),
+    LONG: fmt(ll.lng),
+    YEAR: "",
+    PHOTO: "",
+    DETAILS: "",
+    CREDIT: "",
+    KIND: kind,
+    CATEGORY: DEFAULT_CAT,
+    SERIES: "",
+    ORDER: "",
+    SOURCE: "",
+    STAFF_NOTE: ""
+  };
+  // ensure every column the source file had is present
+  headers.forEach(h => { if (!(h in row)) row[h] = ""; });
+
+  const s = mkSpot(row);
+  spots.push(s);
+  selected = s;
+  render();
+  toast("Added " + row.SPOT_ID);
+});
+
+function proposeNewId(kind){
+  const prefix = kind === "story" ? "ST-" : "SPOT-";
+  const re = new RegExp("^" + prefix.replace(/[-]/g,"\\-") + "(\\d+)$", "i");
+  const nums = spots
+    .map(s => re.exec(String(s.row.SPOT_ID||"").trim()))
+    .filter(Boolean).map(m => +m[1]);
+  const n = (nums.length ? Math.max(...nums) : 0) + 1;
+  return prefix + String(n).padStart(3, "0");
+}
+
+/* ============================================================
+   Publish
+   ============================================================ */
+
+$("publishBtn").onclick = () => {
+  const rows = spots.map(s => pick(s.row, headers));
+  const csv = Papa.unparse({ fields: headers, data: rows });
+  download("spots.csv", csv);
+  if (photosLoaded || photoRows.length) {
+    const sorted = photoRows.slice().sort((a, b) => a.ITEM_ID.localeCompare(b.ITEM_ID) || (parseFloat(a.ORDER) || 0) - (parseFloat(b.ORDER) || 0));
+    download("photos.csv", Papa.unparse({ fields: PHOTO_COLS, data: sorted.map(x => pick(x, PHOTO_COLS)) }));
+  }
+  toast(`Downloaded spots.csv · ${spots.length} items` +
+        (stagedPhotos.length ? ` · ${stagedPhotos.length} staged photos below` : ""));
+};
+
+function pick(row, cols){
+  const out = {};
+  for (const c of cols) out[c] = row[c] != null ? row[c] : "";
+  return out;
+}
+
+function download(name, text){
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ============================================================
+   Toast
+   ============================================================ */
+
+let toastTimer = 0;
+function toast(msg){
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2400);
+}
+</script>
+<script src="photo-resize.js"></script>
+<script src="photo-thumb.js"></script>
+<script>window.PhotoThumb = window.PhotoThumb || { entry: async () => null, addButton() {} };</script>
+<script src="publish.js"></script>
+<script>
+  async function stageThumb(fullPath, blob) {      // also stage a small copy at folder/thumbs/name.jpg
+    try {
+      const t = await PhotoThumb.entry(fullPath, blob);
+      if (!t) return;
+      stagedPhotos = stagedPhotos.filter(p => p.name !== t.name);
+      stagedPhotos.push(t); renderStaged();
+    } catch (e) {}
+  }
+GHPublish.attach({
+  buttons: ["publishBtn", "downloadPhotos"],
+  // The editor strips folders from its downloads, so look the full path (spots/... or stories/...) back up
+  route: name => {
+    const p = stagedPhotos.find(x => x.dl === name) || stagedPhotos.find(x => !x.dl && x.name.split("/").pop() === name);
+    return p ? p.name.replace(/^\/+/, "") : undefined;
+  },
+  onPublished: () => { stagedPhotos = []; renderStaged(); }
+});
+  PhotoThumb.addButton("publishBtn", t => { stagedPhotos = stagedPhotos.filter(p => p.name !== t.name); stagedPhotos.push(t); }, renderStaged);
+</script>
+</body>
+</html>
