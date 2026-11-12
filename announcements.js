@@ -32,9 +32,22 @@
   const list = v => str(v).split("|").map(s => s.trim()).filter(Boolean);
   const goodColor = c => /^#[0-9a-f]{6}$/i.test(str(c)) ? str(c) : DEFAULT_COLOR;
 
-  function readable(hex) {                                         // white or near-black text, whichever reads better on this color
-    const c = goodColor(hex).slice(1), n = parseInt(c, 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-    return (0.299 * r + 0.587 * g + 0.114 * b) > 160 ? "#1a1a1a" : "#ffffff";
+  function lum(hex) {                                              // how bright a color is, 0 (black) to 1 (white), as the accessibility standard (WCAG) measures it
+    const c = goodColor(hex).slice(1);
+    const v = [0, 2, 4].map(i => { const x = parseInt(c.substr(i, 2), 16) / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  }
+  const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  function onWhite(hex) {                                         // the same color, darkened until it can be read as text on a white page (4.5 to 1)
+    let c = goodColor(hex), n = 0;
+    while (contrast(c, "#ffffff") < 4.5 && n++ < 30) {
+      const v = [1, 3, 5].map(i => Math.max(0, Math.floor(parseInt(c.substr(i, 2), 16) * 0.9)));
+      c = "#" + v.map(x => x.toString(16).padStart(2, "0")).join("");
+    }
+    return c;
+  }
+  function readable(hex) {                                         // white or near-black text, whichever is easier to read on this color
+    return contrast("#ffffff", hex) >= contrast("#1a1a1a", hex) ? "#ffffff" : "#1a1a1a";
   }
 
   function scheduleFromRow(r) {
@@ -108,5 +121,5 @@
   }
   const active = (items, nowWall) => withStatus(items, nowWall).filter(a => a.st.state !== "later");   // on now, or starting within its "coming soon" window
 
-  window.Announcements = { COLUMNS, DEFAULT_TZ, DEFAULT_COLOR, readable, goodColor, scheduleFromRow, scheduleToFields, fromRow, toRow, parse, load, fromEventsIndex, withStatus, active };
+  window.Announcements = { COLUMNS, DEFAULT_TZ, DEFAULT_COLOR, readable, onWhite, contrast, goodColor, scheduleFromRow, scheduleToFields, fromRow, toRow, parse, load, fromEventsIndex, withStatus, active };
 })();

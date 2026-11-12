@@ -15,7 +15,8 @@ window.ETS_CONFIG = {
   ],
 
   // Shared by every event and the live map; never copied into an event folder.
-  GLOBAL: ["announcements.csv"],
+  GLOBAL: ["announcements.csv", "labels.csv"],
 
-  ANNOUNCEMENTS_FILE: "announcements.csv"
+  ANNOUNCEMENTS_FILE: "announcements.csv",
+  LABELS_FILE: "labels.csv"
 };

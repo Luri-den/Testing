@@ -53,13 +53,14 @@ code{background:#eee;padding:1px 4px;border-radius:3px}
 <script src="welcome-themes.js"></script>
 <script src="schedule.js"></script>
 <script src="announcements.js"></script>
+<script src="labels.js"></script>
 <script src="marker-fill.js"></script>
 <script src="ets-config.js"></script>
 <script src="workspace.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
-const ORDER = ["Setup","Settings","Places","Children","Stories and spots","Categories","Marker shapes","Photos","Passport","Tours","Announcements","Icons","Old maps","Events"];
+const ORDER = ["Setup","Settings","Places","Children","Stories and spots","Categories","Marker shapes","Photos","Passport","Tours","Announcements","Icons","Wording","Old maps","Events"];
 const BIG_PHOTO = 1.5 * 1024 * 1024;
 const PHOTO_EXT = ["jpg","jpeg","png","webp","JPG","PNG"];
 let issues = [], counts = { files: 0, photos: 0 }, evSlug = "", evInfo = null, headCache = new Map();
@@ -166,7 +167,7 @@ async function runOnce(){
     site = parseCsv("Settings", "site.csv", got["site.csv"].text, ["KEY","VALUE"], "the Settings editor");
     site.rows.forEach(r => { S[v(r, "KEY")] = v(r, "VALUE"); });
   } else add("note", "Settings", "site.csv", "No site.csv, so the page uses its built-in defaults.", "");
-  const KNOWN = ["PLACE","HEADER","TAB_TITLE","BAR_COLOR","CENTER_LAT","CENTER_LNG","ZOOM","BOUNDS_WEST","BOUNDS_SOUTH","BOUNDS_EAST","BOUNDS_NORTH","MIN_ZOOM","MAX_ZOOM","FIT_TO_MARKERS","PASSPORT","PASSPORT_RANKS","YEAR_SLIDER","OVERLAY_SLIDER","AERIAL_BUTTON","EVENT_BUTTON","EVENT_TITLE","EVENT_TEXT","WELCOME_THEME","WELCOME_TEXT"];
+  const KNOWN = ["PLACE","HEADER","TAB_TITLE","BAR_COLOR","ACCENT_COLOR","TOUR_SPIN","TOUR_SPIN_SPEED","TOUR_TILT","CENTER_LAT","CENTER_LNG","ZOOM","BOUNDS_WEST","BOUNDS_SOUTH","BOUNDS_EAST","BOUNDS_NORTH","MIN_ZOOM","MAX_ZOOM","FIT_TO_MARKERS","PASSPORT","PASSPORT_RANKS","YEAR_SLIDER","OVERLAY_SLIDER","AERIAL_BUTTON","EVENT_BUTTON","EVENT_TITLE","EVENT_TEXT","WELCOME_THEME","WELCOME_TEXT"];
   Object.keys(S).forEach(k => { if (k && !KNOWN.includes(k)) add("note", "Settings", k, "Is not a setting the page knows about, so it is ignored.", "Check the spelling, or remove the row."); });
   if (site && !S.PLACE) add("warn", "Settings", "PLACE", "Is empty. {PLACE} will be blank in the header and welcome screen.", "Fill it in on the Settings editor.");
   if (S.BAR_COLOR && !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(S.BAR_COLOR)) add("warn", "Settings", "BAR_COLOR", '"' + S.BAR_COLOR + '" is not a color like #E47303.', "Pick the color again in the Settings editor.");
@@ -178,6 +179,10 @@ async function runOnce(){
   const minZ = num(S.MIN_ZOOM), maxZ = num(S.MAX_ZOOM), z = num(S.ZOOM);
   if (minZ != null && maxZ != null && minZ > maxZ) add("problem", "Settings", "MIN_ZOOM / MAX_ZOOM", "The smallest zoom is larger than the biggest.", "Swap them in the Settings editor.");
   if (z != null && ((minZ != null && z < minZ) || (maxZ != null && z > maxZ))) add("warn", "Settings", "ZOOM", "The starting zoom is outside the allowed zoom range.", "");
+  if (S.ACCENT_COLOR && !/^#[0-9a-f]{6}$/i.test(S.ACCENT_COLOR)) add("warn", "Settings", "ACCENT_COLOR", '"' + S.ACCENT_COLOR + '" is not a color like #E47303, so the top bar color is used.', "Pick the color again in the Settings editor.");
+  if (S.TOUR_SPIN && !/^(yes|no)$/i.test(S.TOUR_SPIN)) add("warn", "Settings", "TOUR_SPIN", '"' + S.TOUR_SPIN + '" should be yes or no.', "");
+  if (S.TOUR_SPIN_SPEED && !/^(slow|medium|fast)$/i.test(S.TOUR_SPIN_SPEED)) add("warn", "Settings", "TOUR_SPIN_SPEED", '"' + S.TOUR_SPIN_SPEED + '" should be slow, medium or fast.', "");
+  if (S.TOUR_TILT && !(num(S.TOUR_TILT) >= 0 && num(S.TOUR_TILT) <= 60)) add("warn", "Settings", "TOUR_TILT", '"' + S.TOUR_TILT + '" should be a number from 0 to 60.', "");
   if (S.WELCOME_THEME && window.WelcomeThemes && !WelcomeThemes.list[lc(S.WELCOME_THEME)]) add("warn", "Settings", "WELCOME_THEME", '"' + S.WELCOME_THEME + '" is not a theme (' + Object.keys(WelcomeThemes.list).join(", ") + ").", "Pick one in the Settings editor.");
   if (/^yes$/i.test(S.PASSPORT || "yes") === false) add("note", "Passport", "", "The passport is turned off, so its files are not checked.", "");
 
@@ -373,6 +378,7 @@ async function runOnce(){
         if (v(r, "MINUTES") && !(num(v(r, "MINUTES")) > 0)) add("warn", "Tours", ref, 'MINUTES "' + v(r, "MINUTES") + '" is not a positive number, so the time is worked out from the route instead.', "Type a number of minutes, or clear it in " + WT + ".");
         if (v(r, "FEATURED") && !/^(y|yes|true|1|n|no|false|0)$/i.test(v(r, "FEATURED"))) add("warn", "Tours", ref, 'FEATURED "' + v(r, "FEATURED") + '" should be yes or blank.', "Tick or untick Feature in " + WT + ".");
         if (/^(y|yes|true|1)$/i.test(v(r, "FEATURED")) && !v(r, "ROUTE") && !(got["tourstops.csv"].text || "").split(/\r?\n/).some(l => lc(l.split(",")[0]) === lc(id))) add("warn", "Tours", ref, "Is featured but has no stops and no route, so there is nothing to show when a visitor presses Start.", "Add stops or a route in " + WT + ".");
+        if (v(r, "SPIN") && !/^(yes|no)$/i.test(v(r, "SPIN"))) add("warn", "Tours", ref, 'SPIN "' + v(r, "SPIN") + '" should be yes, no or blank (blank follows the site setting).', "Choose the camera setting again in " + WT + ".");
         if (!v(r, "SUMMARY") && !v(r, "INTRO")) add("note", "Tours", ref, "Has no short description or intro, so its card in the visitor's list has no text.", "");
       });
       TT.rows.forEach(r => { const id = v(r, "TOUR_ID"); if (!id) return; tourIds.add(lc(id)); const c = v(r, "CATEGORY").toUpperCase(); if (c && cats.size && !cats.has(c)) add("warn", "Tours", "tour " + id, 'Category "' + c + '" is not in categories.csv.', ""); });
@@ -439,6 +445,23 @@ async function runOnce(){
         if (!v(r, "BLURB")) add("note", "Announcements", ref, "Has no description sentence, so the welcome screen shows only its name.", "");
         else if (v(r, "BLURB").length > 170) add("note", "Announcements", ref, "Its description is " + v(r, "BLURB").length + " characters. The welcome screen cuts it at about 170.", "");
         if (!v(r, "VENUE_IDS") && !v(r, "TOUR_ID") && !v(r, "LINK") && !off) add("note", "Announcements", ref, "Has no place, tour or web page, so its welcome-screen button just closes the screen.", "");
+      });
+    }
+  }
+
+  /* wording (labels.csv): shared by the whole site */
+  if (window.Labels) {
+    const lb = await tryFetch((window.ETS_CONFIG && ETS_CONFIG.LABELS_FILE) || "labels.csv");
+    if (lb && lb.ok) {
+      const L = parseCsv("Wording", "labels.csv", await lb.text(), ["KEY", "TEXT"], "the Wording tab"), seenK = new Set();
+      L.rows.forEach((r, i) => {
+        const k = v(r, "KEY"), t = String(r.TEXT == null ? "" : r.TEXT), ref = k || ("row " + (i + 2));
+        if (!k) return;
+        if (!Labels.DEF[k]) { add("note", "Wording", ref, "Is not a phrase this site uses, so it is ignored.", ""); return; }
+        if (seenK.has(k)) add("warn", "Wording", ref, "Appears twice. The last one wins.", "");
+        seenK.add(k);
+        (Labels.DEF[k].text.match(/\{\w+\}/g) || []).forEach(ph => { if (t.trim() && t.indexOf(ph) < 0) add("warn", "Wording", ref, "Leaves out " + ph + ", so the day and time will not appear.", "Put " + ph + " back in the phrase in the Wording tab."); });
+        if (k === "tours.chips" && t.trim()) { const parts = t.split("|").map(x => /^\s*\d+\s*=\s*\S/.test(x)); if (parts.some(ok => !ok)) add("warn", "Wording", ref, "Some time buttons are not written like 30=30 min, so they are skipped.", "Fix them in the Wording tab."); }
       });
     }
   }

@@ -7,6 +7,9 @@
 (function () {
   var q = location.search, DEBUG = /[?&]debug=1/.test(q), lines = [], panel = null;
   window.__SAFE = /[?&]safe=1/.test(q);
+  /* Is each code file as new as this page? (Files are updated one at a time, and a browser can hold an older copy.) */
+  var NEEDS = { Announcements: ["load", "active", "withStatus", "fromEventsIndex", "readable", "onWhite"], Labels: ["t", "chips", "load"], TourInfo: ["listHtml", "overviewHtml", "goText", "legText", "primaryMode", "kindWord", "meta", "fits"], TourCamera: ["create"], EventSchedule: ["status", "statusText", "range", "describe"] };
+  var FILES = { Announcements: "announcements.js", Labels: "labels.js", TourInfo: "tour-info.js", TourCamera: "tour-camera.js", EventSchedule: "schedule.js" };
   function show() {
     if (!DEBUG) return;
     if (!panel) { panel = document.createElement("pre"); panel.id = "dbgPanel"; panel.style.cssText = "position:fixed;left:6px;right:6px;bottom:6px;z-index:99999;max-height:45vh;overflow:auto;margin:0;padding:8px 10px;background:#111e;color:#cfe;font:11px/1.4 monospace;white-space:pre-wrap;border-radius:6px"; (document.body || document.documentElement).appendChild(panel); }
@@ -20,7 +23,8 @@
   window.addEventListener("unhandledrejection", function (e) { window.__dbg("PROBLEM: " + (e.reason && e.reason.message || e.reason)); });
   if (DEBUG) {
     window.__dbg("debug is on" + (window.__SAFE ? ", safe mode is on" : "") + ". " + navigator.userAgent);
-    addEventListener("load", function () { window.__dbg("page finished loading. maplibre: " + typeof maplibregl + ", Papa: " + typeof Papa + ", Labels: " + typeof Labels + ", TourCamera: " + typeof TourCamera + ", service worker: " + (navigator.serviceWorker && navigator.serviceWorker.controller ? "active" : "none")); });
+    if (window.caches) caches.keys().then(function (k) { window.__dbg("saved copies on this device: " + (k.join(", ") || "none")); });
+    addEventListener("load", function () { Object.keys(NEEDS).forEach(function (k) { var o = window[k]; if (!o) { window.__dbg("MISSING: " + FILES[k] + " did not load"); return; } NEEDS[k].forEach(function (m) { if (typeof o[m] !== "function") window.__dbg("OUT OF DATE: " + FILES[k] + " has no \"" + m + "\". Upload the newest " + FILES[k] + ", then reload with Ctrl+F5."); }); }); window.__dbg("page finished loading. maplibre: " + typeof maplibregl + ", Papa: " + typeof Papa + ", Labels: " + typeof Labels + ", TourCamera: " + typeof TourCamera + ", service worker: " + (navigator.serviceWorker && navigator.serviceWorker.controller ? "active" : "none")); });
     if (window.fetch) {
       var of = window.fetch;
       window.fetch = function (u) {
@@ -849,24 +853,24 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
 /* Watch an element's size; where the browser cannot, fall back to window resizes. A missing feature must never stop the map loading. */
 function watchSize(el, fn) { try { new ResizeObserver(fn).observe(el); } catch (e) { addEventListener("resize", fn); } }
 </script>
-<script src="welcome-themes.js"></script>
-<script src="marker-shapes.js"></script>
-<script src="lines-style.js"></script>
-<script src="ets-config.js"></script>
-<script src="labels.js"></script>
-<script src="schedule.js"></script>
-<script src="announcements.js"></script>
-<script src="tour-info.js"></script>
-<script src="tour-camera.js"></script>
-<script src="marker-fill.js"></script>
-<script src="spot-markers.js"></script>
+<script src="welcome-themes.js?v=20261112b"></script>
+<script src="marker-shapes.js?v=20261112b"></script>
+<script src="lines-style.js?v=20261112b"></script>
+<script src="ets-config.js?v=20261112b"></script>
+<script src="labels.js?v=20261112b"></script>
+<script src="schedule.js?v=20261112b"></script>
+<script src="announcements.js?v=20261112b"></script>
+<script src="tour-info.js?v=20261112b"></script>
+<script src="tour-camera.js?v=20261112b"></script>
+<script src="marker-fill.js?v=20261112b"></script>
+<script src="spot-markers.js?v=20261112b"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
   if (typeof Papa === "undefined") {
     document.write('<script src="https://unpkg.com/papaparse@5.4.1/dist/papaparse.min.js"><\/script>');
   }
 </script>
-<script src="icons.js"></script>
+<script src="icons.js?v=20261112b"></script>
 <script>
 const $ = id => document.getElementById(id);
 
@@ -1500,8 +1504,8 @@ const SETTINGS_READY = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("
       const six = c => /^#[0-9a-f]{6}$/i.test(c || "");
       const acc = six(S.ACCENT_COLOR) ? S.ACCENT_COLOR : six(S.BAR_COLOR) ? S.BAR_COLOR : "#B45309", root = document.documentElement.style;
       root.setProperty("--ets-accent", acc);
-      root.setProperty("--ets-on-accent", Announcements.readable(acc));
-      root.setProperty("--ets-accent-text", Announcements.onWhite(acc));
+      root.setProperty("--ets-on-accent", accentOn(acc));
+      root.setProperty("--ets-accent-text", accentOnWhite(acc));
       SITE.introStyle = (S.INTRO_STYLE || "").toLowerCase();        // "", "zoom" or "spin"   (Site Settings > After the Welcome Screen)
       SITE.introFeatures = (S.INTRO_FEATURES || "").toLowerCase();  // "", "mixed" or "spots"
       SITE.introCard = (S.INTRO_CARD || "").toLowerCase();          // "", "bottom" or "top"
@@ -1583,6 +1587,8 @@ function buildGallery(id){
 }
 
 /* Apply one optional setting. If it fails, say so (in the debug panel) and carry on, because everything else waits for the settings. */
+const accentOn = c => (window.Announcements && Announcements.readable) ? Announcements.readable(c) : "#ffffff";       // white or dark text for a button of this color
+const accentOnWhite = c => (window.Announcements && Announcements.onWhite) ? Announcements.onWhite(c) : c;          // this color, darkened to read on white
 function safeApply(name, fn) {
   try { fn(); } catch (e) { console.warn("Setting skipped (" + name + "):", e); if (window.__dbg) __dbg("Setting skipped (" + name + "): " + e.message); }
 }

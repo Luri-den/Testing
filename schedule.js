@@ -114,11 +114,13 @@
   const fmtClock = t => { const p = parseTime(t); return p ? fmtTime(Date.UTC(2000, 0, 1, p[0], p[1])) : ""; };
   const ordinal = n => n + (["th", "st", "nd", "rd"][(n % 100 > 10 && n % 100 < 14) ? 0 : Math.min(n % 10, 4) % 4] || "th");
 
+  // the wording can be changed in the Wording tab (labels.js); these are the standard phrases
+  const phrase = (key, std, vars) => window.Labels ? Labels.t(key, vars) : std.replace(/\{(\w+)\}/g, (m, k) => vars[k] != null ? vars[k] : m);
   function statusText(st) {
-    if (st.state === "now") return "Happening now, until " + fmtDay(st.end) + " at " + fmtTime(st.end);
-    if (st.state === "soon") return "Coming soon: " + fmtDay(st.start) + " at " + fmtTime(st.start);
-    if (st.state === "later") return "Next: " + fmtDay(st.start) + " at " + fmtTime(st.start);
-    if (st.state === "ended") return "Ended" + (st.end ? " " + fmtDay(st.end) : "");
+    if (st.state === "now") return phrase("status.now", "Happening now, until {end}", { end: fmtDay(st.end) + " at " + fmtTime(st.end) });
+    if (st.state === "soon") return phrase("status.soon", "Coming soon: {start}", { start: fmtDay(st.start) + " at " + fmtTime(st.start) });
+    if (st.state === "later") return phrase("status.later", "Next: {start}", { start: fmtDay(st.start) + " at " + fmtTime(st.start) });
+    if (st.state === "ended") return st.end ? phrase("status.ended", "Ended {end}", { end: fmtDay(st.end) }) : phrase("status.ended", "Ended {end}", { end: "" }).replace(/\s+$/, "");
     return "";
   }
   function describe(s) {

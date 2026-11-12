@@ -1,14 +1,16 @@
 /* History map: offline cache worker
 
    What is kept, and how:
-     pages, scripts, data (csv/json) ... network first, but only wait 4 seconds; a slow or missing signal falls back to the saved copy
+     pages, scripts, data (csv/json) ... network first, always asking the server whether the file has changed; if a saved copy exists
+                                          and the signal is slow (4 seconds) or gone, the saved copy is used. With nothing saved yet,
+                                          it waits for the network as long as it takes
      photos, icons, videos ............... shown from the saved copy at once, and refreshed in the background
      map background tiles ................ saved copy first; only the most recent 500 are kept
      very large files (over 4 MB) ........ never saved here (the old-map pictures), so they cannot fill a phone
      audio and video seeking ............. left to the browser (these are "range" requests and cannot be saved in pieces)
 */
 
-const VERSION = "v6-2026-11";
+const VERSION = "v7-2026-11";
 const SHELL_CACHE = "shell-" + VERSION;
 const IMG_CACHE   = "img-" + VERSION;
 const TILE_CACHE  = "tiles-" + VERSION;
@@ -54,7 +56,7 @@ async function trimCache(cache, max) {
 function fetchWithin(request, ms) {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error("slow network")), ms);
-    fetch(request).then(r => { clearTimeout(t); resolve(r); }, e => { clearTimeout(t); reject(e); });
+    fetch(request, { cache: "no-cache" }).then(r => { clearTimeout(t); resolve(r); }, e => { clearTimeout(t); reject(e); });
   });
 }
 
@@ -115,24 +117,37 @@ self.addEventListener("fetch", e => {
     return;
   }
 
-  // Pages, scripts and data: the network when it answers quickly, otherwise the saved copy
+  // Pages, scripts and data
   e.respondWith((async () => {
     const cache = await caches.open(SHELL_CACHE);
     const saved = () => cache.match(req).then(h => h || cache.match(req, { ignoreSearch: true }));
-    if (Date.now() < badNetUntil) {                                           // the signal was just too slow: do not make every file wait again
-      const hit = await saved();
-      if (hit) { e.waitUntil(fetchWithin(req, 20000).then(r => { if (r.ok) return saveCopy(cache, req, r); }).catch(() => {})); return hit; }
+    const hit = await saved();
+
+    // Nothing saved yet (the first visit): there is nothing to fall back on, so wait for the network as long as it takes.
+    if (!hit) {
+      try {
+        const res = await fetch(req, { cache: "no-cache" });
+        if (res.ok) saveCopy(cache, req, res);
+        return res;
+      } catch (err) {
+        if (req.mode === "navigate") { const page = await cache.match("Demo2a.html"); if (page) return page; }
+        return Response.error();                                              // the page sees an ordinary network failure, as if there were no worker
+      }
     }
+
+    // A saved copy exists. If the signal was just too slow, use it straight away and refresh it quietly.
+    if (Date.now() < badNetUntil) {
+      e.waitUntil(fetchWithin(req, 20000).then(r => { if (r.ok) return saveCopy(cache, req, r); }).catch(() => {}));
+      return hit;
+    }
+    // Otherwise ask the network, but only wait a few seconds before using the saved copy.
     try {
       const res = await fetchWithin(req, NET_WAIT);
       if (res.ok) saveCopy(cache, req, res);
       return res;
     } catch (err) {
       if (err && err.message === "slow network") badNetUntil = Date.now() + BAD_NET_FOR;
-      const hit = await saved();
-      if (hit) return hit;
-      if (req.mode === "navigate") { const page = await cache.match("Demo2a.html"); if (page) return page; }
-      return new Response("Offline", { status: 503 });
+      return hit;
     }
   })());
 });

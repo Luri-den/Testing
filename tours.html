@@ -224,7 +224,7 @@ const MODES = [   // how people travel a tour or trail
   ["drive", "Drive", "by car, with stops along public roads. Any vehicle will do."],
   ["virtual", "Virtual", "from anywhere, on screen. For places that are hard to visit, closed or far away, or as an introduction before a visit."]
 ];
-const TOUR_COLS  = ["TOUR_ID","TITLE","INTRO","CATEGORY","ROUTE","TYPE","MODES","LENGTH_MI","SUMMARY","EFFORT","MINUTES","FEATURED"];
+const TOUR_COLS  = ["TOUR_ID","TITLE","INTRO","CATEGORY","ROUTE","TYPE","MODES","LENGTH_MI","SUMMARY","EFFORT","MINUTES","FEATURED","SPIN"];
 const STOP_COLS  = ["TOUR_ID","STEP","ITEM_ID","NOTE","VEHICLE"];
 
 /* Vehicles available on the live site */
@@ -572,6 +572,14 @@ function renderMapMarkers(){
   }
 }
 
+function moveTour(d){   // the order here is the order visitors see (featured tours still come first)
+  const i = tours.indexOf(selectedTour), j = i + d;
+  if (i < 0 || j < 0 || j >= tours.length) return;
+  [tours[i], tours[j]] = [tours[j], tours[i]];
+  render();
+  toast("Moved " + (d < 0 ? "up" : "down"));
+}
+
 function renderTourList(){
   const list = $("tourList");
   list.innerHTML = "";
@@ -669,6 +677,11 @@ function renderForm(){
         <div class="sub" id="minHint"></div>
       </div>
       <div class="field">
+        <label>Camera when a visitor opens it</label>
+        <select id="f-SPIN">${[["", "Use the site setting (Site Settings tab)"], ["yes", "Slowly turn around it"], ["no", "Keep still"]].map(([v, t]) => `<option value="${v}" ${String(r.SPIN||"").toLowerCase()===v?"selected":""}>${t}</option>`).join("")}</select>
+        <div class="sub">The map always frames the whole tour in the middle of the screen. Turning is slow, stops the moment a visitor touches the map, and never happens for visitors who asked their device to reduce motion.</div>
+      </div>
+      <div class="field">
         <label style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="f-FEATURED" ${/^(y|yes|true|1)$/i.test(String(r.FEATURED||"").trim())?"checked":""}> Feature this on the welcome screen and in the Events panel</label>
       </div>
       <div class="field">
@@ -715,6 +728,8 @@ function renderForm(){
       ${selectedStop ? stopEditHtml(selectedStop, selectedTour.stops.indexOf(selectedStop)) : ""}
 
       <div class="actions">
+        <button id="upTour" class="small" title="Show this one earlier in the visitor's list">Move up</button>
+        <button id="downTour" class="small" title="Show this one later in the visitor's list">Move down</button>
         <button id="dupTour" class="small">Duplicate tour</button>
         <span class="grow"></span>
         <button id="delTour" class="small warn">Delete tour</button>
@@ -730,6 +745,10 @@ function renderForm(){
   bindText(box, "f-MINUTES",  v => { r.MINUTES = v; minHint(); });
   box.querySelector("#f-EFFORT").onchange = e => { r.EFFORT = e.target.value; };
   box.querySelector("#f-FEATURED").onchange = e => { r.FEATURED = e.target.checked ? "yes" : ""; };
+  box.querySelector("#f-SPIN").onchange = e => { r.SPIN = e.target.value; };
+  { const at = tours.indexOf(selectedTour); box.querySelector("#upTour").disabled = at <= 0; box.querySelector("#downTour").disabled = at < 0 || at >= tours.length - 1; }
+  box.querySelector("#upTour").onclick = () => moveTour(-1);
+  box.querySelector("#downTour").onclick = () => moveTour(1);
   function minHint() {   // what visitors will see when this is left blank
     const est = TourInfo.minutes({ type: r.TYPE, modes: r.MODES, length: parseFloat(r.LENGTH_MI) || 0, stops: selectedTour ? selectedTour.stops : [] });
     box.querySelector("#minHint").textContent = r.MINUTES ? "Visitors will see " + TourInfo.duration(+r.MINUTES) + "." : (est ? "Left blank, visitors will see about " + TourInfo.duration(est) + ", worked out from the route length and how people travel it." : "Left blank, visitors will see no time. Add a route and a way to travel, or type minutes.");
