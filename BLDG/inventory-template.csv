@@ -1,0 +1,3 @@
+item_id,floor,room,name,category,quantity,serial_number,notes
+EQ-001,Ground Floor,Reception,Fire extinguisher,Safety,1,,Verify inspection date
+EQ-002,Ground Floor,Hallway,AED,Safety,1,,Confirm cabinet location

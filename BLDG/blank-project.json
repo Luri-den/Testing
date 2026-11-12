@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "title": "Community Center Expansion Plan",
+  "scaleNote": "Concept plan \u2014 verify dimensions on site",
+  "backgroundColor": "#ffffff",
+  "floors": [
+    {
+      "id": "floor1",
+      "name": "Ground Floor",
+      "backgroundImage": null,
+      "showImage": true,
+      "objects": []
+    },
+    {
+      "id": "floor2",
+      "name": "Upper Floor",
+      "backgroundImage": null,
+      "showImage": true,
+      "objects": []
+    }
+  ]
+}

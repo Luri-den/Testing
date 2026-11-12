@@ -1,0 +1,947 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Building Map Designer</title>
+<style>
+
+:root {
+  --ink: #24313a;
+  --muted: #64727c;
+  --line: #d6dde1;
+  --panel: #f5f7f8;
+  --accent: #176b87;
+  --accent2: #e8f3f7;
+  --danger: #a93434;
+}
+
+* { box-sizing: border-box; }
+html, body { width: 100%; min-height: 100%; margin: 0; }
+body {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font: 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: #edf1f3;
+}
+button, input, select { font: inherit; }
+button {
+  border: 1px solid #c7d0d5;
+  background: #fff;
+  border-radius: 7px;
+  padding: 7px 10px;
+  cursor: pointer;
+  color: var(--ink);
+}
+button:hover { background: #f0f6f8; }
+button.active { background: var(--accent2); border-color: var(--accent); color: #124c61; }
+button.danger { color: var(--danger); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  z-index: 10;
+}
+header h1 { font-size: 17px; margin: 0 12px 0 0; }
+header .spacer, .canvasbar .spacer, footer .spacer { flex: 1; }
+.status { color: var(--muted); font-size: 12px; }
+.app {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr) 245px;
+  min-height: 0;
+  height: 0;
+  overflow: hidden;
+}
+aside {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #fff;
+  padding: 12px;
+  border-right: 1px solid var(--line);
+}
+aside.right { border-right: 0; border-left: 1px solid var(--line); }
+h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: #52616b;
+  margin: 5px 0 10px;
+}
+.group { border-bottom: 1px solid #e6eaed; padding-bottom: 12px; margin-bottom: 12px; }
+.tools { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.tools button { min-height: 36px; }
+.tools button.wide { grid-column: 1 / -1; }
+.field { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.field label { font-size: 12px; color: var(--muted); }
+input[type="text"], input[type="number"], select {
+  width: 100%; min-width: 0; border: 1px solid #cbd4d9; border-radius: 6px;
+  padding: 7px; background: #fff; color: var(--ink);
+}
+input[type="checkbox"] { accent-color: var(--accent); }
+.row { display: flex; gap: 6px; align-items: center; }
+.row > * { min-width: 0; flex: 1; }
+.small, .hint { font-size: 12px; color: var(--muted); }
+.hint { line-height: 1.45; }
+.palette { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.swatch { height: 25px; border: 1px solid #bbc4ca; border-radius: 5px; padding: 0; }
+main {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.canvasbar {
+  flex: 0 0 auto;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+#viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background-color: #e9eef0;
+  background-image: radial-gradient(#cbd4d9 .8px, transparent .8px);
+  background-size: 18px 18px;
+  touch-action: none;
+}
+#scene {
+  position: absolute;
+  width: 1200px;
+  height: 800px;
+  left: 50%;
+  top: 50%;
+  transform-origin: center center;
+  background: #fff;
+  box-shadow: 0 5px 22px #253b481a;
+  border: 1px solid #d3dadd;
+  will-change: transform;
+}
+#drawing { width: 100%; height: 100%; display: block; overflow: visible; user-select: none; touch-action: none; }
+#sceneImage { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; opacity: .45; pointer-events: none; display: none; }
+.floor-tabs { display: flex; gap: 5px; flex-wrap: wrap; }
+.floor-tabs button { font-size: 12px; padding: 6px 8px; }
+.object-list { display: flex; flex-direction: column; gap: 5px; max-height: 210px; overflow: auto; }
+.object-row { display: flex; gap: 6px; align-items: center; text-align: left; font-size: 12px; }
+.object-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+footer {
+  flex: 0 0 auto;
+  display: flex; gap: 10px; align-items: center; padding: 7px 12px;
+  background: #fff; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted);
+}
+.modal { position: fixed; inset: 0; background: #16232b66; display: none; align-items: center; justify-content: center; z-index: 30; padding: 16px; }
+.modal.open { display: flex; }
+.dialog { background: #fff; border-radius: 12px; padding: 20px; width: min(440px, 100%); box-shadow: 0 10px 40px #0003; }
+.dialog h2 { font-size: 17px; text-transform: none; letter-spacing: 0; color: var(--ink); }
+
+@media (max-width: 1000px) {
+  .app { grid-template-columns: 175px minmax(0, 1fr); grid-template-rows: minmax(360px, 1fr) auto; }
+  aside.right {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    max-height: 34vh;
+  }
+}
+@media (max-width: 650px) {
+  body { height: auto; min-height: 100vh; overflow: auto; display: block; }
+  header { position: relative; }
+  header h1 { width: 100%; }
+  .app { display: flex; flex-direction: column; height: auto; min-height: 0; overflow: visible; }
+  aside.left { border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+  .tools { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tools button { padding: 6px 4px; font-size: 12px; }
+  main { height: auto; min-height: 65vh; }
+  #viewport { flex: none; height: 55vh; min-height: 360px; }
+  #scene { width: 1000px; height: 700px; }
+  aside.right { display: block; max-height: none; overflow: visible; }
+}
+@media print {
+  body { display: block; height: auto; overflow: visible; }
+  header, aside, .canvasbar, footer { display: none !important; }
+  .app { display: block; height: auto; overflow: visible; }
+  main { height: auto; overflow: visible; }
+  #viewport { overflow: visible; height: auto; min-height: 0; background: #fff; }
+  #scene { position: relative; left: auto; top: auto; transform: none !important; box-shadow: none; border: 0; margin: 0 auto; print-color-adjust: exact; }
+}
+
+</style>
+</head>
+<body>
+<header>
+  <h1>Building Map Designer</h1>
+  <button id="newBtn">New</button><button id="openBtn">Open JSON</button><button id="saveBtn">Save JSON</button>
+  <button id="undoBtn" disabled>↶ Undo</button><button id="redoBtn" disabled>↷ Redo</button>
+  <span class="spacer"></span><button id="exportBtn">Export PNG</button><button id="printBtn">Print / PDF</button>
+  <input id="jsonFile" type="file" accept=".json,application/json" hidden>
+</header>
+<div class="app">
+<aside class="left">
+  <section class="group">
+    <h2>Drawing tools</h2>
+    <div class="tools" id="tools">
+      <button data-tool="select" class="active">↖ Select</button><button data-tool="wall">━ Wall</button>
+      <button data-tool="erase">⌫ Remove</button><button data-tool="door">🚪 Door</button>
+      <button data-tool="rect">▭ Rectangle</button><button data-tool="ellipse">◯ Ellipse</button>
+      <button data-tool="line">╱ Line</button><button data-tool="freehand">✎ Freehand</button>
+      <button data-tool="text">T Text</button><button data-tool="icon">＋ Icon</button>
+      <button data-tool="stairs">↕ Stairs</button><button data-tool="elevator">▣ Elevator</button>
+    </div>
+    <p class="hint">Choose a tool, then click or drag on the plan. Select objects to edit them. Remove deletes the clicked item or wall segment.</p>
+  </section>
+  <section class="group">
+    <h2>Place an item</h2>
+    <div class="field"><label for="preset">Furniture / icon</label>
+      <select id="preset">
+        <option value="desk">Desk</option><option value="chair">Chair</option><option value="table">Table</option>
+        <option value="bookshelf">Bookshelf</option><option value="sofa">Sofa</option><option value="cabinet">Cabinet</option>
+        <option value="bathroom">Bathroom fixture</option><option value="toilet">Toilet</option><option value="sink">Sink</option>
+        <option value="extinguisher">Fire extinguisher</option><option value="aed">AED</option><option value="firstaid">First aid</option>
+        <option value="exit">Exit</option><option value="stairsUp">Stairs ↑ Up</option><option value="stairsDown">Stairs ↓ Down</option>
+        <option value="elevator">Elevator</option><option value="plant">Plant</option><option value="custom">Custom labeled box</option>
+      </select>
+    </div>
+    <button id="placeBtn" class="wide">Place selected item</button>
+  </section>
+  <section class="group">
+    <h2>Floor levels</h2>
+    <div class="floor-tabs" id="floorTabs"></div>
+    <div class="row" style="margin-top:7px"><button id="addFloorBtn">＋ Add floor</button><button id="renameFloorBtn">Rename</button></div>
+    <div class="row" style="margin-top:6px"><button id="duplicateFloorBtn">Duplicate</button><button id="removeFloorBtn" class="danger">Remove</button></div>
+    <p class="hint">Use stairs ↑ / ↓ and elevator symbols to show vertical circulation between floors.</p>
+  </section>
+  <section>
+    <h2>Grid & View</h2>
+    <div class="field"><label><input id="snapToggle" type="checkbox" checked> Snap to grid</label></div>
+    <div class="field"><label><input id="gridToggle" type="checkbox" checked> Show grid</label></div>
+    <div class="field">
+  <label>
+    <input id="collisionToggle" type="checkbox" checked>
+    Enforce Collision
+  </label>
+</div>
+    <div class="field"><label for="gridSize">Grid spacing (drawing units)</label><input id="gridSize" type="number" min="2" max="100" value="20"></div>
+    <div class="row"><button id="zoomOut">− Zoom</button><button id="zoomIn">＋ Zoom</button><button id="fitBtn">Fit</button></div>
+  </section>
+</aside>
+<main>
+  <div class="canvasbar">
+    <strong id="floorTitle">Ground Floor</strong><span class="status" id="selectionStatus">No selection</span>
+    <span class="spacer"></span><button id="uploadBtn">Upload plan image</button><input id="imageFile" type="file" accept="image/*" hidden>
+    <button id="toggleImageBtn">Hide image</button><button id="clearImageBtn">Remove image</button>
+  </div>
+  <div id="viewport"><div id="scene"><svg id="drawing" viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg" aria-label="Editable building floor plan"></svg></div></div>
+  <footer><span id="coordStatus">Ready</span><span class="spacer"></span><span>Drawing units are abstract until calibrated to a known measurement.</span></footer>
+</main>
+<aside class="right">
+  <section class="group">
+    <h2>Selected object</h2>
+    <div id="emptySelection" class="hint">Select an object or wall to edit its properties.</div>
+    <div id="properties" hidden>
+      <div class="field"><label for="propLabel">Label</label><input id="propLabel" type="text"></div>
+      <div class="row"><div class="field"><label for="propX">X</label><input id="propX" type="number"></div><div class="field"><label for="propY">Y</label><input id="propY" type="number"></div></div>
+      <div class="row"><div class="field"><label for="propW">Width</label><input id="propW" type="number" min="4"></div><div class="field"><label for="propH">Height</label><input id="propH" type="number" min="4"></div></div>
+      <div class="field"><label for="propRotation">Rotation (degrees)</label><input id="propRotation" type="number" min="-360" max="360"></div>
+      <div class="field"><label for="propSkew">Skew X (degrees)</label><input id="propSkew" type="number" min="-60" max="60"></div>
+      <div class="field"><label for="propColor">Fill / line color</label><input id="propColor" type="color" value="#d7e8ef" style="width:100%;height:34px"></div>
+      <div class="field"><label for="propStroke">Outline / wall color</label><input id="propStroke" type="color" value="#26343b" style="width:100%;height:34px"></div>
+      <div class="field"><label for="propThickness">Wall thickness</label><input id="propThickness" type="number" min="1" max="60" value="10"></div>
+      <div class="field"><label><input id="propSolid" type="checkbox" checked> Solid wall (blocks placement)</label></div>
+      <div class="field"><label><input id="propBlock" type="checkbox" checked> Object blocks placement</label></div>
+      <div class="field"><label><input id="propShowLabel" type="checkbox" checked> Show label</label></div>
+      <div class="row"><button id="applyPropsBtn">Apply changes</button><button id="deleteBtn" class="danger">Delete</button></div>
+      <p class="hint">Geometry is checked when placing items. This is a planning aid, not a code-compliance or life-safety certification tool.</p>
+    </div>
+  </section>
+  <section class="group">
+    <h2>Map settings</h2>
+    <div class="field"><label for="mapTitle">Plan title</label><input id="mapTitle" type="text" value="Building Plan"></div>
+    <div class="field"><label for="scaleNote">Scale / note</label><input id="scaleNote" type="text" value="Concept plan — verify dimensions on site"></div>
+    <div class="field"><label for="backgroundColor">Canvas color</label><input id="backgroundColor" type="color" value="#ffffff"></div>
+    <button id="applyMapBtn">Apply map settings</button>
+  </section>
+  <section>
+    <h2>Object list</h2><div class="object-list" id="objectList"></div>
+    <p class="hint">Click a list item to select it.</p>
+  </section>
+</aside>
+</div>
+<div class="modal" id="noticeModal"><div class="dialog"><h2 id="modalTitle">Notice</h2><p id="modalText"></p><div class="row" style="justify-content:flex-end"><button id="modalClose">OK</button></div></div></div>
+<script>
+(() => {
+"use strict";
+const NS="http://www.w3.org/2000/svg", W=1200,H=800;
+const $=id=>document.getElementById(id);
+const uid=()=> "o"+Math.random().toString(36).slice(2,10);
+const clone=o=>JSON.parse(JSON.stringify(o));
+const defaults={
+  version:1,title:"Community Center Expansion Plan",scaleNote:"Concept plan — verify dimensions on site",backgroundColor:"#ffffff",
+  floors:[
+    {id:"floor1",name:"Ground Floor",backgroundImage:null,showImage:true,objects:[
+      {id:"w1",type:"wall",x:120,y:100,w:760,h:0,thickness:12,solid:true,color:"#26343b",label:"North wall"},
+      {id:"w2",type:"wall",x:120,y:100,w:0,h:560,thickness:12,solid:true,color:"#26343b",label:"West wall"},
+      {id:"w3",type:"wall",x:880,y:100,w:0,h:560,thickness:12,solid:true,color:"#26343b",label:"East wall"},
+      {id:"w4a",type:"wall",x:120,y:660,w:310,h:0,thickness:12,solid:true,color:"#26343b",label:"South wall"},
+      {id:"w4b",type:"wall",x:520,y:660,w:360,h:0,thickness:12,solid:true,color:"#26343b",label:"South wall"},
+      {id:"w5",type:"wall",x:440,y:100,w:0,h:180,thickness:9,solid:true,color:"#26343b",label:"Room divider"},
+      {id:"w6",type:"wall",x:440,y:360,w:0,h:300,thickness:9,solid:true,color:"#26343b",label:"Room divider"},
+      {id:"w7",type:"wall",x:440,y:360,w:440,h:0,thickness:9,solid:true,color:"#26343b",label:"Room divider"},
+      {id:"w8",type:"wall",x:650,y:360,w:0,h:160,thickness:9,solid:true,color:"#26343b",label:"Room divider"},
+      {id:"door1",type:"door",x:430,y:660,w:90,h:0,rotation:0,color:"#ffffff",stroke:"#26343b",label:"Main entrance",showLabel:false,block:false},
+      {id:"desk1",type:"desk",x:205,y:155,w:100,h:55,rotation:0,color:"#d7e8ef",stroke:"#527f91",label:"Reception desk",block:true},
+      {id:"chair1",type:"chair",x:240,y:225,w:34,h:34,rotation:0,color:"#d5e8d5",stroke:"#5c8860",label:"Chair",block:true},
+      {id:"shelf1",type:"bookshelf",x:145,y:300,w:50,h:145,rotation:0,color:"#ead9b7",stroke:"#997b4e",label:"Bookshelves",block:true},
+      {id:"table1",type:"table",x:255,y:355,w:110,h:65,rotation:0,color:"#ead9b7",stroke:"#997b4e",label:"Meeting table",block:true},
+      {id:"bath1",type:"bathroom",x:520,y:415,w:110,h:120,rotation:0,color:"#e6eef2",stroke:"#6d8792",label:"Restroom",block:true},
+      {id:"stairs1",type:"stairsUp",x:700,y:140,w:100,h:150,rotation:0,color:"#e8edf0",stroke:"#566770",label:"Stairs ↑ Up",block:true},
+      {id:"elev1",type:"elevator",x:720,y:415,w:75,h:75,rotation:0,color:"#e8edf0",stroke:"#566770",label:"Elevator",block:true},
+      {id:"aed1",type:"aed",x:820,y:300,w:30,h:40,rotation:0,color:"#d7efdd",stroke:"#32864b",label:"AED",block:false},
+      {id:"ext1",type:"extinguisher",x:145,y:580,w:24,h:40,rotation:0,color:"#f4d6d3",stroke:"#a93434",label:"Fire extinguisher",block:false}
+    ]},
+    {id:"floor2",name:"Upper Floor",backgroundImage:null,showImage:true,objects:[
+      {id:"u1",type:"wall",x:120,y:100,w:760,h:0,thickness:12,solid:true,color:"#26343b",label:"North wall"},
+      {id:"u2",type:"wall",x:120,y:100,w:0,h:560,thickness:12,solid:true,color:"#26343b",label:"West wall"},
+      {id:"u3",type:"wall",x:880,y:100,w:0,h:560,thickness:12,solid:true,color:"#26343b",label:"East wall"},
+      {id:"u4a",type:"wall",x:120,y:660,w:310,h:0,thickness:12,solid:true,color:"#26343b",label:"South wall"},
+      {id:"u4b",type:"wall",x:520,y:660,w:360,h:0,thickness:12,solid:true,color:"#26343b",label:"South wall"},
+      {id:"u5",type:"wall",x:440,y:100,w:0,h:560,thickness:9,solid:true,color:"#26343b",label:"Room divider"},
+      {id:"upstairs",type:"stairsDown",x:700,y:140,w:100,h:150,rotation:0,color:"#e8edf0",stroke:"#566770",label:"Stairs ↓ Down",block:true},
+      {id:"elev2",type:"elevator",x:720,y:415,w:75,h:75,rotation:0,color:"#e8edf0",stroke:"#566770",label:"Elevator",block:true},
+      {id:"meeting",type:"table",x:220,y:270,w:140,h:75,rotation:0,color:"#ead9b7",stroke:"#997b4e",label:"Meeting room table",block:true}
+    ]}
+  ]
+};
+let project=clone(defaults), floorIndex=0, tool="select", selectedId=null, drag=null, history=[], historyIndex=-1, zoom=1, pan={x:0,y:0}, showGrid=true, snap=true, gridSize=20, backgroundImageVisible=true;
+const floor=()=>project.floors[floorIndex], objects=()=>floor().objects;
+function record(){history=history.slice(0,historyIndex+1);history.push(clone(project));if(history.length>80)history.shift();historyIndex=history.length-1;updateHistoryButtons();}
+function updateHistoryButtons(){$("undoBtn").disabled=historyIndex<=0;$("redoBtn").disabled=historyIndex>=history.length-1;}
+function notify(title,msg){$("modalTitle").textContent=title;$("modalText").textContent=msg;$("noticeModal").classList.add("open");}
+$("modalClose").onclick=()=>$("noticeModal").classList.remove("open");
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function svgEl(tag,attrs={},parent=$("drawing")){const e=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))if(v!==undefined&&v!==null)e.setAttribute(k,v);parent.appendChild(e);return e;}
+function snapV(v){return snap?Math.round(v/gridSize)*gridSize:v;}
+function point(evt) {
+  const svg = $("drawing");
+  const svgPoint = svg.createSVGPoint();
+  svgPoint.x = evt.clientX;
+  svgPoint.y = evt.clientY;
+  const matrix = svg.getScreenCTM();
+  if (!matrix) return { x: 0, y: 0 };
+  const local = svgPoint.matrixTransform(matrix.inverse());
+  return { x: snapV(local.x), y: snapV(local.y) };
+}
+function typeLabel(o){return ({wall:"Wall",door:"Door / opening",rect:"Rectangle",ellipse:"Ellipse",line:"Line",freehand:"Freehand",text:"Text",desk:"Desk",chair:"Chair",table:"Table",bookshelf:"Bookshelf",sofa:"Sofa",cabinet:"Cabinet",bathroom:"Bathroom",toilet:"Toilet",sink:"Sink",extinguisher:"Fire extinguisher",aed:"AED",firstaid:"First aid",exit:"Exit",stairsUp:"Stairs ↑ Up",stairsDown:"Stairs ↓ Down",stairs:"Stairs",elevator:"Elevator",plant:"Plant",custom:"Custom shape"})[o.type]||o.type;}
+function addText(parent, x, y, text, attrs = {}) {
+  const el = svgEl("text", {
+    x,
+    y,
+    "font-family": "Arial, sans-serif",
+    "font-size": 14,
+    "text-anchor": "middle",
+    fill: "#26343b",
+    ...attrs
+  }, parent);
+
+  el.textContent = text;
+  return el;
+}
+function drawObject(o,ghost=false){
+ const g=svgEl("g",{ "data-id":o.id,opacity:ghost?.65:1,transform:`translate(${o.x||0} ${o.y||0}) rotate(${o.rotation||0}) skewX(${o.skew||0})`});
+ const w=Math.max(1,o.w||1),h=Math.max(1,o.h||1),fill=o.color||"#d7e8ef",stroke=o.stroke||"#526b77",sw=o.type==="wall"?(o.thickness||10):2;
+ g.setAttribute("cursor",tool==="select"?"move":"crosshair");
+if (o.type === "wall") {
+    svgEl("line", {
+      x1: 0, y1: 0,
+      x2: o.w || 0, y2: o.h || 0,
+      stroke: o.solid === false ? "#94a0a6" : (o.color || "#26343b"),
+      "stroke-width": sw,
+      "stroke-linecap": "square",
+      "stroke-dasharray": o.solid === false ? "8 6" : null
+    }, g);
+    if (o.label && o.showLabel !== false) {
+      addText(g,
+        (o.w || 0) / 2 + (o.labelOffsetX || 0),
+        (o.h || 0) / 2 - 10 + (o.labelOffsetY || 0),
+        o.label,
+        {
+          "font-size": 11,
+          fill: "#37474f",
+          "paint-order": "stroke",
+          stroke: "white",
+          "stroke-width": 3,
+          "data-object-label": "true",
+          cursor: "move"
+        }
+      );
+    }
+  } else if (o.type === "door") {
+   // Door leaf and swing arc; gap is represented by the door object, wall segments must be split at opening.
+   svgEl("line",{x1:0,y1:0,x2:w,y2:0,stroke:"#fff","stroke-width":12});
+   svgEl("path",{d:`M0 0 A${w} ${w} 0 0 1 ${w} ${h||w}`,fill:"none",stroke:"#78909c","stroke-width":1.6},g);
+   svgEl("line",{x1:0,y1:0,x2:0,y2:h||w,stroke:stroke,"stroke-width":2.5},g);
+ }else if(o.type==="line"){
+   svgEl("line",{x1:0,y1:0,x2:o.w||0,y2:o.h||0,stroke:stroke,"stroke-width":sw},g);
+ }else if(o.type==="freehand"){
+   svgEl("path",{d:o.path||"M0 0",fill:"none",stroke:stroke,"stroke-width":3,"stroke-linecap":"round","stroke-linejoin":"round"},g);
+ }else if(o.type==="text"){
+   addText(g,0,0,o.label||"Text",{ "text-anchor":"start","font-size":Math.max(12,h||18),fill:stroke});
+ }else if(o.type==="ellipse"){
+   svgEl("ellipse",{cx:w/2,cy:h/2,rx:w/2,ry:h/2,fill,stroke,"stroke-width":2},g);
+ }else if(o.type==="stairsUp"||o.type==="stairsDown"||o.type==="stairs"){
+   svgEl("rect",{x:0,y:0,width:w,height:h,fill,stroke,"stroke-width":2},g);
+   for(let i=1;i<7;i++)svgEl("line",{x1:0,y1:h*i/7,x2:w,y2:h*i/7,stroke,"stroke-width":1.2},g);
+   const up=o.type!=="stairsDown";const cx=w/2,cy=h/2;
+   svgEl("path",{d:up?`M${cx} ${cy+24}V${cy-25} M${cx-12} ${cy-12}L${cx} ${cy-25}L${cx+12} ${cy-12}`:`M${cx} ${cy-24}V${cy+25} M${cx-12} ${cy+12}L${cx} ${cy+25}L${cx+12} ${cy+12}`,fill:"none",stroke:"#172d38","stroke-width":4,"stroke-linecap":"round","stroke-linejoin":"round"},g);
+   addText(g,cx, h+16, o.label||(up?"UP":"DOWN"),{"font-size":12,"font-weight":"bold"});
+ }else if(o.type==="elevator"){
+   svgEl("rect",{x:0,y:0,width:w,height:h,rx:3,fill,stroke,"stroke-width":2.5},g);
+   svgEl("line",{x1:w/2,y1:6,x2:w/2,y2:h-6,stroke,"stroke-width":1.5},g);
+   addText(g,w/2,h/2+4,"↑",{ "font-size":Math.min(24,h/3),"font-weight":"bold"});
+   addText(g,w/2,h+16,o.label||"ELEVATOR",{"font-size":11,"font-weight":"bold"});
+ }else if(o.type==="extinguisher"){
+   svgEl("rect",{x:w*.25,y:h*.22,width:w*.5,height:h*.68,rx:4,fill:"#d94a43",stroke:"#8b2424","stroke-width":2},g);
+   svgEl("path",{d:`M${w*.35} ${h*.22}v-${h*.12}h${w*.3}v${h*.12} M${w*.5} ${h*.1}q${w*.4} 0 ${w*.35} ${h*.14}`,fill:"none",stroke:"#8b2424","stroke-width":2},g);
+ }else if(o.type==="aed"||o.type==="firstaid"){
+   svgEl("rect",{x:0,y:0,width:w,height:h,rx:4,fill:o.type==="aed"?"#208b52":"#fff",stroke:o.type==="aed"?"#126438":"#d84a4a","stroke-width":2},g);
+   if(o.type==="aed"){svgEl("path",{d:`M${w*.57} ${h*.13}L${w*.34} ${h*.55}H${w*.49}L${w*.42} ${h*.85}L${w*.68} ${h*.43}H${w*.52}Z`,fill:"white"},g);}
+   else {svgEl("path",{d:`M${w*.42} ${h*.2}h${w*.16}v${h*.23}h${w*.23}v${h*.16}h-${w*.23}v${h*.23}h-${w*.16}v-${h*.23}h-${w*.23}v-${h*.16}h${w*.23}Z`,fill:"#d84a4a"},g);}
+ }else if(o.type==="exit"){
+   svgEl("rect",{x:0,y:0,width:w,height:h,fill:"#e1f2e5",stroke:"#36804a","stroke-width":2},g);
+   addText(g,w/2,h/2+5,"EXIT",{"font-size":Math.max(10,h*.28),"font-weight":"bold",fill:"#246d39"});
+ }else if(o.type==="bathroom"||o.type==="toilet"||o.type==="sink"){
+   svgEl("rect",{x:0,y:0,width:w,height:h,fill,stroke,"stroke-width":2},g);
+   if(o.type==="bathroom"){addText(g,w/2,h/2-3,"WC",{"font-size":17,"font-weight":"bold"});addText(g,w/2,h/2+15,"RESTROOM",{"font-size":9});}
+   else if(o.type==="toilet"){svgEl("rect",{x:w*.3,y:h*.12,width:w*.4,height:h*.25,rx:2,fill:"#fff",stroke},g);svgEl("ellipse",{cx:w/2,cy:h*.62,rx:w*.24,ry:h*.25,fill:"#fff",stroke},g);}
+   else {svgEl("rect",{x:w*.15,y:h*.18,width:w*.7,height:h*.6,rx:8,fill:"#fff",stroke},g);svgEl("circle",{cx:w/2,cy:h*.48,r:3,fill:stroke},g);}
+ }else if(o.type==="chair"){
+   svgEl("rect",{x:w*.18,y:h*.12,width:w*.64,height:h*.35,rx:3,fill,stroke,"stroke-width":2},g);
+   svgEl("rect",{x:w*.18,y:h*.49,width:w*.64,height:h*.35,rx:3,fill,stroke,"stroke-width":2},g);
+ }else if(o.type==="bookshelf"){
+   svgEl("rect",{x:0,y:0,width:w,height:h,fill,stroke,"stroke-width":2},g);
+   for(let yy=1;yy<4;yy++)svgEl("line",{x1:2,y1:h*yy/4,x2:w-2,y2:h*yy/4,stroke,"stroke-width":2},g);
+   for(let yy=0;yy<3;yy++)for(let xx=0;xx<3;xx++)svgEl("line",{x1:w*(.2+xx*.25),y1:h*(.08+yy*.25),x2:w*(.2+xx*.25),y2:h*(.20+yy*.25),stroke:"#8a7047","stroke-width":3},g);
+ }else if(o.type==="plant"){
+   svgEl("rect",{x:w*.28,y:h*.55,width:w*.44,height:h*.35,fill:"#d5b58a",stroke:"#90754f"},g);
+   svgEl("circle",{cx:w*.5,cy:h*.35,r:Math.min(w,h)*.28,fill:"#83b58b",stroke:"#4e8457"},g);
+   svgEl("circle",{cx:w*.32,cy:h*.42,r:Math.min(w,h)*.2,fill:"#9bc9a1",stroke:"#4e8457"},g);
+ }else{
+   svgEl("rect",{x:0,y:0,width:w,height:h,rx:2,fill,stroke,"stroke-width":2},g);
+   if(o.type==="desk"){svgEl("rect",{x:w*.08,y:h*.08,width:w*.84,height:h*.18,fill:"#fff8",stroke,"stroke-width":1},g);}
+   if(o.type==="sofa"){svgEl("rect",{x:w*.08,y:h*.12,width:w*.84,height:h*.76,rx:5,fill:"none",stroke},g);svgEl("line",{x1:w/2,y1:h*.15,x2:w/2,y2:h*.85,stroke},g);}
+   if(o.type==="cabinet"){svgEl("line",{x1:w/2,y1:0,x2:w/2,y2:h,stroke},g);svgEl("circle",{cx:w*.42,cy:h/2,r:2,fill:stroke},g);svgEl("circle",{cx:w*.58,cy:h/2,r:2,fill:stroke},g);}
+   if(o.type==="table"){svgEl("ellipse",{cx:w/2,cy:h/2,rx:w*.43,ry:h*.38,fill:"none",stroke},g);}
+ }
+if (
+  o.label &&
+  o.showLabel !== false &&
+  ![
+    "wall", "stairsUp", "stairsDown", "stairs",
+    "elevator", "exit", "bathroom", "text"
+  ].includes(o.type)
+) {
+  addText(
+    g,
+    w / 2 + (o.labelOffsetX || 0),
+    h + 14 + (o.labelOffsetY || 0),
+    o.label,
+    {
+      "font-size": Math.max(10, Math.min(13, w / 7)),
+      "paint-order": "stroke",
+      stroke: "white",
+      "stroke-width": 3,
+      "stroke-linejoin": "round",
+      "data-object-label": "true",
+      cursor: "move"
+    }
+  );
+}
+if (selectedId === o.id) {
+  const handle = (x, y, action) => {
+    svgEl("circle", {
+      cx: x,
+      cy: y,
+      r: 6,
+      fill: action === "rotate" ? "#e58a24" : "#087ea4",
+      stroke: "#ffffff",
+      "stroke-width": 2,
+      "data-handle": action,
+      cursor: action === "rotate" ? "grab" : "nwse-resize"
+    }, g);
+  };
+
+  if (o.type === "wall") {
+    // A wall is a line, so give it endpoint handles.
+    svgEl("line", {
+      x1: o.w / 2,
+      y1: o.h / 2,
+      x2: o.w / 2,
+      y2: o.h / 2 - 28,
+      stroke: "#e58a24",
+      "stroke-width": 1.5,
+      "stroke-dasharray": "3 3",
+      "pointer-events": "none"
+    }, g);
+
+    handle(0, 0, "wall-start");
+    handle(o.w, o.h, "wall-end");
+    handle(o.w / 2, o.h / 2 - 28, "rotate");
+  } else {
+    svgEl("rect", {
+      x: -5,
+      y: -5,
+      width: w + 10,
+      height: h + 10,
+      fill: "none",
+      stroke: "#087ea4",
+      "stroke-width": 2,
+      "stroke-dasharray": "5 4",
+      "pointer-events": "none"
+    }, g);
+
+    // Resize from the lower-right corner.
+    handle(w, h, "resize");
+
+    // Rotate using the handle above the object.
+    svgEl("line", {
+      x1: w / 2,
+      y1: 0,
+      x2: w / 2,
+      y2: -22,
+      stroke: "#e58a24",
+      "stroke-width": 1.5,
+      "pointer-events": "none"
+    }, g);
+
+    handle(w / 2, -25, "rotate");
+  }
+}
+ g.addEventListener("pointerdown",onObjectPointerDown);
+ return g;
+}
+function render(){
+ const svg=$("drawing");svg.innerHTML="";
+ svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+ const defs=svgEl("defs");
+ const pat=svgEl("pattern",{id:"grid",width:gridSize,height:gridSize,patternUnits:"userSpaceOnUse"},defs);
+ svgEl("path",{d:`M ${gridSize} 0 L 0 0 0 ${gridSize}`,fill:"none",stroke:"#e4e9ec","stroke-width":1},pat);
+ svgEl("rect",{x:0,y:0,width:W,height:H,fill:project.backgroundColor||"#fff"});
+ if(showGrid)svgEl("rect",{x:0,y:0,width:W,height:H,fill:"url(#grid)"});
+ for(const o of objects())drawObject(o);
+ $("scene").style.transform=`translate(-50%,-50%) translate(${pan.x}px,${pan.y}px) scale(${zoom})`;
+ $("floorTitle").textContent=floor().name;
+ $("mapTitle").value=project.title||"";
+ $("scaleNote").value=project.scaleNote||"";
+ renderFloorTabs();renderObjectList();renderProperties();updateStatus();
+}
+function renderFloorTabs(){
+ const el=$("floorTabs");el.innerHTML="";
+ project.floors.forEach((f,i)=>{const b=document.createElement("button");b.textContent=f.name;b.className=i===floorIndex?"active":"";b.onclick=()=>{floorIndex=i;selectedId=null;render();};el.appendChild(b);});
+}
+function renderObjectList(){
+ const el=$("objectList");el.innerHTML="";
+ objects().forEach(o=>{const b=document.createElement("button");b.className="object-row";b.innerHTML=`<span>${esc(typeLabel(o))}</span><span>${esc(o.label||o.id)}</span>`;b.onclick=()=>{selectedId=o.id;tool="select";setToolButtons();render();};el.appendChild(b);});
+}
+function getSelected(){return objects().find(o=>o.id===selectedId);}
+function renderProperties(){
+ const o=getSelected();$("emptySelection").hidden=!!o;$("properties").hidden=!o;
+ $("selectionStatus").textContent=o?`${typeLabel(o)}: ${o.label||o.id}`:"No selection";
+ if(!o)return;
+ $("propLabel").value=o.label||"";$("propX").value=Math.round(o.x||0);$("propY").value=Math.round(o.y||0);
+ $("propW").value=Math.round(o.w||0);$("propH").value=Math.round(o.h||0);$("propRotation").value=o.rotation||0;$("propSkew").value=o.skew||0;
+ $("propColor").value=validColor(o.color,"#d7e8ef");$("propStroke").value=validColor(o.stroke||o.color,"#26343b");
+ $("propThickness").value=o.thickness||10;$("propSolid").checked=o.solid!==false;$("propBlock").checked=o.block!==false;$("propShowLabel").checked=o.showLabel!==false;
+ $("propSolid").closest(".field").style.display=o.type==="wall"?"block":"none";
+ $("propThickness").closest(".field").style.display=o.type==="wall"?"block":"none";
+ $("propBlock").closest(".field").style.display=o.type!=="wall"&&o.type!=="door"?"block":"none";
+}
+function validColor(c,fallback){return /^#[0-9a-f]{6}$/i.test(c||"")?c:fallback;}
+function updateStatus(){const o=getSelected();$("coordStatus").textContent=`${floor().name} · ${objects().length} objects · ${Math.round(zoom*100)}%`;updateHistoryButtons();}
+function setToolButtons(){document.querySelectorAll("[data-tool]").forEach(b=>b.classList.toggle("active",b.dataset.tool===tool));}
+function setTool(t){tool=t;setToolButtons();$("selectionStatus").textContent=`Tool: ${t}`;}
+$("tools").addEventListener("click",e=>{const b=e.target.closest("[data-tool]");if(b)setTool(b.dataset.tool);});
+function objectAtTarget(target){const g=target.closest("[data-id]");return g?g.getAttribute("data-id"):null;}
+function onObjectPointerDown(e) {
+  if (e.button !== 0) return;
+
+  const group = e.target.closest("[data-id]");
+  if (!group) return;
+
+  const id = group.getAttribute("data-id");
+  const o = objects().find(x => x.id === id);
+  if (!o) return;
+
+  if (tool === "erase") {
+    e.stopPropagation();
+    record();
+    project.floors[floorIndex].objects =
+      objects().filter(x => x.id !== id);
+    selectedId = null;
+    render();
+    return;
+  }
+
+  if (tool !== "select") return;
+
+  e.stopPropagation();
+
+  const handle = e.target.closest("[data-handle]");
+  const label = e.target.closest("[data-object-label]");
+
+  // Selecting an object also exposes its editing handles.
+  selectedId = id;
+
+  const p = point(e);
+
+  drag = {
+    id,
+    kind: label ? "label" : handle ? handle.getAttribute("data-handle") : "move",
+    start: p,
+    before: clone(o),
+    moved: false
+  };
+
+  $("drawing").setPointerCapture?.(e.pointerId);
+
+  render();
+}
+function intersects(a,b){return a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top;}
+function box(o){const w=Math.abs(o.w||2),h=Math.abs(o.h||2);return {left:(o.x||0),top:(o.y||0),right:(o.x||0)+w,bottom:(o.y||0)+h};}
+function collision(o, excludeId = null) {
+  // The user can disable all placement collision checks.
+  if (!$("collisionToggle").checked) return null;
+
+  // A wall must never collide with itself or be blocked
+  // simply because it crosses another wall.
+  if (o.type === "wall") return null;
+
+  const bb = box(o);
+
+  // Check for overlaps with other blocking objects.
+  for (const other of objects()) {
+    if (
+      other.id === excludeId ||
+      other.type === "wall" ||
+      other.type === "door" ||
+      other.block === false
+    ) {
+      continue;
+    }
+
+    if (intersects(bb, box(other))) {
+      return `overlaps ${other.label || typeLabel(other)}`;
+    }
+  }
+
+  // Check solid walls.
+  for (const wall of objects().filter(
+    x => x.type === "wall" && x.solid !== false
+  )) {
+    if (wall.id === excludeId) continue;
+
+    const x1 = wall.x || 0;
+    const y1 = wall.y || 0;
+    const x2 = x1 + (wall.w || 0);
+    const y2 = y1 + (wall.h || 0);
+    const pad = (wall.thickness || 10) / 2;
+
+    if (segmentIntersectsRect(x1, y1, x2, y2, bb, pad)) {
+      return `crosses solid wall ${wall.label || wall.id}`;
+    }
+  }
+
+  return null;
+}
+function segmentIntersectsRect(x1,y1,x2,y2,b,pad=0){
+ const l=b.left-pad,r=b.right+pad,t=b.top-pad,bt=b.bottom+pad;
+ if(Math.max(x1,x2)<l||Math.min(x1,x2)>r||Math.max(y1,y2)<t||Math.min(y1,y2)>bt)return false;
+ if(x1>=l&&x1<=r&&y1>=t&&y1<=bt||x2>=l&&x2<=r&&y2>=t&&y2<=bt)return true;
+ const orient=(ax,ay,bx,by,cx,cy)=>(bx-ax)*(cy-ay)-(by-ay)*(cx-ax);
+ function seg(ax,ay,bx,by,cx,cy,dx,dy){const o1=orient(ax,ay,bx,by,cx,cy),o2=orient(ax,ay,bx,by,dx,dy),o3=orient(cx,cy,dx,dy,ax,ay),o4=orient(cx,cy,dx,dy,bx,by);return o1*o2<=0&&o3*o4<=0;}
+ return seg(x1,y1,x2,y2,l,t,r,t)||seg(x1,y1,x2,y2,r,t,r,bt)||seg(x1,y1,x2,y2,r,bt,l,bt)||seg(x1,y1,x2,y2,l,bt,l,t);
+}
+function makeObject(type,x,y,w,h){
+ const colors={wall:"#26343b",door:"#78909c",desk:"#d7e8ef",chair:"#d5e8d5",table:"#ead9b7",bookshelf:"#ead9b7",sofa:"#c6d9e4",cabinet:"#d9dfe3",bathroom:"#e6eef2",toilet:"#e6eef2",sink:"#e6eef2",extinguisher:"#d94a43",aed:"#208b52",firstaid:"#ffffff",exit:"#e1f2e5",stairsUp:"#e8edf0",stairsDown:"#e8edf0",stairs:"#e8edf0",elevator:"#e8edf0",plant:"#9bc9a1",rect:"#d7e8ef",ellipse:"#d7e8ef",line:"#26343b",freehand:"#26343b",text:"#26343b",custom:"#d7e8ef"};
+ const labels={wall:"Wall",door:"Door / opening",desk:"Desk",chair:"Chair",table:"Table",bookshelf:"Bookshelf",sofa:"Sofa",cabinet:"Cabinet",bathroom:"Restroom",toilet:"Toilet",sink:"Sink",extinguisher:"Fire extinguisher",aed:"AED",firstaid:"First aid",exit:"Exit",stairsUp:"Stairs ↑ Up",stairsDown:"Stairs ↓ Down",stairs:"Stairs",elevator:"Elevator",plant:"Plant",rect:"Shape",ellipse:"Ellipse",line:"Line",freehand:"Freehand line",text:"Text",custom:"Custom object"};
+ return {id:uid(),type,x,y,w,h,rotation:0,skew:0,color:colors[type]||"#d7e8ef",stroke:type==="wall"?"#26343b":"#526b77",thickness:type==="wall"?10:undefined,solid:type==="wall",block:!["door","extinguisher","aed","firstaid","exit","text","line","freehand"].includes(type),label:labels[type]||type,showLabel:true};
+}
+function onCanvasDown(e){
+ if(e.button!==0||e.target.closest("[data-id]"))return;
+ const p=point(e);
+ if(tool==="select"){selectedId=null;render();return;}
+ if(tool==="erase")return;
+ if(tool==="icon"||tool==="stairs"||tool==="elevator"){
+   const type=tool==="icon"?$("preset").value:tool==="stairs"?"stairsUp":"elevator";
+   const size=type==="elevator"?70: type.startsWith("stairs")?95: type==="bookshelf"?45: type==="extinguisher"?24: type==="aed"?32: type==="desk"?90:60;
+   const o=makeObject(type,p.x,p.y,size,type.startsWith("stairs")?130:size);
+  const err = o.block !== false ? collision(o) : null;
+
+if (err) {
+  notify(
+    "Placement blocked",
+    `This item ${err}. You can move it elsewhere or turn off "Enforce collision checks".`
+  );
+  return;
+}
+   record();objects().push(o);selectedId=o.id;setTool("select");render();return;
+ }
+ drag={drawing:true,type:tool,start:p,last:p,points:[p]};
+ $("drawing").setPointerCapture?.(e.pointerId);
+}
+function onCanvasMove(e) {
+  const p = point(e);
+
+  $("coordStatus").textContent =
+    `X ${p.x} · Y ${p.y} · ${floor().name}`;
+
+  if (drag && !drag.drawing) {
+    const o = objects().find(x => x.id === drag.id);
+    if (!o) return;
+
+    const before = drag.before;
+    const dx = p.x - drag.start.x;
+    const dy = p.y - drag.start.y;
+
+    if (Math.abs(dx) + Math.abs(dy) > 1) {
+      drag.moved = true;
+    }
+
+    if (drag.kind === "label") {
+      // Convert screen-space movement into the object's local space.
+      const angle = (before.rotation || 0) * Math.PI / 180;
+      const localX = dx * Math.cos(angle) + dy * Math.sin(angle);
+      const localY = -dx * Math.sin(angle) + dy * Math.cos(angle);
+
+      o.labelOffsetX = (before.labelOffsetX || 0) + localX;
+      o.labelOffsetY = (before.labelOffsetY || 0) + localY;
+
+    } else if (drag.kind === "move") {
+      o.x = snapV((before.x || 0) + dx);
+      o.y = snapV((before.y || 0) + dy);
+
+    } else if (drag.kind === "wall-start") {
+      // Keep the opposite endpoint fixed.
+      const endX = (before.x || 0) + (before.w || 0);
+      const endY = (before.y || 0) + (before.h || 0);
+
+      o.x = p.x;
+      o.y = p.y;
+      o.w = endX - p.x;
+      o.h = endY - p.y;
+
+    } else if (drag.kind === "wall-end") {
+      // Keep the starting endpoint fixed.
+      o.w = p.x - (before.x || 0);
+      o.h = p.y - (before.y || 0);
+
+    } else if (drag.kind === "resize") {
+      // Convert the pointer position back into local coordinates
+      // so resizing continues to work after rotating an object.
+      const angle = (before.rotation || 0) * Math.PI / 180;
+      const localX = dx * Math.cos(angle) + dy * Math.sin(angle);
+      const localY = -dx * Math.sin(angle) + dy * Math.cos(angle);
+
+      o.w = Math.max(4, snapV((before.w || 4) + localX));
+      o.h = Math.max(4, snapV((before.h || 4) + localY));
+
+    } else if (drag.kind === "rotate") {
+      const cx = (before.x || 0) + (before.w || 0) / 2;
+      const cy = (before.y || 0) + (before.h || 0) / 2;
+
+      const startAngle = Math.atan2(
+        drag.start.y - cy,
+        drag.start.x - cx
+      );
+
+      const currentAngle = Math.atan2(
+        p.y - cy,
+        p.x - cx
+      );
+
+      const delta = (currentAngle - startAngle) * 180 / Math.PI;
+
+      o.rotation = (before.rotation || 0) + delta;
+    }
+
+    render();
+    return;
+  }
+
+  if (drag?.drawing) {
+    drag.last = p;
+
+    if (drag.type === "freehand") {
+      drag.points.push(p);
+    }
+
+    render();
+
+    const temp = makeObject(
+      drag.type,
+      drag.start.x,
+      drag.start.y,
+      p.x - drag.start.x,
+      p.y - drag.start.y
+    );
+
+    if (drag.type === "wall") {
+      temp.type = "wall";
+      temp.thickness = 10;
+      temp.solid = true;
+    }
+
+    if (drag.type === "door") {
+      temp.type = "door";
+      temp.h = Math.abs(p.y - drag.start.y) ||
+               Math.abs(p.x - drag.start.x);
+      temp.w = Math.abs(p.x - drag.start.x) || 90;
+    }
+
+    if (drag.type === "freehand") {
+      temp.path = drag.points.map((pt, i) =>
+        (i ? "L" : "M") +
+        (pt.x - drag.start.x) + " " +
+        (pt.y - drag.start.y)
+      ).join(" ");
+
+      temp.w = 1;
+      temp.h = 1;
+    }
+
+    if (drag.type === "text") {
+      temp.w = 1;
+      temp.h = 18;
+      temp.label = "Double-click to edit text";
+    }
+
+    drawObject(temp, true);
+  }
+}
+function onCanvasUp(e){
+ if (!drag) return;
+ if (!drag.drawing) {
+  const d = drag;
+  drag = null;
+
+  if (d.moved) {
+    const o = objects().find(x => x.id === d.id);
+
+    // Labels move independently, and walls can always be edited.
+    const shouldCheck =
+      o &&
+      d.kind !== "label" &&
+      o.type !== "wall" &&
+      o.block !== false;
+
+    const err = shouldCheck ? collision(o, o.id) : null;
+
+    if (err) {
+      // Restore every original property, including size and rotation.
+      Object.assign(o, d.before);
+
+      notify(
+        "Change blocked",
+        `The object ${err}. It was returned to its original position.`
+      );
+    } else {
+      record();
+    }
+  }
+
+  render();
+  return;
+}
+ const d=drag;drag=null;const p=d.last||d.start;let x=Math.min(d.start.x,p.x),y=Math.min(d.start.y,p.y),w=Math.abs(p.x-d.start.x),h=Math.abs(p.y-d.start.y);
+ if(d.type==="wall"||d.type==="line"){
+   if(w<2&&h<2)return;
+   const o=makeObject(d.type==="wall"?"wall":"line",d.start.x,d.start.y,p.x-d.start.x,p.y-d.start.y);if(o.type==="wall"){o.solid=true;o.thickness=10;}record();objects().push(o);selectedId=o.id;
+ }else if(d.type==="door"){
+   const ww=Math.max(w,h,60);const o=makeObject("door",x,y,ww,ww);o.label="Door / opening";o.block=false;record();objects().push(o);selectedId=o.id;
+ }else if(["rect","ellipse"].includes(d.type)){
+   if(w<4||h<4)return;const o=makeObject(d.type,x,y,w,h);record();objects().push(o);selectedId=o.id;
+ }else if(d.type==="freehand"){
+   if(d.points.length<2)return;const pts=d.points;const minX=Math.min(...pts.map(a=>a.x)),minY=Math.min(...pts.map(a=>a.y));const maxX=Math.max(...pts.map(a=>a.x)),maxY=Math.max(...pts.map(a=>a.y));const o=makeObject("freehand",minX,minY,Math.max(1,maxX-minX),Math.max(1,maxY-minY));o.path=pts.map((pt,i)=>(i?"L":"M")+(pt.x-minX)+" "+(pt.y-minY)).join(" ");record();objects().push(o);selectedId=o.id;
+ }else if(d.type==="text"){
+   const label=prompt("Text to place on the plan:","Room label");if(label===null)return;const o=makeObject("text",d.start.x,d.start.y,1,18);o.label=label;o.block=false;record();objects().push(o);selectedId=o.id;
+ }
+ setTool("select");render();
+}
+$("drawing").addEventListener("pointerdown",onCanvasDown);
+$("drawing").addEventListener("pointermove",onCanvasMove);
+$("drawing").addEventListener("pointerup",onCanvasUp);
+$("drawing").addEventListener("pointercancel",onCanvasUp);
+$("drawing").addEventListener("dblclick",e=>{const id=objectAtTarget(e.target);const o=objects().find(x=>x.id===id);if(o){const v=prompt("Edit label:",o.label||"");if(v!==null){record();o.label=v;render();}}});
+$("applyPropsBtn").onclick=()=>{
+ const o=getSelected();if(!o)return;
+ const next={...o,label:$("propLabel").value,x:Number($("propX").value)||0,y:Number($("propY").value)||0,w:Math.max(1,Number($("propW").value)||1),h:Math.max(1,Number($("propH").value)||1),rotation:Number($("propRotation").value)||0,skew:Number($("propSkew").value)||0,color:$("propColor").value,stroke:$("propStroke").value,thickness:Math.max(1,Number($("propThickness").value)||10),solid:$("propSolid").checked,block:$("propBlock").checked,showLabel:$("propShowLabel").checked};
+ const old=clone(o);Object.assign(o,next);const err=o.block!==false?collision(o,o.id):null;
+ if(err){Object.assign(o,old);notify("Change not applied",`The selected object ${err}. Adjust its position or size and try again.`);render();return;}
+ record();render();
+};
+$("deleteBtn").onclick=()=>{if(!selectedId)return;record();project.floors[floorIndex].objects=objects().filter(o=>o.id!==selectedId);selectedId=null;render();};
+$("placeBtn").onclick=()=>{const type=$("preset").value;setTool("icon");$("selectionStatus").textContent=`Click plan to place: ${typeLabel({type})}`;};
+$("addFloorBtn").onclick=()=>{const n=project.floors.length+1;record();project.floors.push({id:uid(),name:`Floor ${n}`,backgroundImage:null,showImage:true,objects:[]});floorIndex=project.floors.length-1;selectedId=null;render();};
+$("renameFloorBtn").onclick=()=>{const name=prompt("Floor name:",floor().name);if(name&&name.trim()){record();floor().name=name.trim();render();}};
+$("duplicateFloorBtn").onclick=()=>{record();const f=clone(floor());f.id=uid();f.name=f.name+" Copy";f.objects.forEach(o=>o.id=uid());project.floors.splice(floorIndex+1,0,f);floorIndex++;selectedId=null;render();};
+$("removeFloorBtn").onclick=()=>{if(project.floors.length<=1){notify("Cannot remove floor","A project must contain at least one floor.");return;}if(confirm(`Remove "${floor().name}" and all its objects?`)){record();project.floors.splice(floorIndex,1);floorIndex=Math.max(0,floorIndex-1);selectedId=null;render();}};
+$("snapToggle").onchange=e=>{snap=e.target.checked;};$("gridToggle").onchange=e=>{showGrid=e.target.checked;render();};
+$("gridSize").onchange=e=>{gridSize=Math.max(2,Math.min(100,Number(e.target.value)||20));render();};
+$("zoomIn").onclick=()=>{zoom=Math.min(2.5,zoom*1.15);render();};$("zoomOut").onclick=()=>{zoom=Math.max(.35,zoom/1.15);render();};$("fitBtn").onclick=()=>{zoom=1;pan={x:0,y:0};render();};
+$("applyMapBtn").onclick=()=>{record();project.title=$("mapTitle").value||"Building Plan";project.scaleNote=$("scaleNote").value||"";project.backgroundColor=$("backgroundColor").value;render();};
+$("newBtn").onclick=()=>{if(confirm("Start a new blank project? Unsaved changes will be lost unless saved first.")){project={version:1,title:"Untitled Building Plan",scaleNote:"Concept plan — verify dimensions on site",backgroundColor:"#ffffff",floors:[{id:uid(),name:"Ground Floor",backgroundImage:null,showImage:true,objects:[]}]};floorIndex=0;selectedId=null;history=[];historyIndex=-1;record();render();}};
+$("saveBtn").onclick=()=>{const blob=new Blob([JSON.stringify(project,null,2)],{type:"application/json"});downloadBlob(blob,safeName(project.title)+".json");};
+$("openBtn").onclick=()=>$("jsonFile").click();
+$("jsonFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const data=JSON.parse(await f.text());if(!Array.isArray(data.floors)||!data.floors.length)throw Error("The file does not contain any floors.");record();project=data;floorIndex=0;selectedId=null;render();record();}catch(err){notify("Could not open project",err.message);}e.target.value="";};
+function safeName(s){return String(s||"building-plan").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"building-plan";}
+function downloadBlob(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+$("uploadBtn").onclick=()=>$("imageFile").click();
+$("imageFile").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{record();floor().backgroundImage=r.result;floor().showImage=true;applyBackgroundImage();};r.readAsDataURL(f);e.target.value="";};
+function applyBackgroundImage(){const img=$("sceneImage");if(floor().backgroundImage){if(!img.parentNode) $("scene").insertBefore(img,$("drawing"));img.src=floor().backgroundImage;img.style.display=floor().showImage?"block":"none";}else img.style.display="none";}
+$("toggleImageBtn").onclick=()=>{floor().showImage=!floor().showImage;applyBackgroundImage();$("toggleImageBtn").textContent=floor().showImage?"Hide image":"Show image";};
+$("clearImageBtn").onclick=()=>{if(floor().backgroundImage){record();floor().backgroundImage=null;applyBackgroundImage();}};
+$("undoBtn").onclick=()=>{if(historyIndex>0){historyIndex--;project=clone(history[historyIndex]);floorIndex=Math.min(floorIndex,project.floors.length-1);selectedId=null;render();}};
+$("redoBtn").onclick=()=>{if(historyIndex<history.length-1){historyIndex++;project=clone(history[historyIndex]);floorIndex=Math.min(floorIndex,project.floors.length-1);selectedId=null;render();}};
+$("printBtn").onclick=()=>window.print();
+$("exportBtn").onclick=async()=>{
+ const source=$("drawing").cloneNode(true);source.setAttribute("xmlns",NS);
+ // Include the floor background in the exported SVG; the HTML background image is rasterized only by print, not this SVG export.
+ const svgText=new XMLSerializer().serializeToString(source);const blob=new Blob([svgText],{type:"image/svg+xml;charset=utf-8"});const url=URL.createObjectURL(blob);
+ const img=new Image();img.onload=()=>{const c=document.createElement("canvas");c.width=W*2;c.height=H*2;const ctx=c.getContext("2d");ctx.scale(2,2);ctx.fillStyle=project.backgroundColor||"#fff";ctx.fillRect(0,0,W,H);ctx.drawImage(img,0,0,W,H);c.toBlob(b=>{downloadBlob(b,safeName(floor().name)+".png");URL.revokeObjectURL(url);});};img.onerror=()=>{URL.revokeObjectURL(url);notify("Export failed","This browser could not render the SVG export.");};img.src=url;
+};
+document.querySelectorAll(".swatch").forEach(b=>b.onclick=()=>{const o=getSelected();if(o){o.color=b.dataset.color;render();}});
+document.addEventListener("keydown",e=>{
+ if(["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName))return;
+ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();$("undoBtn").click();}
+ else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="y"){e.preventDefault();$("redoBtn").click();}
+ else if(e.key==="Delete"&&selectedId)$("deleteBtn").click();
+ else if(e.key==="Escape"){selectedId=null;setTool("select");render();}
+});
+function init(){const scene=$("scene");const img=document.createElement("img");img.id="sceneImage";img.alt="Uploaded floor plan background";scene.insertBefore(img,$("drawing"));history=[];historyIndex=-1;record();render();applyBackgroundImage();}
+init();
+})();
+</script>
+</body>
+</html>

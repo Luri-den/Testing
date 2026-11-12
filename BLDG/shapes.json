@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "description": "Reusable shape library. The editor currently has built-in SVG renderers for these types.",
+  "shapes": [
+    {
+      "type": "desk",
+      "label": "Desk",
+      "defaultWidth": 100,
+      "defaultHeight": 55,
+      "blocksPlacement": true
+    },
+    {
+      "type": "chair",
+      "label": "Chair",
+      "defaultWidth": 34,
+      "defaultHeight": 34,
+      "blocksPlacement": true
+    },
+    {
+      "type": "table",
+      "label": "Table",
+      "defaultWidth": 110,
+      "defaultHeight": 65,
+      "blocksPlacement": true
+    },
+    {
+      "type": "bookshelf",
+      "label": "Bookshelf",
+      "defaultWidth": 50,
+      "defaultHeight": 145,
+      "blocksPlacement": true
+    },
+    {
+      "type": "bathroom",
+      "label": "Bathroom / restroom",
+      "defaultWidth": 110,
+      "defaultHeight": 120,
+      "blocksPlacement": true
+    },
+    {
+      "type": "extinguisher",
+      "label": "Fire extinguisher",
+      "defaultWidth": 24,
+      "defaultHeight": 40,
+      "blocksPlacement": false
+    },
+    {
+      "type": "aed",
+      "label": "AED",
+      "defaultWidth": 32,
+      "defaultHeight": 40,
+      "blocksPlacement": false
+    },
+    {
+      "type": "firstaid",
+      "label": "First aid",
+      "defaultWidth": 32,
+      "defaultHeight": 32,
+      "blocksPlacement": false
+    },
+    {
+      "type": "stairsUp",
+      "label": "Stairs up",
+      "defaultWidth": 95,
+      "defaultHeight": 130,
+      "blocksPlacement": true
+    },
+    {
+      "type": "stairsDown",
+      "label": "Stairs down",
+      "defaultWidth": 95,
+      "defaultHeight": 130,
+      "blocksPlacement": true
+    },
+    {
+      "type": "elevator",
+      "label": "Elevator",
+      "defaultWidth": 70,
+      "defaultHeight": 70,
+      "blocksPlacement": true
+    }
+  ]
+}
