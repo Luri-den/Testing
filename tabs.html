@@ -141,67 +141,67 @@
   <div class="content-area">
     
     <div id="p1" class="page-container">
-      <iframe src="site.html"></iframe>
+      <iframe data-src="site.html"></iframe>
     </div>
 
     <div id="p2" class="page-container active">
-      <iframe src="editor.html"></iframe>
+      <iframe data-src="editor.html"></iframe>
     </div>
 
     <div id="p3" class="page-container">
-      <iframe src="spots.html"></iframe>
+      <iframe data-src="spots.html"></iframe>
     </div>
 
     <div id="p4" class="page-container">
-      <iframe src="tours.html"></iframe>
+      <iframe data-src="tours.html"></iframe>
     </div>
 
     <div id="p5" class="page-container">
-      <iframe src="boundary.html"></iframe>
+      <iframe data-src="boundary.html"></iframe>
     </div>
 
     <div id="p6" class="page-container">
-      <iframe src="overlays.html"></iframe>
+      <iframe data-src="overlays.html"></iframe>
     </div>
 
     <div id="p7" class="page-container">
-      <iframe src="passport.html"></iframe>
+      <iframe data-src="passport.html"></iframe>
     </div>
 
     <div id="p8" class="page-container">
-      <iframe src="25dgenerator.html"></iframe>
+      <iframe data-src="25dgenerator.html"></iframe>
     </div>
 
     <div id="p9" class="page-container">
-      <iframe src="events.html"></iframe>
+      <iframe data-src="events.html"></iframe>
     </div>
 
     <div id="p14" class="page-container">
-      <iframe src="announce.html"></iframe>
+      <iframe data-src="announce.html"></iframe>
     </div>
 
     <div id="p15" class="page-container">
-      <iframe src="calendar.html"></iframe>
+      <iframe data-src="calendar.html"></iframe>
     </div>
 
     <div id="p16" class="page-container">
-      <iframe src="icon-editor.html"></iframe>
+      <iframe data-src="icon-editor.html"></iframe>
     </div>
 
     <div id="p17" class="page-container">
-      <iframe src="wording.html"></iframe>
+      <iframe data-src="wording.html"></iframe>
     </div>
 
         <div id="p10" class="page-container">
-      <iframe src="qr.html"></iframe>
+      <iframe data-src="qr.html"></iframe>
     </div>
 
     <div id="p11" class="page-container">
-      <iframe src="check.html"></iframe>
+      <iframe data-src="check.html"></iframe>
     </div>
     
     <div id="p12" class="page-container">
-      <iframe src="BLDG/index.html"></iframe>
+      <iframe data-src="BLDG/index.html"></iframe>
     </div>
 
       
@@ -226,7 +226,7 @@
     </div>
 
           <div id="p13" class="page-container">
-      <iframe src="Demo2a.html"></iframe>
+      <iframe data-src="Demo2a.html"></iframe>
     </div>
     <!-- Add containers for p4 through p7 identically here -->
 
@@ -238,8 +238,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const containers = document.querySelectorAll(".page-container");
   const blurbText = document.getElementById("dynamic-blurb");
 
-  // Keep track of which pages have already been opened/loaded correctly
-  const loadedPages = { p2: true }; 
+  /* Each editor loads the first time its tab is opened, not all 17 when the hub starts (that was about 37 MB). */
+  const loadFrame = container => { const f = container && container.querySelector("iframe"); if (f && !f.getAttribute("src") && f.dataset.src) f.src = f.dataset.src; };
+  loadFrame(document.querySelector(".page-container.active"));
 
   tabs.forEach(tab => {
     tab.addEventListener("click", () => {
@@ -256,14 +257,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // 3. Dynamically update the instructions blurb
       blurbText.innerHTML = tab.getAttribute("data-blurb");
 
-      
-      if (!loadedPages[targetId]) {
-        const iframe = targetContainer.querySelector("iframe");
-        if (iframe) {
-          iframe.src = iframe.src; // This cleanly forces the iframe map to recalculate its width/height
-        }
-        loadedPages[targetId] = true; // Mark as loaded so it saves user progress moving forward
-      }
+      loadFrame(targetContainer);
     });
   });
 });
@@ -293,8 +287,9 @@ document.addEventListener("DOMContentLoaded", () => {
       acts.innerHTML = "";
     }
     const live = document.querySelector("#p13 iframe");
-    if (live) live.src = slug ? LIVE + "?event=" + encodeURIComponent(slug) + "&t=" + Date.now() : LIVE;
+    if (live) { const u = slug ? LIVE + "?event=" + encodeURIComponent(slug) + "&t=" + Date.now() : LIVE; if (live.getAttribute("src")) live.src = u; else live.dataset.src = u; }
     if (reload) document.querySelectorAll(".page-container iframe").forEach(f => {
+      if (!f.getAttribute("src")) return;                       // not opened yet: it will start in the right place when it is
       if (f.closest("#p13") || (from && f.contentWindow === from)) return;
       try { f.contentWindow.location.reload(); } catch (e) { f.src = f.getAttribute("src"); }
     });
@@ -324,9 +319,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.origin !== location.origin || !e.data || e.data.type !== "ets-open-tab") return;
     const tab = document.querySelector('.top-tab[data-target="' + e.data.tab + '"]');
     if (!tab) return;
-    tab.click();
     const fr = document.querySelector("#" + e.data.tab + " iframe");
-    if (fr && fr.contentWindow && e.data.payload) fr.contentWindow.postMessage(e.data.payload, location.origin);
+    const wasLoaded = !!(fr && fr.getAttribute("src") && fr.contentDocument && fr.contentDocument.readyState === "complete");
+    tab.click();
+    if (fr && e.data.payload) {
+      const send = () => { try { fr.contentWindow.postMessage(e.data.payload, location.origin); } catch (err) {} };
+      if (wasLoaded) send(); else fr.addEventListener("load", send, { once: true });   // a tab opening for the first time is not ready yet
+    }
   });
   window.addEventListener("message", e => {
     if (e.origin !== location.origin || !e.data || e.data.type !== "ets-dirty") return;

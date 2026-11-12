@@ -853,24 +853,24 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
 /* Watch an element's size; where the browser cannot, fall back to window resizes. A missing feature must never stop the map loading. */
 function watchSize(el, fn) { try { new ResizeObserver(fn).observe(el); } catch (e) { addEventListener("resize", fn); } }
 </script>
-<script src="welcome-themes.js?v=20261112b"></script>
-<script src="marker-shapes.js?v=20261112b"></script>
-<script src="lines-style.js?v=20261112b"></script>
-<script src="ets-config.js?v=20261112b"></script>
-<script src="labels.js?v=20261112b"></script>
-<script src="schedule.js?v=20261112b"></script>
-<script src="announcements.js?v=20261112b"></script>
-<script src="tour-info.js?v=20261112b"></script>
-<script src="tour-camera.js?v=20261112b"></script>
-<script src="marker-fill.js?v=20261112b"></script>
-<script src="spot-markers.js?v=20261112b"></script>
+<script src="welcome-themes.js?v=20261112c"></script>
+<script src="marker-shapes.js?v=20261112c"></script>
+<script src="lines-style.js?v=20261112c"></script>
+<script src="ets-config.js?v=20261112c"></script>
+<script src="labels.js?v=20261112c"></script>
+<script src="schedule.js?v=20261112c"></script>
+<script src="announcements.js?v=20261112c"></script>
+<script src="tour-info.js?v=20261112c"></script>
+<script src="tour-camera.js?v=20261112c"></script>
+<script src="marker-fill.js?v=20261112c"></script>
+<script src="spot-markers.js?v=20261112c"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
   if (typeof Papa === "undefined") {
     document.write('<script src="https://unpkg.com/papaparse@5.4.1/dist/papaparse.min.js"><\/script>');
   }
 </script>
-<script src="icons.js?v=20261112b"></script>
+<script src="icons.js?v=20261112c"></script>
 <script>
 const $ = id => document.getElementById(id);
 
@@ -988,6 +988,11 @@ function majorSites() {
   return flagged.length ? flagged : places;
 }
 
+let passportUiTimer = 0;
+function schedulePassportUI() {          // photo loads call this: rebuild the stamp grid at most once per 400 ms
+  if (passportUiTimer) return;
+  passportUiTimer = setTimeout(() => { passportUiTimer = 0; updatePassportUI(); }, 400);
+}
 function updatePassportUI() {
   const unlocked = getUnlockedStamps();
   const sites = majorSites();
@@ -1670,16 +1675,29 @@ let travelInProgress = false;
 const EXT = ["jpg","jpeg","png","webp","JPG","PNG"];
 const PHOTO_SRC = {};
 
-function thumb(id, category, path){
+// The editors save a small copy of each photo at folder/thumbs/name.jpg (400 pixels). Markers and lists use that; it is about
+// a tenth of the size. Where a photo is shown big (the place card), pass full = true to use the full photo and keep the small copy
+// as the fallback.
+const thumbOf = p => String(p).replace(/^(?:(.*)\/)?([^\/]+?)(?:\.[^.\/]+)?$/, (m, d, b) => (d ? d + "/" : "") + "thumbs/" + b + ".jpg");
+
+const PHOTO_MISS = new Set();      // places already found to have no photo: do not look for them again during this visit
+function thumb(id, category, path, full){
   const im = new Image();
   im.alt = "";
-  let i = 0;
-  let typed = String(path || "").trim();
-  const go = () => { im.src = assetUrl(typed || ("photos/" + encodeURIComponent(id) + "." + EXT[i])); };
+  im.decoding = "async";
+  if (PHOTO_MISS.has(id)) { im.classList.add("is-default"); if (hasFill(category)) im.classList.add("is-fill"); im.src = iconFor(category); return im; }
+  const typed = String(path || "").trim();
+  const external = /^(https?:)?\/\//i.test(typed);
+  const small = external ? null : assetUrl(thumbOf(typed || ("photos/" + encodeURIComponent(id) + ".jpg")));
+  const bigOnes = (typed ? [assetUrl(typed)] : []).concat(EXT.map(e => assetUrl("photos/" + encodeURIComponent(id) + "." + e)));
+  const tries = full ? bigOnes.concat(small ? [small] : []) : (small ? [small] : []).concat(bigOnes);
+  let k = 0, warned = false;
+  const go = () => { im.src = tries[k]; };
   im.onerror = () => {
-    if (typed) { console.warn("Photo path not found for " + id + ": " + typed); typed = ""; i = 0; go(); return; }
-    if (++i < EXT.length) { go(); return; }
+    if (typed && !warned && im.src === assetUrl(typed)) { warned = true; console.warn("Photo path not found for " + id + ": " + typed); }
+    if (++k < tries.length) { go(); return; }
     console.warn("No photo for " + id + ", using category icon");
+    PHOTO_MISS.add(id);
     im.onerror = null;
     im.classList.add("is-default");
     if (hasFill(category)) im.classList.add("is-fill");
@@ -1688,7 +1706,7 @@ function thumb(id, category, path){
   im.onload = () => {
     if (im.classList.contains("is-default")) return;
     PHOTO_SRC[id] = im.currentSrc || im.src;
-    updatePassportUI();
+    schedulePassportUI();
   };
   go();
   return im;
@@ -1756,12 +1774,27 @@ function makePin(item, cls){
 
 map.on("load", async () => {
   await EVENT_READY;
-  map.addSource("boundary", { type:"geojson", data: (EVENT_SLUG && EVENT_INFO && Array.isArray(EVENT_INFO.data) && EVENT_INFO.data.includes(SITE.files.boundary)) ? EVENT_DIR + SITE.files.boundary : SITE.files.boundary });
+  const boundaryUrl = (EVENT_SLUG && EVENT_INFO && Array.isArray(EVENT_INFO.data) && EVENT_INFO.data.includes(SITE.files.boundary)) ? EVENT_DIR + SITE.files.boundary : SITE.files.boundary;
+  // The line's style comes from the GeoJSON itself (stroke, stroke-width, stroke-dasharray), set in the Boundary editor; the defaults are the old look.
+  const BDASH = { solid: null, dashed: [3, 2], dotted: [1, 2] };
+  let bData = null, bColor = "#E47303", bWidth = 2, bDash = BDASH.dashed;
+  try {
+    bData = await (await fetch(boundaryUrl)).json();
+    const feats = bData.features || [bData];
+    const bp = (feats.find(f => f.properties && f.properties.stroke) || feats[0] || {}).properties || {};
+    if (/^#[0-9a-f]{6}$/i.test(bp.stroke || "")) bColor = bp.stroke;
+    if (Number(bp["stroke-width"]) > 0) bWidth = Number(bp["stroke-width"]);
+    if (Object.prototype.hasOwnProperty.call(BDASH, bp["stroke-dasharray"])) bDash = BDASH[bp["stroke-dasharray"]];
+  } catch (e) { bData = null; }
+  map.addSource("boundary", { type:"geojson", data: bData || boundaryUrl });
+  const bPaint = { "line-color": bColor, "line-width": bWidth };
+  if (bDash) bPaint["line-dasharray"] = bDash;
   map.addLayer({
     id: "boundary",
     type: "line",
     source: "boundary",
-    paint: { "line-color":"#E47303", "line-width":2, "line-dasharray":[3,2] }
+    layout: { "line-join": "round" },
+    paint: bPaint
   });
 
   try {   // hand-drawn lines and trails (lines.geojson, made in the Lines editor)
@@ -2077,7 +2110,7 @@ function select(it){
       ? "<h3>Places here</h3>" +
         it.kids.map(k => `<button class="kid" data-id="${esc(k.id)}">${esc(k.name)}</button>`).join("")
       : "");
-  const cov = thumb(it.id, d.CATEGORY, coverPath(it.id, d.PHOTO));
+  const cov = thumb(it.id, d.CATEGORY, coverPath(it.id, d.PHOTO), true);
   cov.dataset.caption = coverNote(it.id);
   panel.insertBefore(cov, panel.querySelector("h2"));
   if (coverNote(it.id)) { const s = document.createElement("small"); s.className = "covernote"; s.textContent = coverNote(it.id); cov.after(s); }

@@ -534,10 +534,11 @@ async function runOnce(){
     const r = await head(assetUrl(p));
     if (r.failed) return false;
     if (!r.ok) return false;
-    counts.photos++;
+    counts.photos++; foundPhotos.add(p);
     if (r.size > BIG_PHOTO && !big.has(p)) { big.set(p, r.size); add("warn", job.section, job.ref, "Photo " + p + " is " + (r.size / 1048576).toFixed(1) + " MB. That is slow on a phone.", "Resize it to about 1600 pixels wide before uploading."); }
     return true;
   };
+  const foundPhotos = new Set();
   await pool(photoJobs, 6, async job => {
     if (job.path) {
       const ok = await checkPath(job, job.path);
@@ -549,6 +550,12 @@ async function runOnce(){
     } else if (job.noProbe && job.section === "Stories and spots") add("note", job.section, job.ref, "Has no photo.", "");
     done++; if (done % 5 === 0) progress();
   });
+  {   // every photo should have a small copy, which is what the map loads for its markers
+    const thumbOf = p => String(p).replace(/^(?:(.*)\/)?([^\/]+?)(?:\.[^.\/]+)?$/, (m, d, b) => (d ? d + "/" : "") + "thumbs/" + b + ".jpg");
+    const missing = [];
+    await pool([...foundPhotos].filter(p => !/^(https?:)?\/\//i.test(p)), 6, async p => { const r = await head(thumbOf(p)); if (!r.ok && !r.failed) missing.push(p); });
+    if (missing.length) add("warn", "Photos", "small copies", missing.length + " photo" + (missing.length === 1 ? " has" : "s have") + " no small copy (thumbnail), so the map downloads the full photo for each marker: " + missing.slice(0, 3).join(", ") + (missing.length > 3 ? ", ..." : "") + ".", 'In the Places editor, and the Stories & Spots editor, press "Make missing thumbnails", then publish.');
+  }
   await pool(fileJobs, 6, async job => {
     const r = await head(job.section === "Old maps" ? assetUrl(job.path) : job.path);
     if (!r.ok && !r.failed) add(job.sev || "warn", job.section, job.ref, "The " + job.what + ' file "' + job.path + '" was not found.', job.fix || "Upload it, or fix the name.");
