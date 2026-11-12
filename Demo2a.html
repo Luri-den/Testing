@@ -1,6 +1,36 @@
 <!DOCTYPE html>
 <html lang="en" class="settings-loading">
 <head>
+<script>
+/* ?debug=1 on the address shows a panel listing everything that went wrong while the page loaded, so it can be read out or copied.
+   ?safe=1 loads the map WITHOUT the optional Site Settings (layout, fonts, map style, intro motion), to tell whether one of them is the cause. */
+(function () {
+  var q = location.search, DEBUG = /[?&]debug=1/.test(q), lines = [], panel = null;
+  window.__SAFE = /[?&]safe=1/.test(q);
+  function show() {
+    if (!DEBUG) return;
+    if (!panel) { panel = document.createElement("pre"); panel.id = "dbgPanel"; panel.style.cssText = "position:fixed;left:6px;right:6px;bottom:6px;z-index:99999;max-height:45vh;overflow:auto;margin:0;padding:8px 10px;background:#111e;color:#cfe;font:11px/1.4 monospace;white-space:pre-wrap;border-radius:6px"; (document.body || document.documentElement).appendChild(panel); }
+    panel.textContent = lines.join("\n");
+  }
+  window.__dbg = function (m) { lines.push(new Date().toLocaleTimeString() + "  " + m); show(); };
+  window.addEventListener("error", function (e) {
+    if (e.target && e.target !== window && (e.target.src || e.target.href)) window.__dbg("FAILED TO LOAD: " + (e.target.src || e.target.href));
+    else window.__dbg("ERROR: " + e.message + " (" + String(e.filename || "").split("/").pop() + ":" + e.lineno + ")");
+  }, true);
+  window.addEventListener("unhandledrejection", function (e) { window.__dbg("PROBLEM: " + (e.reason && e.reason.message || e.reason)); });
+  if (DEBUG) {
+    window.__dbg("debug is on" + (window.__SAFE ? ", safe mode is on" : "") + ". " + navigator.userAgent);
+    addEventListener("load", function () { window.__dbg("page finished loading. maplibre: " + typeof maplibregl + ", Papa: " + typeof Papa + ", Labels: " + typeof Labels + ", TourCamera: " + typeof TourCamera + ", service worker: " + (navigator.serviceWorker && navigator.serviceWorker.controller ? "active" : "none")); });
+    if (window.fetch) {
+      var of = window.fetch;
+      window.fetch = function (u) {
+        return of.apply(this, arguments).then(function (r) { if (!r.ok) window.__dbg("HTTP " + r.status + " for " + (typeof u === "string" ? u : u.url)); return r; },
+          function (err) { window.__dbg("NETWORK FAILED for " + (typeof u === "string" ? u : u.url) + ": " + err.message); throw err; });
+      };
+    }
+  }
+})();
+</script>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#800000">
@@ -71,6 +101,7 @@ html.settings-loading #tools { visibility: hidden; }
 #yticks i{position:absolute;top:0;width:1px;height:4px;margin-left:-.5px;background:rgba(255,255,255,.9)}
 #yticks i.maj{height:7px}
 #yticks em{position:absolute;top:8px;transform:translateX(-50%);font:normal 10px/1 Arial,sans-serif;color:#fff;white-space:nowrap}
+#ovw.loading::after{content:"Loading\2026";margin-left:6px;font-size:12px;opacity:.85}
 #tools label#ovw{flex:1 1 260px}   /* the label rule above would otherwise override the hidden attribute */
 
 #panel{position:absolute;z-index:6;left:0;right:0;bottom:0;max-height:55vh;overflow:auto;background:#fff;padding:12px 14px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -2px 8px #0005;box-sizing:border-box}
@@ -814,6 +845,10 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+/* Watch an element's size; where the browser cannot, fall back to window resizes. A missing feature must never stop the map loading. */
+function watchSize(el, fn) { try { new ResizeObserver(fn).observe(el); } catch (e) { addEventListener("resize", fn); } }
+</script>
 <script src="welcome-themes.js"></script>
 <script src="marker-shapes.js"></script>
 <script src="lines-style.js"></script>
@@ -1047,7 +1082,7 @@ function startBand(){
     document.documentElement.style.setProperty("--bandh", h + "px");
     try { map.resize(); } catch (e) {}
   };
-  new ResizeObserver(fit).observe(bar);
+  watchSize(bar, fit);
   fit();
 }
 
@@ -1080,7 +1115,7 @@ function buildRing(){
   const bar = document.getElementById("bar");
   if (!bar) return;
   const set = () => document.documentElement.style.setProperty("--barB", Math.round(bar.getBoundingClientRect().bottom) + "px");
-  if (window.ResizeObserver) new ResizeObserver(set).observe(bar);
+  watchSize(bar, set);
   addEventListener("resize", set); set();
 })();
 /* A story or spot, shaped like a place so the intro can feature it. No photo means no stop: the intro is photo-first. */
@@ -1419,7 +1454,7 @@ function applyLayout(S){
       });
       placeLegend(); setH();
     };
-    new ResizeObserver(setH).observe(B);
+    watchSize(B, setH);
     mq.addEventListener("change", apply); apply();
   }
   if (typeof syncMoreBtn === "function") syncMoreBtn();
@@ -1437,6 +1472,7 @@ const SETTINGS_READY = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("
       const k = String(r.KEY || "").trim().toUpperCase();
       if (k) S[k] = String(r.VALUE == null ? "" : r.VALUE).trim();
     });
+    if (window.__SAFE) { ["FONT_BODY","FONT_HEAD","MAP_TONE","ZOOM_POS","LAYOUT_STYLE","LAYOUT_TOP","LAYOUT_MORE","LAYOUT_OFF","LAYOUT_BOTTOM","LAYOUT_FLOAT","PASSPORT_STYLE","INTRO_STYLE","INTRO_FEATURES","INTRO_CARD","TOUR_SPIN","BAR_STYLE","SEARCH_WIDTH","SEARCH_WIDTH_PHONE"].forEach(k => delete S[k]); if (window.__dbg) __dbg("safe mode: the optional settings were left out"); }
     const num = k => { const v = parseFloat(S[k]); return isNaN(v) ? null : v; };
     const fill = t => t.replace(/\{PLACE\}/g, S.PLACE || "");
 
@@ -1456,11 +1492,11 @@ const SETTINGS_READY = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("
       if (fb) document.documentElement.style.setProperty("--font-body", fb);
       if (fh) document.documentElement.style.setProperty("--font-head", fh);
       if (fb || fh) document.documentElement.classList.add("fontset");
-      applyTone((S.MAP_TONE || "").toLowerCase());
-      if ((S.ZOOM_POS || "").toLowerCase() === "top") { try { map.removeControl(navCtl); map.addControl(navCtl, "top-right"); } catch (e) {} }
-      if ((S.LAYOUT_STYLE || "").toLowerCase() === "band") { document.documentElement.classList.add("band"); startBand(); }
+      safeApply("map style", () => applyTone((S.MAP_TONE || "").toLowerCase()));
+      safeApply("zoom buttons", () => { if ((S.ZOOM_POS || "").toLowerCase() === "top") { map.removeControl(navCtl); map.addControl(navCtl, "top-right"); } });
+      safeApply("band header", () => { if ((S.LAYOUT_STYLE || "").toLowerCase() === "band") { document.documentElement.classList.add("band"); startBand(); } });
     }
-    {   // buttons and highlights follow ACCENT_COLOR, or else the header color; their text is whichever of white or dark reads better
+    safeApply("colors and intro", () => {   // buttons and highlights follow ACCENT_COLOR, or else the header color; their text is whichever of white or dark reads better
       const six = c => /^#[0-9a-f]{6}$/i.test(c || "");
       const acc = six(S.ACCENT_COLOR) ? S.ACCENT_COLOR : six(S.BAR_COLOR) ? S.BAR_COLOR : "#B45309", root = document.documentElement.style;
       root.setProperty("--ets-accent", acc);
@@ -1472,7 +1508,7 @@ const SETTINGS_READY = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("
       SITE.tourSpin = /^(y|yes|true|1)$/i.test(S.TOUR_SPIN || "");
       SITE.tourSpinSpeed = /^(slow|medium|fast)$/i.test(S.TOUR_SPIN_SPEED || "") ? S.TOUR_SPIN_SPEED.toLowerCase() : "medium";
       SITE.tourTilt = Math.max(0, Math.min(60, parseFloat(S.TOUR_TILT) || 0));
-    }
+    });
 
     const lng = num("CENTER_LNG"), lat = num("CENTER_LAT"), z = num("ZOOM");
     if (lng !== null && lat !== null) SITE.center = [lng, lat];
@@ -1496,8 +1532,9 @@ const SETTINGS_READY = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("
     SITE.place = S.PLACE || "";
     SITE.event = { button: S.EVENT_BUTTON || "About", title: fill(S.EVENT_TITLE || ""), text: fill(S.EVENT_TEXT || "") };
     SITE.fromCsv = true;
-    try { applyLayout(S); } catch (e) { console.warn("Layout settings skipped:", e); }
-  });
+    try { applyLayout(S); } catch (e) { console.warn("Layout settings skipped:", e); if (window.__dbg) __dbg("Layout settings skipped: " + e.message); }
+  })
+  .catch(e => { console.warn("Settings could not be applied:", e); if (window.__dbg) __dbg("Settings could not be applied: " + e.message); });   // never leave the rest of the page waiting on a failed promise
 
 Promise.race([SETTINGS_READY, new Promise(r => setTimeout(r, 1500))])
   .finally(() => document.documentElement.classList.remove("settings-loading"));
@@ -1545,11 +1582,16 @@ function buildGallery(id){
   return g;
 }
 
+/* Apply one optional setting. If it fails, say so (in the debug panel) and carry on, because everything else waits for the settings. */
+function safeApply(name, fn) {
+  try { fn(); } catch (e) { console.warn("Setting skipped (" + name + "):", e); if (window.__dbg) __dbg("Setting skipped (" + name + "): " + e.message); }
+}
+
 async function applySettingsToMap(){
   await SETTINGS_READY;
   if (!SITE.fromCsv) return;
   if (!SITE.passport) $("passportBtn").style.display = "none";
-  else if (SITE.passportStyle === "ring") buildRing();
+  else if (SITE.passportStyle === "ring") safeApply("passport ring", buildRing);
   if (!SITE.yearSlider) $("yr").closest("label").style.display = "none";
   if (!SITE.aerialButton) $("aerialBtn").hidden = true;
   if (SITE.event.title || SITE.event.text) {
@@ -1583,6 +1625,7 @@ const map = new maplibregl.Map({
 });
 window.map = map;
 map.once("load", () => { window.__mapLoaded = true; });
+map.on("error", e => { if (window.__dbg) __dbg("MAP: " + ((e && e.error && e.error.message) || "error") + (e && e.sourceId ? " (source " + e.sourceId + ")" : "")); });   // a tile server refusing us, a bad style, and so on (shown with ?debug=1)
 
 const spotId = new URLSearchParams(location.search).get("spot");
 const siteId = new URLSearchParams(location.search).get("site");
@@ -2179,22 +2222,41 @@ async function initOverlays(){
   const o = SITE.overlays;
   if (!o.length) return;
 
-  o.forEach((x,n) => {
-    map.addSource("ov" + n, { type:"image", url: x.url, coordinates: x.coords });
-    map.addLayer({
-      id: "ov" + n, type: "raster", source: "ov" + n,
-      paint: { "raster-opacity": 0 }
-    }, "boundary");
+  /* Old maps are very large images. Each one is added to the map ONLY when the visitor first chooses to show it
+     (moves the slider off zero while it is selected), never when the page opens. */
+  const added = new Set(), loading = new Set();
+  const mapReady = () => new Promise(res => (window.__mapLoaded ? res() : map.once("load", res)));
+  const wrap = $("ovw");
+  const busy = () => wrap.classList.toggle("loading", loading.size > 0);
+  const paint = () => o.forEach((x, n) => {
+    if (!added.has(n) || !map.getLayer("ov" + n)) return;
+    try { map.setPaintProperty("ov" + n, "raster-opacity", n == $("ovs").value ? $("ov").value / 100 : 0); } catch (e) {}
   });
+  const ensure = async n => {
+    if (added.has(n) || loading.has(n)) return;
+    loading.add(n); busy();
+    try {
+      await mapReady();
+      map.addSource("ov" + n, { type: "image", url: o[n].url, coordinates: o[n].coords });
+      map.addLayer({ id: "ov" + n, type: "raster", source: "ov" + n, paint: { "raster-opacity": 0 } }, map.getLayer("boundary") ? "boundary" : undefined);
+      added.add(n);
+      const done = e => { if (e.sourceId === "ov" + n && e.isSourceLoaded) { map.off("sourcedata", done); loading.delete(n); busy(); } };
+      map.on("sourcedata", done);
+      setTimeout(() => { loading.delete(n); busy(); }, 20000);        // never leave "Loading" showing for ever
+    } catch (e) { console.warn("Couldn't add the old map " + o[n].name, e); if (window.__dbg) __dbg("Old map not added: " + e.message); loading.delete(n); busy(); }
+    paint();
+  };
 
   $("ovs").innerHTML = o.map((x,n) => `<option value="${n}">${esc(x.name)}</option>`).join("");
   $("ovs").hidden = o.length < 2;
   $("ovw").hidden = false;
   syncMoreBtn();
 
-  const apply = () => o.forEach((x,n) =>
-    map.setPaintProperty("ov" + n, "raster-opacity", n == $("ovs").value ? $("ov").value / 100 : 0)
-  );
+  const apply = () => {
+    const n = +$("ovs").value;
+    if ($("ov").value > 0) ensure(n);                           // only now does the image start to download
+    paint();
+  };
   $("ov").oninput = () => { apply(); updateMoreDot(); };
   $("ovs").onchange = apply;
 }
@@ -3904,28 +3966,37 @@ setTimeout(buildChips, 3000);
   btn.textContent = "📥 Save this map for offline use";
   body.insertBefore(btn, body.firstChild);
 
+  /* Progress comes back from the offline worker as it saves each file. */
+  const say = (text) => { btn.textContent = text; };
+  navigator.serviceWorker.addEventListener("message", e => {
+    const m = e.data || {};
+    if (m.type === "PRECACHE_PROGRESS" && m.total) say("Saving… " + Math.round(100 * m.done / m.total) + "%");
+    if (m.type === "PRECACHE_DONE") {
+      btn.disabled = false;
+      btn.classList.add("saved");
+      say(m.failed ? "✅ Saved (" + m.failed + " of " + m.total + " could not be saved)" : "✅ Saved for offline use");
+      toast(m.failed ? "Saved, but " + m.failed + " files could not be saved. Try again with a good signal." : "Saved the pages, your data and the photos. The map background is kept only for the areas you have already looked at.");
+    }
+  });
+
   btn.onclick = async () => {
     if (!navigator.serviceWorker.controller){
       toast("Reload the page once, then try again.");
       return;
     }
     btn.disabled = true;
-    btn.textContent = "Saving… 0%";
+    say("Saving… 0%");
+    // the pages and data, plus every photo this page knows about (each place's photo, its thumbnail, and the gallery photos)
+    const photos = new Set();
+    Object.values(typeof PHOTO_SRC !== "undefined" ? PHOTO_SRC : {}).forEach(u => { if (u && !/^data:/.test(u)) photos.add(u); });
+    try { Object.values(typeof PHOTO_ROWS !== "undefined" ? PHOTO_ROWS : {}).forEach(rows => (rows || []).forEach(r => { if (r && r.path && !/^(https?:)?\/\//i.test(r.path)) photos.add(assetUrl(r.path)); })); } catch (err) {}
     const files = [location.pathname].concat(
-      window.ETS_CONFIG ? ETS_CONFIG.DATA.concat(ETS_CONFIG.GLOBAL) : ["site.csv", "locations.csv", "childmarkers.csv", "categories.csv", "shapes.csv", "photos.csv", "stamps.csv", "tasks.csv", "prizes.csv", "overlays.json", "spots.csv", "tours.csv", "tourstops.csv", "lines.geojson", "border.geojson"],
-      ["events/index.json", window.EVENT_DIR ? window.EVENT_DIR + "event.json" : null]
-    ).filter(Boolean);
-    navigator.serviceWorker.controller.postMessage({
-      type: "PRECACHE", files,
-      bounds: window.SITE && SITE.maxBounds,
-      zoom: 15
-    });
+      window.ETS_CONFIG ? ETS_CONFIG.DATA.concat(ETS_CONFIG.GLOBAL) : ["site.csv", "locations.csv", "childmarkers.csv", "categories.csv", "shapes.csv", "photos.csv", "stamps.csv", "tasks.csv", "prizes.csv", "spots.csv", "tours.csv", "tourstops.csv", "lines.geojson", "border.geojson"],
+      ["events/index.json", window.EVENT_DIR ? window.EVENT_DIR + "event.json" : null],
+      Array.from(photos)
+    ).filter(Boolean).filter(f => f !== "overlays.json" && !/franklin-19|1901-map|cropped-/.test(f));      // the big old-map pictures are never saved
+    navigator.serviceWorker.controller.postMessage({ type: "PRECACHE", files, bounds: window.SITE && SITE.maxBounds, zoom: 15 });
     toast("Saving in the background — you can keep browsing.");
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.textContent = "✅ Saved for offline use";
-      btn.classList.add("saved");
-    }, 4000);
   };
 })();
 
