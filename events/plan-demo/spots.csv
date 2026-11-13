@@ -1,0 +1,5 @@
+SPOT_ID,TITLE,LAT,LONG,YEAR,PHOTO,DETAILS,CREDIT,KIND,CATEGORY,SERIES,ORDER,SOURCE,STAFF_NOTE,ICON,ICON_COLOR,EFFECT,FLOOR
+SPOT-A,AED (defibrillator),0.0004,0.001175,,,Mounted by the stairs.,,spot,BLDGS,,,,,,,flash,ground
+SPOT-B,Fire extinguisher,-0.001,-0.002215,,,Checked monthly.,,spot,BLDGS,,,,,,,flash,ground
+SPOT-C,"The 1937 Cord, a story",-0.001,0.0002,,,A story that lives in the lobby and has an audio clip.,,story,CANAL,,,,,,,flash,ground
+SPOT-D,Upstairs display case,0.001,0.0,,,Rotating exhibits.,,spot,BLDGS,,,,,,,flash,upper

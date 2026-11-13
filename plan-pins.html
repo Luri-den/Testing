@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan Pins: click the plan to get coordinates</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:Arial,sans-serif;color:#222}
+body{display:flex;flex-direction:column}
+header{background:#333;color:#fff;padding:8px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+header h1{font-size:17px;margin:0 8px 0 0}
+button{font:inherit;font-size:13px;padding:7px 11px;border:0;border-radius:4px;background:#fff;color:#222;cursor:pointer}
+button.on{background:#176B87;color:#fff}
+button.go{background:#28a745;color:#fff;font-weight:bold}
+button.small{padding:3px 8px;border:1px solid #bbb;font-size:12px}
+#msg{background:#fff3cd;color:#664d03;padding:6px 12px;font-size:13px}
+#msg:empty{display:none}
+main{flex:1;display:flex;min-height:0}
+#stageWrap{flex:1;overflow:auto;background:#e9e6df;padding:12px}
+#stage{position:relative;display:inline-block;line-height:0;box-shadow:0 0 0 1px #999;background:#fff}
+#stage img{display:block;cursor:crosshair;user-select:none;-webkit-user-drag:none}
+.dot{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:#d22;border:2px solid #fff;color:#fff;font:bold 10px/14px Arial;text-align:center;pointer-events:none}
+aside{width:340px;max-width:45%;border-left:1px solid #ccc;padding:10px;overflow:auto;background:#fafafa;font-size:13px}
+table{border-collapse:collapse;width:100%;margin:8px 0}
+td,th{border-bottom:1px solid #e3e3e3;padding:4px 3px;text-align:left;font-size:12px}
+.hint{color:#555;line-height:1.45;margin:6px 0}
+@media(max-width:700px){main{flex-direction:column}aside{width:auto;max-width:none;border-left:0;border-top:1px solid #ccc;max-height:40vh}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Plan Pins</h1>
+  <span id="floors"></span>
+  <span style="flex:1"></span>
+  <button id="zOut" type="button">&minus;</button><span id="zTxt">100%</span><button id="zIn" type="button">+</button>
+</header>
+<div id="msg"></div>
+<main>
+  <div id="stageWrap"><div id="stage"><img id="plan" alt="The plan. Click to place a pin."></div></div>
+  <aside>
+    <b>Click the plan where a pin should go.</b>
+    <p class="hint">Each click adds a row. Copy the numbers into your spreadsheet's LAT and LONG columns (and FLOOR, if the plan has several floors).</p>
+    <table id="pts"><thead><tr><th>#</th><th>LAT</th><th>LONG</th><th>FLOOR</th><th></th></tr></thead><tbody></tbody></table>
+    <button id="copy" type="button" class="go">Copy all (LAT, LONG, FLOOR)</button>
+    <button id="clear" type="button">Clear</button>
+    <p class="hint" id="note"></p>
+  </aside>
+</main>
+<script src="backdrop.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const q = new URLSearchParams(location.search);
+const ev = /^[a-z0-9][a-z0-9_-]*$/i.test(q.get("event") || "") ? q.get("event") : "";
+const dir = ev ? "events/" + ev + "/" : "";
+let cfg = null, floor = null, cs = null, pts = [], zoom = 1, natural = 0;
+const say = t => { $("msg").textContent = t || ""; };
+
+async function init() {
+  const r = await fetch(dir + (q.get("file") || "backdrop.json"), { cache: "no-store" }).catch(() => null);
+  if (!r || !r.ok) { say("Could not find " + dir + "backdrop.json. Upload it next to the map page first."); return; }
+  try { cfg = Backdrop.normalize(await r.json()); } catch (e) { cfg = null; }
+  if (!cfg) { say("backdrop.json does not list a picture (\"floors\" or \"image\")."); return; }
+  $("note").textContent = cfg.corners ? "This plan is tied to a real place, so these are real coordinates." : "This plan is not tied to a real place, so these are made-up coordinates that only work on this plan. That is what the map expects.";
+  if (cfg.floors.length > 1) cfg.floors.forEach(f => { const b = document.createElement("button"); b.type = "button"; b.textContent = f.name; b.dataset.id = f.id; b.onclick = () => pick(f); $("floors").appendChild(b); });
+  pick(cfg.floors[0]);
+}
+async function pick(f) {
+  floor = f;
+  document.querySelectorAll("#floors button").forEach(b => b.classList.toggle("on", b.dataset.id === f.id));
+  try {
+    const ras = await Backdrop.rasterize(dir + f.image);
+    cs = Backdrop.cornersFor(cfg, ras.w, ras.h); natural = ras.w; $("plan").src = ras.url;
+    await $("plan").decode().catch(() => {}); fit(); draw();
+  } catch (e) { say("Could not read " + dir + f.image + " (" + e.message + ")."); }
+}
+function fit() { const w = Math.min(natural, Math.max(320, $("stageWrap").clientWidth - 30)); $("plan").style.width = Math.round(w * zoom) + "px"; $("zTxt").textContent = Math.round(zoom * 100) + "%"; }
+function draw() {
+  document.querySelectorAll(".dot").forEach(d => d.remove());
+  pts.forEach((p, i) => { if (p.floor !== floor.id) return; const d = document.createElement("div"); d.className = "dot"; d.textContent = i + 1; d.style.left = p.u * 100 + "%"; d.style.top = p.v * 100 + "%"; $("stage").appendChild(d); });
+  const tb = $("pts").querySelector("tbody"); tb.innerHTML = "";
+  pts.forEach((p, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + (i + 1) + "</td><td>" + p.lat + "</td><td>" + p.lng + "</td><td>" + (cfg.floors.length > 1 ? p.floor : "") + "</td><td></td>";
+    const x = document.createElement("button"); x.type = "button"; x.className = "small"; x.textContent = "x"; x.setAttribute("aria-label", "Remove pin " + (i + 1)); x.onclick = () => { pts.splice(i, 1); draw(); };
+    tr.lastChild.appendChild(x); tb.appendChild(tr);
+  });
+}
+$("plan").addEventListener("click", e => {
+  if (!cs) return;
+  const r = $("plan").getBoundingClientRect(), u = (e.clientX - r.left) / r.width, v = (e.clientY - r.top) / r.height;
+  const ll = Backdrop.toLngLat(cs, u, v);
+  pts.push({ u, v, lng: ll[0].toFixed(7), lat: ll[1].toFixed(7), floor: floor.id }); draw();
+});
+$("zIn").onclick = () => { zoom = Math.min(4, zoom * 1.25); fit(); };
+$("zOut").onclick = () => { zoom = Math.max(0.4, zoom / 1.25); fit(); };
+$("clear").onclick = () => { pts = []; draw(); };
+$("copy").onclick = async () => {
+  const text = pts.map(p => p.lat + "\t" + p.lng + (cfg.floors.length > 1 ? "\t" + p.floor : "")).join("\n");
+  try { await navigator.clipboard.writeText(text); say("Copied. Paste into your spreadsheet."); }
+  catch (e) { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); say("Copied. Paste into your spreadsheet."); }
+};
+init();
+</script>
+</body>
+</html>

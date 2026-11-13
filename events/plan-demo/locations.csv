@@ -1,0 +1,7 @@
+ID,NAME,EST.,LAT,LONG,DETAILS,CATEGORY,USER NOTE,MAJOR,RADIUS,PHOTO,FLOOR
+P-001,Reception,,0.00109,-0.001725,The front desk. Start here for maps and tickets.,BLDGS,,,,,ground
+P-002,Meeting Room,,6.5e-05,-0.00145,Used for talks and workshops.,BLDGS,,,,,ground
+P-003,Restrooms,,-0.000375,-0.000125,Accessible restrooms.,COMM,,,,,ground
+P-004,Elevator,,-0.00026,0.000785,Serves both floors.,COMM,,,,,ground|upper
+P-005,Main Entrance,,-0.0013,-0.000625,Step inside and turn left for the Reception.,BLDGS,,,,,ground
+P-006,Upper Meeting Room,,0.000465,-0.00155,The large table is original to the building.,BLDGS,,,,,upper

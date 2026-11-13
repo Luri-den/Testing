@@ -11,7 +11,7 @@ window.ETS_CONFIG = {
     "spots.csv", "tours.csv", "tourstops.csv", "lines.geojson",
     "stamps.csv", "tasks.csv", "prizes.csv",
     "photos.csv", "shapes.csv", "media.csv",
-    "overlays.json", "border.geojson"
+    "overlays.json", "border.geojson", "backdrop.json"
   ],
 
   // Shared by every event and the live map; never copied into an event folder.

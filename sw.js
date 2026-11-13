@@ -11,7 +11,7 @@
      video seeking ....................... left to the browser (range requests are not saved)
 */
 
-const VERSION = "v9-2026-11";
+const VERSION = "v10-2026-11";
 const SHELL_CACHE = "shell-" + VERSION;
 const IMG_CACHE   = "img-" + VERSION;
 const TILE_CACHE  = "tiles-" + VERSION;
@@ -26,7 +26,7 @@ const SHELL = [
   "./",
   "Demo2a.html",
   "welcome-themes.js", "marker-shapes.js", "marker-fill.js",
-  "schedule.js", "announcements.js", "labels.js", "tour-camera.js", "tour-info.js", "here.js", "media.js", "ets-config.js", "icons.js", "lines-style.js", "spot-markers.js",
+  "schedule.js", "announcements.js", "labels.js", "tour-camera.js", "tour-info.js", "here.js", "media.js", "backdrop.js", "ets-config.js", "icons.js", "lines-style.js", "spot-markers.js",
   "manifest.json"
 ];
 

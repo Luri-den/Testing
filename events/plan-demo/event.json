@@ -1,0 +1,20 @@
+{
+  "title": "Plan demo (a museum floor plan)",
+  "data": [
+    "site.csv",
+    "locations.csv",
+    "childmarkers.csv",
+    "categories.csv",
+    "spots.csv",
+    "tours.csv",
+    "tourstops.csv",
+    "lines.geojson",
+    "media.csv",
+    "backdrop.json"
+  ],
+  "folders": [
+    "plans",
+    "audio"
+  ],
+  "public": false
+}

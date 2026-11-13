@@ -1,0 +1,7 @@
+CODE,LABEL,COLOR,ICON,RANKED,SHAPE,FILL,FILL_COLOR,FILL_COLOR2
+COMM,Commercial,#E47303,store,no,circle,,,
+RAIL,Whitewater Valley Railroad,#8B6F47,train,yes,circle,,,
+CANAL,The Whitewater Canal,#4A7C8C,boat,yes,flag1,,,
+DOWNTOWN,Historic Downtown,#7B5EA7,hotel,yes,circle,,,
+NAT,Nature,#49c753,bridge,no,leaf,,,
+BLDGS,Historic Buildings,#800040,house,no,circle,,,

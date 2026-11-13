@@ -55,6 +55,7 @@ code{background:#eee;padding:1px 4px;border-radius:3px}
 <script src="announcements.js"></script>
 <script src="tour-info.js"></script>
 <script src="media.js"></script>
+<script src="backdrop.js"></script>
 <script src="labels.js"></script>
 <script src="marker-fill.js"></script>
 <script src="ets-config.js"></script>
@@ -169,7 +170,7 @@ async function runOnce(){
     site = parseCsv("Settings", "site.csv", got["site.csv"].text, ["KEY","VALUE"], "the Settings editor");
     site.rows.forEach(r => { S[v(r, "KEY")] = v(r, "VALUE"); });
   } else add("note", "Settings", "site.csv", "No site.csv, so the page uses its built-in defaults.", "");
-  const KNOWN = ["ACCENT_COLOR", "AERIAL_BUTTON", "BAR_COLOR", "BAR_STYLE", "BOTTOM_ON", "BOUNDS_EAST", "BOUNDS_NORTH", "BOUNDS_SOUTH", "BOUNDS_WEST", "CENTER_LAT", "CENTER_LNG", "EVENT_BUTTON", "EVENT_TEXT", "EVENT_TITLE", "FIT_TO_MARKERS", "FONT_BODY", "FONT_HEAD", "HEADER", "INTRO_CARD", "INTRO_EVERY", "INTRO_FEATURES", "INTRO_STYLE", "INTRO_TOURS", "INTRO_WHATSON", "LAYOUT_BOTTOM", "LAYOUT_FLOAT", "LAYOUT_MORE", "LAYOUT_OFF", "LAYOUT_STYLE", "LAYOUT_TOP", "MAPS_LINK", "MAP_TONE", "MAX_ZOOM", "MIN_ZOOM", "OVERLAY_SLIDER", "PASSPORT", "PASSPORT_RANKS", "PASSPORT_STYLE", "PLACE", "PRIZES", "RING_COLOR", "RING_TEXT", "RING_TRACK", "SEARCH_WIDTH", "SEARCH_WIDTH_PHONE", "TAB_TITLE", "TOUR_SPIN", "TOUR_SPIN_SPEED", "TOUR_TILT", "WELCOME_TEXT", "WELCOME_THEME", "YEAR_SLIDER", "ZOOM", "ZOOM_POS", "HERE_BUTTON", "HERE_ARRIVE"];
+  const KNOWN = ["ACCENT_COLOR", "AERIAL_BUTTON", "BACKDROP_FILE", "BAR_COLOR", "BAR_STYLE", "BOTTOM_ON", "BOUNDS_EAST", "BOUNDS_NORTH", "BOUNDS_SOUTH", "BOUNDS_WEST", "CENTER_LAT", "CENTER_LNG", "EVENT_BUTTON", "EVENT_TEXT", "EVENT_TITLE", "FIT_TO_MARKERS", "FONT_BODY", "FONT_HEAD", "HEADER", "INTRO_CARD", "INTRO_EVERY", "INTRO_FEATURES", "INTRO_STYLE", "INTRO_TOURS", "INTRO_WHATSON", "LAYOUT_BOTTOM", "LAYOUT_FLOAT", "LAYOUT_MORE", "MAP_BACKDROP", "LAYOUT_OFF", "LAYOUT_STYLE", "LAYOUT_TOP", "MAPS_LINK", "MAP_TONE", "MAX_ZOOM", "MIN_ZOOM", "OVERLAY_SLIDER", "PASSPORT", "PASSPORT_RANKS", "PASSPORT_STYLE", "PLACE", "PRIZES", "RING_COLOR", "RING_TEXT", "RING_TRACK", "SEARCH_WIDTH", "SEARCH_WIDTH_PHONE", "TAB_TITLE", "TOUR_SPIN", "TOUR_SPIN_SPEED", "TOUR_TILT", "WELCOME_TEXT", "WELCOME_THEME", "YEAR_SLIDER", "ZOOM", "ZOOM_POS", "HERE_BUTTON", "HERE_ARRIVE"];
   Object.keys(S).forEach(k => { if (k && !KNOWN.includes(k)) add("note", "Settings", k, "Is not a setting the page knows about, so it is ignored.", "Check the spelling, or remove the row."); });
   if (site && !S.PLACE) add("warn", "Settings", "PLACE", "Is empty. {PLACE} will be blank in the header and welcome screen.", "Fill it in on the Settings editor.");
   if (S.BAR_COLOR && !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(S.BAR_COLOR)) add("warn", "Settings", "BAR_COLOR", '"' + S.BAR_COLOR + '" is not a color like #E47303.', "Pick the color again in the Settings editor.");
@@ -520,6 +521,46 @@ async function runOnce(){
       if (!Array.isArray(c) || c.length !== 4 || c.some(p => !Array.isArray(p) || p.length !== 2 || p.some(n => !isFinite(n)))) add("problem", "Old maps", ref, "Needs four corners, each a [longitude, latitude] pair.", "Re-place the map in the Overlays editor.");
     });
   }
+  /* the plan used as the map (MAP_BACKDROP=image) */
+  if (site && lc(S.MAP_BACKDROP) === "image") {
+    const SEC = "Map background", file = S.BACKDROP_FILE || "backdrop.json", WB = "the Settings editor";
+    let text = null;
+    if (file === "backdrop.json" && got["backdrop.json"]) text = got["backdrop.json"].text;
+    else text = await fetch(file, { cache: "no-store" }).then(r => r.ok ? r.text() : null).catch(() => null);
+    let raw = null; try { raw = text != null ? JSON.parse(text) : null; } catch (e) { add("problem", SEC, file, "Is not valid JSON, so visitors will see the street map instead (" + e.message + ").", "Fix or replace the file."); }
+    if (text == null) add("problem", SEC, file, "The map is set to use your own plan, but this file cannot be read, so visitors will see the street map instead.", "Upload " + file + " or change the map background in " + WB + ".");
+    else if (raw) {
+      const cfg = window.Backdrop ? Backdrop.normalize(raw) : null;
+      if (!cfg) add("problem", SEC, file, 'Lists no picture ("floors" or "image"), so visitors will see the street map instead.', "Add at least one floor with an image.");
+      else {
+        const ids = new Set();
+        cfg.floors.forEach(f => {
+          fileJobs.push({ section: SEC, ref: f.name + " (" + f.image + ")", path: f.image, what: "plan picture", sev: "problem", fix: "Upload the picture to the plans folder and publish, or fix the path in " + file + "." });
+          if (ids.has(lc(f.id))) add("warn", SEC, f.name, "Shares the id \"" + f.id + "\" with another floor, so one of them cannot be chosen.", "Give each floor its own id in " + file + ".");
+          ids.add(lc(f.id));
+        });
+        if (raw.corners && !cfg.corners) add("warn", SEC, file, '"corners" is not four [longitude, latitude] pairs, so the plan is treated as not tied to a real place.', "Give four corners, top-left first, going clockwise.");
+        if (raw.scale && !cfg.scale) add("note", SEC, file, '"scale" needs a positive "across" (the real width of the whole picture) and a unit (ft or m), so no scale bar is shown.', "");
+        if (cfg.floors.length > 1) {
+          const ok = new Set(); cfg.floors.forEach(f => { ok.add(lc(f.id)); ok.add(lc(f.name)); });
+          [["locations.csv", "ID", "NAME"], ["childmarkers.csv", "CHILD_ID", "NAME"], ["spots.csv", "SPOT_ID", "TITLE"]].forEach(([fn, idc, nc]) => {
+            if (got[fn] && got[fn].text != null) Papa.parse(got[fn].text, { header: true, skipEmptyLines: "greedy" }).data.forEach(r => {
+              String(r.FLOOR || "").split(/[|,;]/).map(s => lc(s.trim())).filter(Boolean).forEach(fl => { if (!ok.has(fl)) add("warn", SEC, (v(r, idc) || v(r, nc)) + " (" + fn + ")", 'Is on floor "' + fl + '", which is not one of the floors in ' + file + ", so it never shows.", "Use a floor's id or name."); });
+            });
+          });
+        }
+        // a pin far from the plan was probably placed while the street map was showing
+        const fr = cfg.corners ? (() => { const xs = cfg.corners.map(c => c[0]), ys = cfg.corners.map(c => c[1]), px = (Math.max(...xs) - Math.min(...xs)) * 0.5, py = (Math.max(...ys) - Math.min(...ys)) * 0.5; return [Math.min(...xs) - px, Math.min(...ys) - py, Math.max(...xs) + px, Math.max(...ys) + py]; })() : [-0.02, -0.02, 0.02, 0.02];
+        [["locations.csv", "ID", "NAME", "LAT", "LONG"], ["childmarkers.csv", "CHILD_ID", "NAME", "LAT", "LONG"], ["spots.csv", "SPOT_ID", "TITLE", "LAT", "LONG"]].forEach(([fn, idc, nc, la, lo]) => {
+          if (got[fn] && got[fn].text != null) Papa.parse(got[fn].text, { header: true, skipEmptyLines: "greedy" }).data.forEach(r => {
+            const y = parseFloat(r[la]), x = parseFloat(r[lo]);
+            if (isFinite(x) && isFinite(y) && (x < fr[0] || x > fr[2] || y < fr[1] || y > fr[3])) add("warn", SEC, (v(r, idc) || v(r, nc)) + " (" + fn + ")", "Is not on the plan, so nobody can reach it on this map. It was probably placed while the street map was showing.", "Move it onto the plan in its editor.");
+          });
+        });
+      }
+    }
+  }
+
   /* audio and video (media.csv) */
   if (got["media.csv"] && got["media.csv"].text != null) {
     const WM = "the Audio & Video tab", SEC = "Audio & video", AUDIO = /\.(mp3|m4a|aac|ogg|oga|opus|wav|weba)$/i;
@@ -606,7 +647,7 @@ async function runOnce(){
     if (missing.length) add("warn", "Photos", "small copies", missing.length + " photo" + (missing.length === 1 ? " has" : "s have") + " no small copy (thumbnail), so the map downloads the full photo for each marker: " + missing.slice(0, 3).join(", ") + (missing.length > 3 ? ", ..." : "") + ".", 'In the Places editor, and the Stories & Spots editor, press "Make missing thumbnails", then publish.');
   }
   await pool(fileJobs, 6, async job => {
-    const r = await head(job.section === "Old maps" || job.section === "Audio & video" ? assetUrl(job.path) : job.path);
+    const r = await head(job.section === "Old maps" || job.section === "Audio & video" || job.section === "Map background" ? assetUrl(job.path) : job.path);
     if (!r.ok && !r.failed) add(job.sev || "warn", job.section, job.ref, "The " + job.what + ' file "' + job.path + '" was not found.', job.fix || "Upload it, or fix the name.");
     done++; progress();
   });

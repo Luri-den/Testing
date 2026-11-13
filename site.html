@@ -157,6 +157,14 @@ input[type=range]{padding:0;border:0}
     <select data-k="FONT_BODY"><option value="">Standard (Arial)</option><option value="classic">Classic Eerif (Georgia)</option><option value="book">Book Serif (Palatino / Charter)</option><option value="humanist">Friendly Sans (Gill Sans / Calibri)</option><option value="typewriter">Typewriter</option></select>
     <small>These use fonts already on the visitor's device, so nothing extra downloads and they work offline. A device without the named font shows a similar one, so the look can differ a little between iPhone and Android.</small>
 
+    <h2>Map Background</h2>
+    <label>What the map is drawn on</label>
+    <select data-k="MAP_BACKDROP"><option value="">Street map (default)</option><option value="image">My own plan or picture (no street map)</option></select>
+    <small>Choose "My own plan or picture" for a museum floor plan, a campus or fairgrounds drawing, or any image people should explore. The street map, Aerial, old-map overlays and the location buttons are switched off unless the plan is tied to a real place. The picture, its floors and its scale are listed in backdrop.json.</small>
+    <label>Plan file</label>
+    <input data-k="BACKDROP_FILE" placeholder="backdrop.json">
+    <small>Leave this blank to use backdrop.json.</small>
+
     <h2>Map Style</h2>
     <label>Street Map Colors</label>
     <select data-k="MAP_TONE"><option value="">Standard Map</option><option value="warm">Warm Paper (A soft sepia with cream-shaded pop-up cards)</option><option value="muted">Muted (A calm option with less color saturation)</option></select>
@@ -299,7 +307,7 @@ const DEFAULTS = {
   EVENT_TEXT: "",
   WELCOME_THEME: "",
   WELCOME_TEXT: "Welcome to|{PLACE}",
-  BAR_STYLE: "", SEARCH_WIDTH: "", SEARCH_WIDTH_PHONE: "", BOTTOM_ON: "", MAP_TONE: "",
+  BAR_STYLE: "", SEARCH_WIDTH: "", SEARCH_WIDTH_PHONE: "", BOTTOM_ON: "", MAP_TONE: "", MAP_BACKDROP: "", BACKDROP_FILE: "",
   PASSPORT_STYLE: "", RING_COLOR: "", RING_TRACK: "", RING_TEXT: "", INTRO_STYLE: "", INTRO_FEATURES: "", INTRO_CARD: "", INTRO_WHATSON: "", INTRO_TOURS: "", INTRO_EVERY: "", FONT_BODY: "", FONT_HEAD: "",
   LAYOUT_TOP: "", LAYOUT_MORE: "", LAYOUT_OFF: "", LAYOUT_BOTTOM: "", LAYOUT_FLOAT: "", ZOOM_POS: ""
 };

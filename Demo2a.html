@@ -935,6 +935,7 @@ function watchSize(el, fn) { try { new ResizeObserver(fn).observe(el); } catch (
 <script src="tour-camera.js?v=20261113a"></script>
 <script src="here.js?v=20261113a"></script>
 <script src="media.js?v=20261113a"></script>
+<script src="backdrop.js?v=20261113a"></script>
 <script src="marker-fill.js?v=20261113a"></script>
 <script src="spot-markers.js?v=20261113a"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -998,12 +999,12 @@ const AUTO_CHECK = EVENTS_INDEX_READY.then(() => {
   if (on) location.replace(location.pathname + "?event=" + encodeURIComponent(on.slug) + location.hash);
 });
 
-const EVENT_FOLDERS = () => (EVENT_INFO && Array.isArray(EVENT_INFO.folders)) ? EVENT_INFO.folders : ["photos", "spots", "stories", "anims", "audio"];
+const EVENT_FOLDERS = () => (EVENT_INFO && Array.isArray(EVENT_INFO.folders)) ? EVENT_INFO.folders : ["photos", "spots", "stories", "anims", "audio", "plans"];
 
 function assetUrl(path) {
   const p = String(path || "");
   if (!EVENT_SLUG || /^([a-z]+:)?\/\//i.test(p) || p.startsWith("data:")) return p;
-  const m = /^(photos|spots|stories|anims|audio)\//.exec(p);
+  const m = /^(photos|spots|stories|anims|audio|plans)\//.exec(p);
   return m && EVENT_FOLDERS().includes(m[1]) ? EVENT_DIR + p : p;
 }
 
@@ -1130,6 +1131,7 @@ function setMaps(a, ll, name){
 
 /* ===== Map style: Standard | Warm | Muted (colors the street map only; aerial photos and old-map overlays stay as they are) ===== */
 function applyTone(tone){
+  if (!map.getLayer("osm")) { document.documentElement.classList.toggle("paper", tone === "warm"); return; }
   const T = { warm: { sat: -0.3, con: -0.05, bmax: 0.97, tint: 0.14 }, muted: { sat: -0.65, con: -0.1, bmax: 1, tint: 0 } }[tone];
   document.documentElement.classList.toggle("paper", tone === "warm");     // warm also gives the cards a paper color
   if (!T) return;
@@ -1481,6 +1483,8 @@ SITE.hereArrive = 30;
 SITE.prizes = true;
 SITE.yearSlider = true;
 SITE.aerialButton = true;
+SITE.backdrop = "streets";                // "image" = use a plan or picture as the map instead of street tiles
+SITE.backdropFile = "backdrop.json";
 SITE.overlaySlider = true;
 SITE.welcomeTheme = "";
 SITE.welcomeText = "";
@@ -1549,7 +1553,7 @@ function applyLayout(S){
 
 
 const PREVIEW_SETTINGS = (() => { const v = new URLSearchParams(location.search).get("settings") || ""; return v.startsWith("blob:") ? v : ""; })();   // the Settings editor's live preview hands over unsaved settings this way
-const SETTINGS_READY = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("site.csv", { cache: "no-store" }))
+const SETTINGS_PARSED = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("site.csv", { cache: "no-store" }))
   .then(r => r.ok ? r.text() : "")
   .catch(() => "")
   .then(txt => {
@@ -1619,6 +1623,8 @@ const SETTINGS_READY = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("
     SITE.yearSlider = (S.YEAR_SLIDER || "yes").toLowerCase() !== "no";
     SITE.overlaySlider = (S.OVERLAY_SLIDER || "yes").toLowerCase() !== "no";
     SITE.aerialButton = (S.AERIAL_BUTTON || "yes").toLowerCase() !== "no";
+    SITE.backdrop = (S.MAP_BACKDROP || "streets").toLowerCase() === "image" ? "image" : "streets";   // street tiles, or your own picture
+    SITE.backdropFile = S.BACKDROP_FILE || "backdrop.json";
     SITE.welcomeTheme = (S.WELCOME_THEME || "").toLowerCase();
     SITE.welcomeText = S.WELCOME_TEXT || "";
     SITE.place = S.PLACE || "";
@@ -1627,6 +1633,9 @@ const SETTINGS_READY = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("
     try { applyLayout(S); } catch (e) { console.warn("Layout settings skipped:", e); if (window.__dbg) __dbg("Layout settings skipped: " + e.message); }
   })
   .catch(e => { console.warn("Settings could not be applied:", e); if (window.__dbg) __dbg("Settings could not be applied: " + e.message); });   // never leave the rest of the page waiting on a failed promise
+
+/* The settings are not "ready" until the map's background is decided (see setupBackdrop below). */
+const SETTINGS_READY = SETTINGS_PARSED.then(() => setupBackdrop()).catch(e => { if (window.__dbg) __dbg("MAP BACKDROP: " + (e && e.message)); try { map.setLayoutProperty("osm", "visibility", "visible"); } catch (x) {} });
 
 Promise.race([SETTINGS_READY, new Promise(r => setTimeout(r, 1500))])
   .finally(() => document.documentElement.classList.remove("settings-loading"));
@@ -1712,7 +1721,7 @@ const map = new maplibregl.Map({
         attribution: "&copy; OpenStreetMap contributors"
       }
     },
-    layers: [ { id:"osm", type:"raster", source:"osm" } ]
+    layers: [ { id:"osm", type:"raster", source:"osm", layout: { visibility: (() => { try { return localStorage.getItem("ets.backdrop" + KEY_SUFFIX) === "streets" ? "visible" : "none"; } catch (e) { return "visible"; } })() } } ]
   },
   center: SITE.center,
   zoom: SITE.zoom,
@@ -1741,7 +1750,8 @@ if (skipWelcome) {
 
 const navCtl = new maplibregl.NavigationControl({ showCompass:false });
 map.addControl(navCtl, "bottom-right");
-map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+window.__scaleCtl = new maplibregl.ScaleControl();
+map.addControl(window.__scaleCtl, "bottom-left");
 
 const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
 svg.id = "leaders";
@@ -1755,6 +1765,31 @@ Object.defineProperty(window, "sel",    { get: () => sel });
 let returning = false, year = null, stops = [], tourI = -1, me = null;
 let tourGeoJSON = null;
 let travelInProgress = false;
+
+/* setupBackdrop() decides the map's background: street tiles, or the plan/picture the curator chose. */
+async function setupBackdrop() {
+  const mode = SITE.fromCsv && SITE.backdrop === "image" ? "image" : "streets";
+  try { localStorage.setItem("ets.backdrop" + KEY_SUFFIX, mode); } catch (e) {}
+  if (!map.isStyleLoaded()) await new Promise(r => map.once("load", r));
+  const streets = () => { if (map.getLayer("osm")) map.setLayoutProperty("osm", "visibility", "visible"); };
+  if (mode !== "image" || !window.Backdrop) { streets(); return; }
+  const cfg = await Backdrop.load((u, o) => dataFetch(u, o), SITE.backdropFile);
+  if (!cfg) { if (window.__dbg) __dbg("MAP BACKDROP: could not read " + SITE.backdropFile + ", so the street map is shown instead"); streets(); return; }
+  let ctl;
+  try { ctl = await Backdrop.install(map, cfg, { url: assetUrl, floorsLabel: Labels.t("backdrop.floors") }); }
+  catch (e) { if (window.__dbg) __dbg("MAP BACKDROP: " + e.message + ", so the street map is shown instead"); streets(); return; }
+  // the picture's frame replaces the street map's frame everywhere the page uses the settings
+  SITE.maxBounds = ctl.maxBounds; SITE.center = ctl.center; SITE.zoom = ctl.zoom;
+  if (SITE.minZoom === null) SITE.minZoom = ctl.minZoom;
+  if (SITE.maxZoom === null) SITE.maxZoom = ctl.maxZoom;
+  // nothing that needs the real world, unless the plan was tied to it
+  SITE.aerialButton = false; SITE.overlaySlider = false;
+  if (!ctl.anchored) { SITE.hereButton = false; SITE.mapsLink = false; const nb = document.getElementById("near"); if (nb) nb.hidden = true; }
+  if (window.__scaleCtl) { try { map.removeControl(window.__scaleCtl); } catch (e) {} window.__scaleCtl = null; }
+  ctl.scaleBar(map.getContainer()); ctl.floorBar(map.getContainer());
+  window.__bd = ctl;
+  map.jumpTo({ center: ctl.center, zoom: ctl.zoom });
+}
 
 const EXT = ["jpg","jpeg","png","webp","JPG","PNG"];
 const PHOTO_SRC = {};
@@ -1952,7 +1987,9 @@ map.on("load", async () => {
 
 const yr4 = v => { const m = /\d{4}/.exec(v || ""); return m ? +m[0] : null; };
 
+function ensureFloor(row){ const b = window.Backdrop && Backdrop.active(); if (b && row && !b.onFloor(row)) b.showFloorFor(row); }
 function alive(i){
+  { const b = window.Backdrop && Backdrop.active(); if (b && !b.onFloor(i.d)) return false; }
   if (year === null) return true;
   const e = yr4(i.d.EST);
   const c = yr4(i.d.CLSD);
@@ -1972,6 +2009,7 @@ function update(){
   drawLeaders();
 }
 window.update = update;
+window.addEventListener("ets-floor", () => { update(); });
 
 function segDist(px,py,ax,ay,bx,by){
   const dx = bx - ax, dy = by - ay;
@@ -2160,6 +2198,7 @@ function travelTo(fromLl, toLl, vehicleKey, path){
 }
 
 function select(it){
+  ensureFloor(it.d);
   window.sel = it;
   window.__sel = it;
   if (tourI >= 0 && stops[tourI] !== it) tourI = -1;
@@ -2453,6 +2492,8 @@ $("res").onclick = e => {
     if (!r) { console.warn("No spot called " + id); return; }
     const ll = [parseFloat(r.LONG), parseFloat(r.LAT)];
     if (ll.some(isNaN)) { console.warn("Spot " + id + " has bad coordinates"); return; }
+    await SETTINGS_READY;                 // the map's background (street tiles or a plan) is decided by now
+    ensureFloor(r);                       // a spot on another floor of a plan: show that floor
     map.jumpTo({ center: ll, zoom: 18 });
     const pin = document.createElement("div");
     pin.className = "spotpin";
@@ -2561,7 +2602,9 @@ $("res").onclick = e => {
   }
   document.addEventListener("keydown", e => { if (e.key === "Escape") box.hidden = true; });
 
+  window.addEventListener("ets-floor", () => vis());
   function showSpot(it) {
+    ensureFloor(it.r);
     const r = it.r;
     const cp = coverPath(it.id, r.PHOTO);
     const holder = $("sp-img").parentNode;
@@ -2611,7 +2654,8 @@ $("res").onclick = e => {
 
   const vis = () => {
     const z = map.getZoom();
-    items.forEach(i => { if (i.el) i.el.style.display = (showAll || z >= 16) ? "" : "none"; });
+    const bd = window.Backdrop && Backdrop.active();
+    items.forEach(i => { if (i.el) i.el.style.display = ((showAll || z >= 16) && (!bd || bd.onFloor(i.r))) ? "" : "none"; });
   };
 
   const byId = id => {
@@ -2629,6 +2673,7 @@ $("res").onclick = e => {
     clearHi();
     const st = T.stops[n];
     const it = byId(st.ITEM_ID);
+    ensureFloor(it && (isSpot(it) ? it.r : it.d));
     const card = $("tourCard");
     card.classList.remove("list", "overview");
     let name = "Missing item: " + st.ITEM_ID;
@@ -4328,9 +4373,10 @@ setTimeout(buildChips, 3000);
       window.ETS_CONFIG ? ETS_CONFIG.DATA.concat(ETS_CONFIG.GLOBAL) : ["site.csv", "locations.csv", "childmarkers.csv", "categories.csv", "shapes.csv", "photos.csv", "stamps.csv", "tasks.csv", "prizes.csv", "spots.csv", "tours.csv", "tourstops.csv", "lines.geojson", "border.geojson"],
       ["events/index.json", window.EVENT_DIR ? window.EVENT_DIR + "event.json" : null],
       Array.from(photos),
-      (window.Media ? Media.audioPaths().map(assetUrl) : [])
+      (window.Media ? Media.audioPaths().map(assetUrl) : []),
+      (window.Backdrop && Backdrop.active() ? Backdrop.active().files().map(assetUrl) : [])
     ).filter(Boolean).filter(f => f !== "overlays.json" && !/franklin-19|1901-map|cropped-/.test(f));      // the big old-map pictures are never saved
-    navigator.serviceWorker.controller.postMessage({ type: "PRECACHE", files, bounds: window.SITE && SITE.maxBounds, zoom: 15 });
+    navigator.serviceWorker.controller.postMessage({ type: "PRECACHE", files, bounds: window.SITE && SITE.backdrop !== "image" ? SITE.maxBounds : null, zoom: 15 });
     toast("Saving in the background — you can keep browsing.");
   };
 })();

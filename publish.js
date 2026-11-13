@@ -174,7 +174,7 @@
     const old = entries.find(x => x.path === path);
     if (old) { try { const b = await api("/git/blobs/" + old.sha); info = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b.content.replace(/\s/g, "")), c => c.charCodeAt(0)))); } catch (e) { info = {}; } }
     info.data = dataFiles().filter(f => have.has(w.dir + f));
-    info.folders = ["photos", "spots", "stories", "anims", "audio"].filter(f => [...have].some(q => q.startsWith(w.dir + f + "/")));
+    info.folders = ["photos", "spots", "stories", "anims", "audio", "plans"].filter(f => [...have].some(q => q.startsWith(w.dir + f + "/")));
     info.files = [...have].filter(q => q.startsWith(w.dir) && q !== path).length;
     info.updated = new Date().toISOString();
     if (!info.name) info.name = w.slug;
@@ -186,6 +186,7 @@
     const ext = (name.split(".").pop() || "").toLowerCase();
     if (["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) return "photos/" + name;
     if (["mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "weba"].includes(ext)) return "audio/" + name;
+    if (ext === "svg") return "plans/" + name;                                  // drawn plans that can be used as the map
     if (["mp4", "webm", "mov"].includes(ext)) return "anims/" + name;
     return name;                                // csv, json, geojson: top folder
   }

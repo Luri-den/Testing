@@ -1,0 +1,21 @@
+{
+  "title": "Plan Test Museum",
+  "background": "#f4f1ea",
+  "floors": [
+    {
+      "id": "ground",
+      "name": "Ground floor",
+      "image": "plans/ground.svg"
+    },
+    {
+      "id": "upper",
+      "name": "Upper floor",
+      "image": "plans/upper.svg"
+    }
+  ],
+  "scale": {
+    "across": 100,
+    "unit": "ft"
+  },
+  "credit": "Plan drawn in the Building Map Designer"
+}
