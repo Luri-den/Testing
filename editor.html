@@ -297,8 +297,8 @@ let customShapes = {};     // code -> { label, points:[[x,y],...] }  (shapes.csv
 let shapesLoaded = false;
 const CHECKIN_OPTS = v => [["", "Just open it (default)"], ["gps", "Be near it (GPS)"], ["qr", "Scan its QR sign"], ["either", "Scan or be near"], ["both", "Scan while standing there"], ["none", "No stamp"]]
   .map(([k, t]) => `<option value="${k}" ${String(v || "") === k ? "selected" : ""}>${t}</option>`).join("");
-const LOC_COLS  = ["ID","NAME","EST.","LAT","LONG","DETAILS","BLURB","CATEGORY","MAJOR","RADIUS","CHECKIN","PHOTO"];
-const CHILD_COLS= ["CHILD_ID","PARENT_ID","NAME","HIST_NAMES","ADDRESS","DETAILS","BLURB","LAT","LONG","CONNECTION","CATEGORY","MAJOR","RADIUS","CHECKIN","PHOTO"];
+const LOC_COLS  = ["ID","NAME","EST.","LAT","LONG","DETAILS","BLURB","CATEGORY","MAJOR","RADIUS","CHECKIN","PHOTO","INSIDE","FLOOR"];
+const CHILD_COLS= ["CHILD_ID","PARENT_ID","NAME","HIST_NAMES","ADDRESS","DETAILS","BLURB","LAT","LONG","CONNECTION","CATEGORY","MAJOR","RADIUS","CHECKIN","PHOTO","INSIDE","FLOOR"];
 
 /* ---------- State ---------- */
 let parents = [];      // {row, ll, marker, el, kids:[]}
@@ -727,6 +727,7 @@ function renderParentForm(box, p){
         <label>Passport</label>
         <label style="display:flex;gap:8px;align-items:center;font-size:13px;text-transform:none;letter-spacing:0;font-weight:normal;color:var(--ink)"><input type="checkbox" id="f-MAJOR" ${isYes(r.MAJOR) ? "checked" : ""}> Major site (listed in the passport collection)</label>
         <div class="pair" style="margin-top:6px"><div><label>Check-in radius (m)</label><input type="text" id="f-RADIUS" value="${esc(r.RADIUS||"")}" placeholder="50"></div><div><label>How to earn the stamp</label><select id="f-CHECKIN">${CHECKIN_OPTS(r.CHECKIN)}</select></div></div>
+        <div class="pair" style="margin-top:6px"><div><label>Go inside (interior folder name)</label><input type="text" id="f-INSIDE" value="${esc(r.INSIDE||"")}" placeholder="e.g. museum"></div><div><label>Floor (on a plan map)</label><input type="text" id="f-FLOOR" value="${esc(r.FLOOR||"")}" placeholder="blank = every floor"></div></div>
         <div class="sub">QR link for this place: <code>${((window.ETS_CONFIG&&window.ETS_CONFIG.LIVE_PAGE)||"Demo2a.html")}?site=${esc(r.ID||"")}</code></div>
       </div>
 
@@ -768,6 +769,8 @@ function renderParentForm(box, p){
   bindText(box, "f-BLURB", v => { r.BLURB = v; });
   box.querySelector("#f-MAJOR").onchange = e => { r.MAJOR = e.target.checked ? "yes" : ""; };
   bindText(box, "f-RADIUS", v => { r.RADIUS = v; });
+  bindText(box, "f-INSIDE", v => { r.INSIDE = v.trim().toLowerCase(); });
+  bindText(box, "f-FLOOR", v => { r.FLOOR = v; });
   box.querySelector("#f-CHECKIN").onchange = e => { r.CHECKIN = e.target.value; };
 
   box.querySelector("#f-CATEGORY").onchange = e => {
@@ -903,6 +906,7 @@ function renderChildForm(box, c){
         <label>Passport</label>
         <label style="display:flex;gap:8px;align-items:center;font-size:13px;text-transform:none;letter-spacing:0;font-weight:normal;color:var(--ink)"><input type="checkbox" id="f-MAJOR" ${isYes(r.MAJOR) ? "checked" : ""}> Major site (listed in the passport collection)</label>
         <div class="pair" style="margin-top:6px"><div><label>Check-in radius (m)</label><input type="text" id="f-RADIUS" value="${esc(r.RADIUS||"")}" placeholder="50"></div><div><label>How to earn the stamp</label><select id="f-CHECKIN">${CHECKIN_OPTS(r.CHECKIN)}</select></div></div>
+        <div class="pair" style="margin-top:6px"><div><label>Go inside (interior folder name)</label><input type="text" id="f-INSIDE" value="${esc(r.INSIDE||"")}" placeholder="e.g. museum"></div><div><label>Floor (on a plan map)</label><input type="text" id="f-FLOOR" value="${esc(r.FLOOR||"")}" placeholder="blank = every floor"></div></div>
         <div class="sub">QR link for this place: <code>${((window.ETS_CONFIG&&window.ETS_CONFIG.LIVE_PAGE)||"Demo2a.html")}?site=${esc(r.CHILD_ID||"")}</code></div>
       </div>
 
@@ -930,6 +934,8 @@ function renderChildForm(box, c){
   bindText(box, "f-BLURB", v => { r.BLURB = v; });
   box.querySelector("#f-MAJOR").onchange = e => { r.MAJOR = e.target.checked ? "yes" : ""; };
   bindText(box, "f-RADIUS", v => { r.RADIUS = v; });
+  bindText(box, "f-INSIDE", v => { r.INSIDE = v.trim().toLowerCase(); });
+  bindText(box, "f-FLOOR", v => { r.FLOOR = v; });
   box.querySelector("#f-CHECKIN").onchange = e => { r.CHECKIN = e.target.value; };
 
   box.querySelector("#f-CATEGORY").onchange = e => {

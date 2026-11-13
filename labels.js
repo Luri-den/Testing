@@ -41,6 +41,8 @@
     ["media.videoError",  "Audio and video", "When a video link is not a YouTube video", "This video could not be found."],
     ["media.videoOffline","Audio and video", "When a video is pressed with no internet connection", "This video needs an internet connection."],
     ["backdrop.floors",   "Map", "Read out by a screen reader for the buttons that switch floors of a building or plan", "Floors"],
+    ["inside.go",         "Go inside", "Button on a place's card that opens the inside of the building", "Go inside"],
+    ["inside.back",       "Go inside", "Button inside a building that returns to the outdoor map", "Back to the map"],
     ["maps.open",        "Place cards", "Button that opens a place in the phone's Maps app", "Open in Maps"],
     ["here.button",       "You are here", "Name of the button that shows the visitor's own location on the map", "Show where I am"],
     ["here.follow",       "You are here", "Name of the button, once their dot is showing, that keeps the map centered on them", "Keep the map on me"],

@@ -1,5 +1,5 @@
 {
-  "title": "Plan demo (a museum floor plan)",
+  "title": "Plan Test Museum (interior)",
   "data": [
     "site.csv",
     "locations.csv",
@@ -16,5 +16,7 @@
     "plans",
     "audio"
   ],
-  "public": false
+  "public": false,
+  "kind": "interior",
+  "inherit": true
 }

@@ -561,6 +561,19 @@ async function runOnce(){
     }
   }
 
+  /* Go inside: the INSIDE column on places and parts of places */
+  {
+    const SEC = "Go inside", seen = new Set();
+    [["locations.csv", "ID", "NAME"], ["childmarkers.csv", "CHILD_ID", "NAME"]].forEach(([fn, idc, nc]) => {
+      if (got[fn] && got[fn].text != null) Papa.parse(got[fn].text, { header: true, skipEmptyLines: "greedy" }).data.forEach(r => {
+        const raw = String(r.INSIDE || "").trim(); if (!raw) return;
+        const ref = (v(r, idc) || v(r, nc)) + " (" + fn + ")", slug = raw.toLowerCase();
+        if (!/^[a-z0-9][a-z0-9_-]*$/.test(slug) || slug === "main") { add("warn", SEC, ref, 'The interior name "' + raw + '" can only use letters, numbers, - and _, so the Go inside button will not show.', "Fix it in the Places editor."); return; }
+        if (!seen.has(slug)) { seen.add(slug); fileJobs.push({ section: SEC, ref, path: "events/" + slug + "/event.json", what: "interior folder", sev: "problem", fix: "Create the interior's folder (events/" + slug + "/ with its event.json), or fix the name: the Go inside button would lead to an empty map." }); }
+      });
+    });
+  }
+
   /* audio and video (media.csv) */
   if (got["media.csv"] && got["media.csv"].text != null) {
     const WM = "the Audio & Video tab", SEC = "Audio & video", AUDIO = /\.(mp3|m4a|aac|ogg|oga|opus|wav|weba)$/i;

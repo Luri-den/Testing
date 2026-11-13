@@ -94,7 +94,7 @@
     s.textContent = ".floorBar{position:absolute;left:10px;top:50%;transform:translateY(-50%);z-index:5;display:flex;flex-direction:column-reverse;gap:6px;max-height:60%;overflow:auto}" +
       ".floorBar button{min-width:44px;min-height:44px;padding:6px 12px;border:2px solid rgba(0,0,0,.25);border-radius:10px;background:#fff;color:#222;font:600 14px system-ui,sans-serif;cursor:pointer;text-align:left}" +
       ".floorBar button[aria-pressed=true]{background:var(--ets-accent,#B45309);color:var(--ets-on-accent,#fff);border-color:transparent}" +
-      ".bdScale{position:absolute;left:10px;bottom:8px;z-index:5;font:12px system-ui,sans-serif;color:#222;background:rgba(255,255,255,.85);padding:2px 6px;border-radius:4px;pointer-events:none}" +
+      ".bdScale{position:absolute;left:10px;bottom:calc(76px - var(--botH,0px));z-index:5;font:12px system-ui,sans-serif;color:#222;background:rgba(255,255,255,.85);padding:2px 6px;border-radius:4px;pointer-events:none}" +
       ".bdScale i{display:block;height:5px;border:2px solid #222;border-top:0;margin-top:2px}";
     document.head.appendChild(s);
   }
@@ -149,6 +149,11 @@
       ctl.listeners.forEach(fn => { try { fn(f); } catch (e) {} });
       window.dispatchEvent(new CustomEvent("ets-floor", { detail: { id: f.id, name: f.name } }));
     };
+    // zoom out to show the whole plan (when a visitor presses a floor button)
+    ctl.showWhole = () => {
+      const cam = map.cameraForBounds ? map.cameraForBounds(b, { padding: 24 }) : null;
+      if (cam && cam.center) map.easeTo({ center: cam.center, zoom: cam.zoom, duration: 600, essential: true });
+    };
     ctl.onChange = fn => ctl.listeners.push(fn);
     // a pin shows on a floor if its FLOOR column is blank, or names that floor (several can be listed with | or ,)
     ctl.onFloor = row => {
@@ -170,7 +175,7 @@
     ctl.floorBar = host => {
       if (cfg.floors.length < 2 || !host) return null;
       bar = document.createElement("div"); bar.className = "floorBar"; bar.setAttribute("role", "group"); bar.setAttribute("aria-label", opts.floorsLabel || "Floors");
-      cfg.floors.forEach(f => { const b = document.createElement("button"); b.type = "button"; b.dataset.id = f.id; b.textContent = f.name; b.onclick = () => ctl.setFloor(f.id); bar.appendChild(b); });
+      cfg.floors.forEach(f => { const b = document.createElement("button"); b.type = "button"; b.dataset.id = f.id; b.textContent = f.name; b.onclick = () => { ctl.setFloor(f.id); ctl.showWhole(); }; bar.appendChild(b); });
       host.appendChild(bar); syncBar(); return bar;
     };
     ctl.scaleBar = host => {

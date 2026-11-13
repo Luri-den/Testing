@@ -201,7 +201,7 @@ const DEFAULT_CAT = "COMM";
 /* Exact header order */
 const CHECKIN_OPTS = v => [["", "Just open it (default)"], ["gps", "Be near it (GPS)"], ["qr", "Scan its QR sign"], ["either", "Scan or be near"], ["both", "Scan while standing there"], ["none", "No stamp"]]
   .map(([k, t]) => `<option value="${k}" ${String(v || "") === k ? "selected" : ""}>${t}</option>`).join("");
-const SPOT_COLS = ["SPOT_ID","TITLE","LAT","LONG","YEAR","PHOTO","DETAILS","BLURB","INTRO","CREDIT","KIND","CATEGORY","SERIES","ORDER","SOURCE","STAFF_NOTE","ICON","ICON_COLOR","EFFECT","CHECKIN","RADIUS"];
+const SPOT_COLS = ["SPOT_ID","TITLE","LAT","LONG","YEAR","PHOTO","DETAILS","BLURB","INTRO","CREDIT","KIND","CATEGORY","SERIES","ORDER","SOURCE","STAFF_NOTE","ICON","ICON_COLOR","EFFECT","CHECKIN","RADIUS", "FLOOR"];
 
 /* ---------- State ---------- */
 window.PhotoResize = window.PhotoResize || {   // stand-in so uploads still work if photo-resize.js was not uploaded
@@ -688,6 +688,7 @@ function renderForm(){
         <div class="sub" style="margin-top:4px">Not yet used by the site. Fill in now, wire up later.</div>
       </details>
 
+      <div class="field"><label for="f-FLOOR">Floor (on a plan map)</label><input type="text" id="f-FLOOR" value="${esc(r.FLOOR||"")}" placeholder="blank = every floor"></div>
       <details class="staff">
         <summary>Staff note (internal)</summary>
         <div class="field">
@@ -720,6 +721,7 @@ function renderForm(){
   bindText(box, "f-ORDER",      v => { r.ORDER = v; });
   renderGalEditor(box, r.SPOT_ID);
   bindText(box, "f-STAFF_NOTE", v => { r.STAFF_NOTE = v; });
+  bindText(box, "f-FLOOR", v => { r.FLOOR = v; });
 
   box.querySelector("#f-KIND").onchange = e => {
     r.KIND = e.target.value;

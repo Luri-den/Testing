@@ -783,6 +783,10 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
 .hereLine .harrow{display:inline-block;font-size:20px;line-height:1;flex:none;transition:transform .3s}
 .hereLine.arrived{background:#e3f6e8;color:#0e5a24;font-weight:600}
 @media (prefers-reduced-motion:reduce){.heredot::after{animation:none;opacity:0}.hereLine .harrow{transition:none}}
+/* ---- go inside / back to the map ---- */
+.goInside{display:inline-flex;align-items:center;min-height:44px;padding:8px 20px;border:0;border-radius:999px;background:var(--ets-accent,#B45309);color:var(--ets-on-accent,#fff);font-size:16px;font-weight:600;cursor:pointer}
+#insideBack{position:fixed;left:10px;top:calc(var(--barB,0px) + 10px);z-index:6;min-height:44px;padding:8px 16px;border:2px solid rgba(0,0,0,.25);border-radius:999px;background:#fff;color:#222;font:600 14px system-ui,sans-serif;cursor:pointer;box-shadow:0 1px 6px #0003}
+#insideBack[hidden]{display:none}
 /* ---- audio and video ---- */
 .mediaBox{margin:10px 0}
 .mediaBox[hidden]{display:none}
@@ -924,27 +928,28 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
 /* Watch an element's size; where the browser cannot, fall back to window resizes. A missing feature must never stop the map loading. */
 function watchSize(el, fn) { try { new ResizeObserver(fn).observe(el); } catch (e) { addEventListener("resize", fn); } }
 </script>
-<script src="welcome-themes.js?v=20261113c"></script>
-<script src="marker-shapes.js?v=20261113c"></script>
-<script src="lines-style.js?v=20261113c"></script>
-<script src="ets-config.js?v=20261113c"></script>
-<script src="labels.js?v=20261113c"></script>
-<script src="schedule.js?v=20261113c"></script>
-<script src="announcements.js?v=20261113c"></script>
-<script src="tour-info.js?v=20261113c"></script>
-<script src="tour-camera.js?v=20261113c"></script>
-<script src="here.js?v=20261113c"></script>
-<script src="media.js?v=20261113c"></script>
-<script src="backdrop.js?v=20261113c"></script>
-<script src="marker-fill.js?v=20261113c"></script>
-<script src="spot-markers.js?v=20261113c"></script>
+<script src="welcome-themes.js?v=20261113e"></script>
+<script src="marker-shapes.js?v=20261113e"></script>
+<script src="lines-style.js?v=20261113e"></script>
+<script src="ets-config.js?v=20261113e"></script>
+<script src="labels.js?v=20261113e"></script>
+<script src="schedule.js?v=20261113e"></script>
+<script src="announcements.js?v=20261113e"></script>
+<script src="tour-info.js?v=20261113e"></script>
+<script src="tour-camera.js?v=20261113e"></script>
+<button id="insideBack" type="button" hidden></button>
+<script src="here.js?v=20261113e"></script>
+<script src="media.js?v=20261113e"></script>
+<script src="backdrop.js?v=20261113e"></script>
+<script src="marker-fill.js?v=20261113e"></script>
+<script src="spot-markers.js?v=20261113e"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
   if (typeof Papa === "undefined") {
     document.write('<script src="https://unpkg.com/papaparse@5.4.1/dist/papaparse.min.js"><\/script>');
   }
 </script>
-<script src="icons.js?v=20261113c"></script>
+<script src="icons.js?v=20261113e"></script>
 <script>
 const $ = id => document.getElementById(id);
 
@@ -981,6 +986,13 @@ const LABELS_READY = window.Labels ? Labels.load() : Promise.resolve();   // the
 /* Audio clips and videos attached to places, spots and stories (media.csv). Cards show nothing for an item that has none. */
 const MEDIA_READY = window.Media ? Media.load((u, o) => dataFetch(u, o)) : Promise.resolve();
 MEDIA_READY.then(() => { if (window.Media) Media.hydrate(document, assetUrl); });          // a card opened before the file arrived
+/* Inside a building that was opened from the street map, "Back to the map" returns to that building's card. */
+const BACK_ID = (() => { const v = new URLSearchParams(location.search).get("back") || ""; return EVENT_SLUG && /^[A-Za-z0-9_.-]{1,64}$/.test(v) ? v : ""; })();
+if (BACK_ID) LABELS_READY.then(() => {
+  const b = document.getElementById("insideBack"); if (!b) return;
+  b.textContent = "\u2039 " + Labels.t("inside.back"); b.hidden = false;
+  b.onclick = () => { location.href = location.pathname + "?site=" + encodeURIComponent(BACK_ID); };
+});
 let ANN_ALL = [], ANN = [];
 const findItem = id => places.concat(kids).find(i => key(i.id) === key(id)) || null;
 const ANN_READY = Promise.all([window.Announcements ? Announcements.load() : [], EVENTS_INDEX_READY]).then(([a]) => {
@@ -1557,10 +1569,26 @@ function applyLayout(S){
 }
 
 
+/* An interior (event.json says "inherit": true) takes the main site's colors, fonts and layout unless its own site.csv sets them. */
+const INHERITED_LOOK = ["ACCENT_COLOR","BAR_COLOR","BAR_STYLE","FONT_BODY","FONT_HEAD","LAYOUT_STYLE","LAYOUT_TOP","LAYOUT_MORE","LAYOUT_OFF","LAYOUT_BOTTOM","LAYOUT_FLOAT","BOTTOM_ON","ZOOM_POS","SEARCH_WIDTH","SEARCH_WIDTH_PHONE","PASSPORT_STYLE","RING_COLOR","RING_TRACK","RING_TEXT"];
+async function inheritLook(txt) {
+  try {
+    const own = [], seen = new Set();
+    Papa.parse(txt || "", { header: true, skipEmptyLines: "greedy" }).data.forEach(r => { const k = String(r.KEY || "").trim(); if (!k) return; own.push({ KEY: k, VALUE: r.VALUE == null ? "" : r.VALUE }); if (String(r.VALUE || "").trim()) seen.add(k.toUpperCase()); });
+    const rr = await fetch("site.csv", { cache: "no-store" }); if (!rr.ok) return txt;
+    const add = [];
+    Papa.parse(await rr.text(), { header: true, skipEmptyLines: "greedy" }).data.forEach(r => {
+      const k = String(r.KEY || "").trim().toUpperCase(), v = String(r.VALUE == null ? "" : r.VALUE).trim();
+      if (INHERITED_LOOK.includes(k) && v && !seen.has(k)) add.push({ KEY: k, VALUE: v });
+    });
+    return Papa.unparse({ fields: ["KEY", "VALUE"], data: own.concat(add) });
+  } catch (e) { return txt; }
+}
 const PREVIEW_SETTINGS = (() => { const v = new URLSearchParams(location.search).get("settings") || ""; return v.startsWith("blob:") ? v : ""; })();   // the Settings editor's live preview hands over unsaved settings this way
 const SETTINGS_PARSED = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch("site.csv", { cache: "no-store" }))
   .then(r => r.ok ? r.text() : "")
   .catch(() => "")
+  .then(async txt => (EVENT_SLUG && EVENT_INFO && EVENT_INFO.inherit) ? await inheritLook(txt) : txt)       // an interior borrows the main site's colors and fonts
   .then(txt => {
     if (!txt.trim()) return;
     const S = {};
@@ -1773,6 +1801,21 @@ let tourGeoJSON = null;
 let travelInProgress = false;
 
 /* setupBackdrop() decides the map's background: street tiles, or the plan/picture the curator chose. */
+/* Everything an interior needs to work with no signal: its settings and spreadsheets, its plan pictures, its audio and its photos. */
+async function interiorFiles(slug) {
+  const base = "events/" + slug + "/", out = [base + "event.json"];
+  const get = async f => { try { const r = await fetch(base + f, { cache: "no-store" }); return r.ok ? await r.text() : ""; } catch (e) { return ""; } };
+  const col = async (f, c) => { const t = await get(f); return t ? Papa.parse(t, { header: true, skipEmptyLines: "greedy" }).data.map(r => String(r[c] || "").trim()).filter(p => p && !/^(https?:)?\/\//i.test(p)) : []; };
+  try {
+    const info = JSON.parse(await get("event.json") || "{}");
+    (Array.isArray(info.data) ? info.data : (window.ETS_CONFIG ? ETS_CONFIG.DATA : [])).forEach(f => out.push(base + f));
+    const bd = await get("backdrop.json");
+    if (bd && window.Backdrop) { const c = Backdrop.normalize(JSON.parse(bd)); if (c) c.floors.forEach(f => out.push(base + f.image)); }
+    (await col("media.csv", "SOURCE")).filter(s => /\.(mp3|m4a|aac|ogg|oga|opus|wav|weba)$/i.test(s)).forEach(s => out.push(base + s));
+    for (const [f, c] of [["locations.csv", "PHOTO"], ["childmarkers.csv", "PHOTO"], ["spots.csv", "PHOTO"], ["photos.csv", "PATH"]]) (await col(f, c)).forEach(p => out.push(base + p));
+  } catch (e) {}
+  return out;
+}
 async function setupBackdrop() {
   const mode = SITE.fromCsv && SITE.backdrop === "image" ? "image" : "streets";
   try { localStorage.setItem("ets.backdrop" + KEY_SUFFIX, mode); } catch (e) {}
@@ -1999,6 +2042,8 @@ map.on("load", async () => {
 
 const yr4 = v => { const m = /\d{4}/.exec(v || ""); return m ? +m[0] : null; };
 
+function insideSlug(d){ const v = String((d && d.INSIDE) || "").trim().toLowerCase(); return /^[a-z0-9][a-z0-9_-]*$/.test(v) && v !== "main" ? v : ""; }   // the interior a place opens, if it has one
+function goInside(it, slug){ location.href = location.pathname + "?event=" + encodeURIComponent(slug) + "&back=" + encodeURIComponent(it.id) + "&skipWelcome=1"; }
 function ensureFloor(row){ const b = window.Backdrop && Backdrop.active(); if (b && row && !b.onFloor(row)) b.showFloorFor(row); }
 function alive(i){
   { const b = window.Backdrop && Backdrop.active(); if (b && !b.onFloor(i.d)) return false; }
@@ -2258,6 +2303,12 @@ function select(it){
   const c = yr4(d.CLSD);
   const when = [e ? "Established " + e : "", c ? "Closed " + c : (e ? "Still standing" : "")].filter(Boolean).join(" &middot; ");
   if (when) panel.querySelector("h2").insertAdjacentHTML("afterend", `<p><b>${when}</b></p>`);
+  { const slug = insideSlug(d);
+    if (slug) {
+      const p = document.createElement("p"), gi = document.createElement("button");
+      gi.type = "button"; gi.className = "goInside"; gi.textContent = Labels.t("inside.go"); gi.onclick = () => goInside(it, slug); p.appendChild(gi);
+      const h2 = panel.querySelector("h2"); (when ? h2.nextElementSibling : h2).insertAdjacentElement("afterend", p);
+    } }
   if (SITE.memoryUrl) {
     const m = SITE.memoryUrl.startsWith("mailto:")
       ? SITE.memoryUrl + "?subject=" + encodeURIComponent("Memory of " + it.name + " (" + it.id + ")")
@@ -2730,8 +2781,10 @@ $("res").onclick = e => {
     if (ll) {
       focus = (it && it.parent) || null;
       update();
-      const d = document.createElement("div");
-      d.className = "tring";
+      const d = document.createElement("div");           // the box the map moves into place...
+      d.style.cssText = "width:64px;height:64px;pointer-events:none";
+      const pulse = document.createElement("div");       // ...and the ring that pulses INSIDE it. (A pulse on the box the map moves overrides its position
+      pulse.className = "tring"; d.appendChild(pulse);   // and parks the ring in a corner of the screen, which is what the old ring did.)
       ring = new maplibregl.Marker({ element: d }).setLngLat(ll).addTo(map);
       map.flyTo({ center: ll, zoom: Math.max(map.getZoom(), 17) });
     }
@@ -4381,12 +4434,14 @@ setTimeout(buildChips, 3000);
     const photos = new Set();
     Object.values(typeof PHOTO_SRC !== "undefined" ? PHOTO_SRC : {}).forEach(u => { if (u && !/^data:/.test(u)) photos.add(u); });
     try { Object.values(typeof PHOTO_ROWS !== "undefined" ? PHOTO_ROWS : {}).forEach(rows => (rows || []).forEach(r => { if (r && r.path && !/^(https?:)?\/\//i.test(r.path)) photos.add(assetUrl(r.path)); })); } catch (err) {}
+    const insideFiles = []; { const slugs = [...new Set(places.concat(kids).map(i => insideSlug(i.d)).filter(Boolean))]; for (const sl of slugs) insideFiles.push(...await interiorFiles(sl)); }
     const files = [location.pathname].concat(
       window.ETS_CONFIG ? ETS_CONFIG.DATA.concat(ETS_CONFIG.GLOBAL) : ["site.csv", "locations.csv", "childmarkers.csv", "categories.csv", "shapes.csv", "photos.csv", "stamps.csv", "tasks.csv", "prizes.csv", "spots.csv", "tours.csv", "tourstops.csv", "lines.geojson", "border.geojson"],
       ["events/index.json", window.EVENT_DIR ? window.EVENT_DIR + "event.json" : null],
       Array.from(photos),
       (window.Media ? Media.audioPaths().map(assetUrl) : []),
-      (window.Backdrop && Backdrop.active() ? Backdrop.active().files().map(assetUrl) : [])
+      (window.Backdrop && Backdrop.active() ? Backdrop.active().files().map(assetUrl) : []),
+      insideFiles
     ).filter(Boolean).filter(f => f !== "overlays.json" && !/franklin-19|1901-map|cropped-/.test(f));      // the big old-map pictures are never saved
     navigator.serviceWorker.controller.postMessage({ type: "PRECACHE", files, bounds: window.SITE && SITE.backdrop !== "image" ? SITE.maxBounds : null, zoom: 15 });
     toast("Saving in the background — you can keep browsing.");
