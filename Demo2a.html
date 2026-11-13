@@ -924,27 +924,27 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
 /* Watch an element's size; where the browser cannot, fall back to window resizes. A missing feature must never stop the map loading. */
 function watchSize(el, fn) { try { new ResizeObserver(fn).observe(el); } catch (e) { addEventListener("resize", fn); } }
 </script>
-<script src="welcome-themes.js?v=20261113a"></script>
-<script src="marker-shapes.js?v=20261113a"></script>
-<script src="lines-style.js?v=20261113a"></script>
-<script src="ets-config.js?v=20261113a"></script>
-<script src="labels.js?v=20261113a"></script>
-<script src="schedule.js?v=20261113a"></script>
-<script src="announcements.js?v=20261113a"></script>
-<script src="tour-info.js?v=20261113a"></script>
-<script src="tour-camera.js?v=20261113a"></script>
-<script src="here.js?v=20261113a"></script>
-<script src="media.js?v=20261113a"></script>
-<script src="backdrop.js?v=20261113a"></script>
-<script src="marker-fill.js?v=20261113a"></script>
-<script src="spot-markers.js?v=20261113a"></script>
+<script src="welcome-themes.js?v=20261113b"></script>
+<script src="marker-shapes.js?v=20261113b"></script>
+<script src="lines-style.js?v=20261113b"></script>
+<script src="ets-config.js?v=20261113b"></script>
+<script src="labels.js?v=20261113b"></script>
+<script src="schedule.js?v=20261113b"></script>
+<script src="announcements.js?v=20261113b"></script>
+<script src="tour-info.js?v=20261113b"></script>
+<script src="tour-camera.js?v=20261113b"></script>
+<script src="here.js?v=20261113b"></script>
+<script src="media.js?v=20261113b"></script>
+<script src="backdrop.js?v=20261113b"></script>
+<script src="marker-fill.js?v=20261113b"></script>
+<script src="spot-markers.js?v=20261113b"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
   if (typeof Papa === "undefined") {
     document.write('<script src="https://unpkg.com/papaparse@5.4.1/dist/papaparse.min.js"><\/script>');
   }
 </script>
-<script src="icons.js?v=20261113a"></script>
+<script src="icons.js?v=20261113b"></script>
 <script>
 const $ = id => document.getElementById(id);
 
@@ -1244,7 +1244,6 @@ function startWelcome(featuredId){
 
   function startSites() {
     image.hidden = true;
-    siteBox.hidden = false;
     ANN_READY.then(() => { if (!stopped) nextSite(); });
   }
 
@@ -1315,6 +1314,7 @@ function startWelcome(featuredId){
     document.getElementById("wsIn").textContent = [a.meta || EventSchedule.statusText(a.st), it ? "at " + it.name : ""].filter(Boolean).join(" \u00b7 ");
     const tour = a.tourId && window.ETSTours && ETSTours.isOpen(a.tourId) ? ETSTours.get(a.tourId) : null;     // an event tour that has not started yet has no Start button
     goBtn.textContent = tour ? TourInfo.goText(tour) : it ? Labels.t("welcome.seeOnMap") : (a.link ? (a.linkText || Labels.t("welcome.learnMore")) : Labels.t("welcome.close"));
+    siteBox.hidden = false;
     siteBox.classList.remove("in"); void siteBox.offsetWidth; siteBox.classList.add("in");   // after the card's classes are set, so the pointer measures the final position
     present(it, a.color);
     siteTimer = setTimeout(nextSite, siteTime);
@@ -1327,7 +1327,8 @@ function startWelcome(featuredId){
     const featuredFirst = featuredId && !featuredShown;         // a QR visitor's own place always comes first
     const rot = rotation();
     if (rot.length && !featuredFirst && slideN++ % (SITE.introEvery || 2) === 0) { showAnnouncement(rot[annIdx++ % rot.length]); return; }   // what's on, then a place, then what's on...
-    const placePool = places.concat(kids).filter(i => PHOTO_SRC[i.id]);
+    let placePool = places.concat(kids).filter(i => PHOTO_SRC[i.id]);
+    if (!placePool.length && tries >= 3) placePool = places.concat(kids);        // no photos anywhere (after giving them a moment to load): text-only cards
     const spotMode = introMotion ? SITE.introFeatures : "";                  // stories and spots only show once the camera has zoomed in
     const spotPool = (spotMode && window.introSpots) ? window.introSpots().map(spotAsStop).filter(Boolean) : [];
     const useSpots = spotPool.length && (spotMode === "spots" || (spotMode === "mixed" && Math.random() < 0.4));
@@ -1357,13 +1358,15 @@ function startWelcome(featuredId){
     if (!bl && blurb.length > 170) blurb = blurb.slice(0, 167) + "...";
     const e = yr4(it.d.EST);
 
-    document.getElementById("wsPhoto").src = it.src || PHOTO_SRC[it.id];
+    { const ps = it.src || PHOTO_SRC[it.id], pe = document.getElementById("wsPhoto");
+      if (ps) { pe.src = ps; pe.onerror = () => siteBox.classList.add("nophoto"); } else { pe.removeAttribute("src"); siteBox.classList.add("nophoto"); } }
     document.getElementById("wsName").textContent = it.name;
     document.getElementById("wsText").textContent = blurb;
     document.getElementById("wsIn").textContent = it.isSpot
       ? [Labels.t(it.kind === "story" ? "welcome.story" : "welcome.spot"), it.year].filter(Boolean).join(" \u00b7 ")
       : [it.parent ? "In " + it.parent.name : "", e ? "Established " + e : ""].filter(Boolean).join(" \u00b7 ");
 
+    siteBox.hidden = false;
     siteBox.classList.remove("in"); void siteBox.offsetWidth; siteBox.classList.add("in");
     present(it, it.color);
     siteTimer = setTimeout(nextSite, siteTime);
@@ -1635,7 +1638,7 @@ const SETTINGS_PARSED = (PREVIEW_SETTINGS ? fetch(PREVIEW_SETTINGS) : dataFetch(
   .catch(e => { console.warn("Settings could not be applied:", e); if (window.__dbg) __dbg("Settings could not be applied: " + e.message); });   // never leave the rest of the page waiting on a failed promise
 
 /* The settings are not "ready" until the map's background is decided (see setupBackdrop below). */
-const SETTINGS_READY = SETTINGS_PARSED.then(() => setupBackdrop()).catch(e => { if (window.__dbg) __dbg("MAP BACKDROP: " + (e && e.message)); try { map.setLayoutProperty("osm", "visibility", "visible"); } catch (x) {} });
+const SETTINGS_READY = SETTINGS_PARSED.then(() => Promise.race([setupBackdrop(), new Promise(r => setTimeout(r, 8000))])).catch(e => { if (window.__dbg) __dbg("MAP BACKDROP: " + (e && e.message)); try { map.setLayoutProperty("osm", "visibility", "visible"); } catch (x) {} });
 
 Promise.race([SETTINGS_READY, new Promise(r => setTimeout(r, 1500))])
   .finally(() => document.documentElement.classList.remove("settings-loading"));
@@ -1721,7 +1724,7 @@ const map = new maplibregl.Map({
         attribution: "&copy; OpenStreetMap contributors"
       }
     },
-    layers: [ { id:"osm", type:"raster", source:"osm", layout: { visibility: (() => { try { return localStorage.getItem("ets.backdrop" + KEY_SUFFIX) === "streets" ? "visible" : "none"; } catch (e) { return "visible"; } })() } } ]
+    layers: [ { id:"osm", type:"raster", source:"osm", layout: { visibility: (() => { try { return localStorage.getItem("ets.backdrop" + KEY_SUFFIX) === "image" ? "none" : "visible"; } catch (e) { return "visible"; } })() } } ]
   },
   center: SITE.center,
   zoom: SITE.zoom,
@@ -1729,6 +1732,7 @@ const map = new maplibregl.Map({
 });
 window.map = map;
 map.once("load", () => { window.__mapLoaded = true; });
+const MAP_LOADED = new Promise(r => map.once("load", r));      // a promise that cannot miss the event, even if it already happened
 map.on("error", e => { if (window.__dbg) __dbg("MAP: " + ((e && e.error && e.error.message) || "error") + (e && e.sourceId ? " (source " + e.sourceId + ")" : "")); });   // a tile server refusing us, a bad style, and so on (shown with ?debug=1)
 
 const spotId = new URLSearchParams(location.search).get("spot");
@@ -1770,13 +1774,16 @@ let travelInProgress = false;
 async function setupBackdrop() {
   const mode = SITE.fromCsv && SITE.backdrop === "image" ? "image" : "streets";
   try { localStorage.setItem("ets.backdrop" + KEY_SUFFIX, mode); } catch (e) {}
-  if (!map.isStyleLoaded()) await new Promise(r => map.once("load", r));
-  const streets = () => { if (map.getLayer("osm")) map.setLayoutProperty("osm", "visibility", "visible"); };
-  if (mode !== "image" || !window.Backdrop) { streets(); return; }
+  const streets = () => {                                      // street tiles on (they already are, unless this site used to be a plan)
+    try { if (map.getLayer("osm")) map.setLayoutProperty("osm", "visibility", "visible"); }
+    catch (e) { MAP_LOADED.then(() => { try { map.setLayoutProperty("osm", "visibility", "visible"); } catch (x) {} }); }
+  };
+  if (mode !== "image" || !window.Backdrop) { streets(); return; }          // an ordinary map never waits for anything here
+  await Promise.race([MAP_LOADED, new Promise(r => setTimeout(r, 6000))]);
   const cfg = await Backdrop.load((u, o) => dataFetch(u, o), SITE.backdropFile);
   if (!cfg) { if (window.__dbg) __dbg("MAP BACKDROP: could not read " + SITE.backdropFile + ", so the street map is shown instead"); streets(); return; }
   let ctl;
-  try { ctl = await Backdrop.install(map, cfg, { url: assetUrl, floorsLabel: Labels.t("backdrop.floors") }); }
+  try { ctl = await Backdrop.install(map, cfg, { url: assetUrl, floorsLabel: Labels.t("backdrop.floors"), log: window.__dbg }); }
   catch (e) { if (window.__dbg) __dbg("MAP BACKDROP: " + e.message + ", so the street map is shown instead"); streets(); return; }
   // the picture's frame replaces the street map's frame everywhere the page uses the settings
   SITE.maxBounds = ctl.maxBounds; SITE.center = ctl.center; SITE.zoom = ctl.zoom;

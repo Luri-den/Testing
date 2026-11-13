@@ -121,19 +121,26 @@
     const fictAcross = Math.abs(cs[1][0] - cs[0][0]) * 111319.49 * Math.cos(mid[1] * Math.PI / 180);
     ctl.realPerFict = cfg.anchored ? 1 : (realAcross && fictAcross ? realAcross / fictAcross : 0);
 
-    const SRC = "bd-plan", LAY = "bd-plan", BG = "bd-bg";
+    const SRC = "bd-plan", LAY = "bd-plan";
+    const log = opts.log || (() => {});
+    const order = () => (map.getStyle && map.getStyle() && map.getStyle().layers ? map.getStyle().layers.map(l => l.id) : []);
     const draw = async () => {
       const r = await getFloor(ctl.floor);
       if (map.getLayer(LAY)) map.removeLayer(LAY);
       if (map.getSource(SRC)) map.removeSource(SRC);
-      const layers = map.getStyle && map.getStyle() ? map.getStyle().layers.map(l => l.id) : [];
-      const before = layers.filter(id => id !== BG && id !== "osm")[0];       // under everything the page adds later (lines, outlines)
+      const bottom = order().filter(id => id !== LAY && id !== "osm")[0];       // the plan goes at the very bottom: under every line, outline and tint the page adds
       map.addSource(SRC, { type: "image", url: r.url, coordinates: cs });
-      map.addLayer({ id: LAY, type: "raster", source: SRC, paint: { "raster-fade-duration": 0, "raster-resampling": "linear" } }, before);
+      map.addLayer({ id: LAY, type: "raster", source: SRC, paint: { "raster-opacity": 1, "raster-fade-duration": 0, "raster-resampling": "linear" } }, bottom);
+      log("BACKDROP: plan \"" + ctl.floor.name + "\" given to the map (" + r.w + " x " + r.h + " px). Layers, bottom to top: " + order().join(" > "));
     };
     if (map.getLayer && map.getLayer("osm")) map.removeLayer("osm");              // no street tiles are ever requested
     if (map.getSource && map.getSource("osm")) map.removeSource("osm");
-    if (map.getLayer && !map.getLayer(BG)) map.addLayer({ id: BG, type: "background", paint: { "background-color": cfg.background } });
+    try { map.getContainer().style.backgroundColor = cfg.background; } catch (e) {}           // the color around the plan
+    if (map.on) {                                                                           // say, in the debug panel, whether the map really loaded the picture
+      const t0 = Date.now(); let said = false;
+      map.on("sourcedata", e => { if (!said && e && e.sourceId === SRC && e.isSourceLoaded) { said = true; log("BACKDROP: the map loaded the plan picture (" + (Date.now() - t0) + " ms)"); } });
+      setTimeout(() => { if (!said) log("BACKDROP: the map has not reported loading the plan picture after 6 seconds. If the plan is not visible, send this panel."); }, 6000);
+    }
     await draw();
 
     ctl.setFloor = async id => {
