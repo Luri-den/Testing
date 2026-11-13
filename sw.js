@@ -11,7 +11,7 @@
      video seeking ....................... left to the browser (range requests are not saved)
 */
 
-const VERSION = "v11-2026-11";
+const VERSION = "v12-2026-11";
 const SHELL_CACHE = "shell-" + VERSION;
 const IMG_CACHE   = "img-" + VERSION;
 const TILE_CACHE  = "tiles-" + VERSION;

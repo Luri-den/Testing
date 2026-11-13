@@ -110,7 +110,7 @@
     const first = await getFloor(cfg.floors[0]);
     const cs = cornersFor(cfg, first.w, first.h), b = boundsOf(cs);
     const mid = [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2];
-    const padX = (b[1][0] - b[0][0]) * 0.25, padY = (b[1][1] - b[0][1]) * 0.25;
+    const padX = (b[1][0] - b[0][0]) * 1.0, padY = (b[1][1] - b[0][1]) * 1.0;      // roomy: a phone zoomed in on a plan can show more than the plan itself, and a tight limit makes the map library push the camera off the plan
     const maxBounds = [[b[0][0] - padX, b[0][1] - padY], [b[1][0] + padX, b[1][1] + padY]];
     const cam = map.cameraForBounds ? map.cameraForBounds(b, { padding: 24 }) : null;
     const ctl = { cfg, corners: cs, bounds: b, maxBounds, center: cam ? [cam.center.lng !== undefined ? cam.center.lng : cam.center[0], cam.center.lat !== undefined ? cam.center.lat : cam.center[1]] : mid,

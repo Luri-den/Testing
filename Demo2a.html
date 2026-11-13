@@ -924,27 +924,27 @@ html.fontset h1,html.fontset h2,html.fontset h3,html.fontset #bar h1{font-family
 /* Watch an element's size; where the browser cannot, fall back to window resizes. A missing feature must never stop the map loading. */
 function watchSize(el, fn) { try { new ResizeObserver(fn).observe(el); } catch (e) { addEventListener("resize", fn); } }
 </script>
-<script src="welcome-themes.js?v=20261113b"></script>
-<script src="marker-shapes.js?v=20261113b"></script>
-<script src="lines-style.js?v=20261113b"></script>
-<script src="ets-config.js?v=20261113b"></script>
-<script src="labels.js?v=20261113b"></script>
-<script src="schedule.js?v=20261113b"></script>
-<script src="announcements.js?v=20261113b"></script>
-<script src="tour-info.js?v=20261113b"></script>
-<script src="tour-camera.js?v=20261113b"></script>
-<script src="here.js?v=20261113b"></script>
-<script src="media.js?v=20261113b"></script>
-<script src="backdrop.js?v=20261113b"></script>
-<script src="marker-fill.js?v=20261113b"></script>
-<script src="spot-markers.js?v=20261113b"></script>
+<script src="welcome-themes.js?v=20261113c"></script>
+<script src="marker-shapes.js?v=20261113c"></script>
+<script src="lines-style.js?v=20261113c"></script>
+<script src="ets-config.js?v=20261113c"></script>
+<script src="labels.js?v=20261113c"></script>
+<script src="schedule.js?v=20261113c"></script>
+<script src="announcements.js?v=20261113c"></script>
+<script src="tour-info.js?v=20261113c"></script>
+<script src="tour-camera.js?v=20261113c"></script>
+<script src="here.js?v=20261113c"></script>
+<script src="media.js?v=20261113c"></script>
+<script src="backdrop.js?v=20261113c"></script>
+<script src="marker-fill.js?v=20261113c"></script>
+<script src="spot-markers.js?v=20261113c"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
   if (typeof Papa === "undefined") {
     document.write('<script src="https://unpkg.com/papaparse@5.4.1/dist/papaparse.min.js"><\/script>');
   }
 </script>
-<script src="icons.js?v=20261113b"></script>
+<script src="icons.js?v=20261113c"></script>
 <script>
 const $ = id => document.getElementById(id);
 
@@ -1212,7 +1212,7 @@ function spotAsStop(i){
   return { id: i.id, ll: i.ll, el: i.el, isSpot: true, kind: i.kind, src: assetUrl(p),
            name: i.r.TITLE || i.id, year: (i.r.YEAR || "").trim(),
            color: (i.r.ICON_COLOR || "").trim() || (i.kind === "story" ? "#D55E00" : "#333333"),
-           d: { BLURB: i.r.BLURB, DETAILS: i.r.DETAILS } };
+           d: { BLURB: i.r.BLURB, DETAILS: i.r.DETAILS, FLOOR: i.r.FLOOR } };
 }
 
 function startWelcome(featuredId){
@@ -1263,6 +1263,8 @@ function startWelcome(featuredId){
   function present(it, color) {
     const line = document.getElementById("wsLine");
     if (!it) { siteBox.classList.remove("bottom"); line.innerHTML = ""; return; }
+    ensureFloor(it.d);                                           // a featured place or spot upstairs: show its floor
+    const bdCam = window.Backdrop && Backdrop.active();          // on a plan the camera stays flat and upright
     const tgt = it.el.style.display !== "none" ? it : (it.parent || it);
     const p = map.project(tgt.ll);
     siteBox.classList.toggle("right", p.x < window.innerWidth * 0.5);
@@ -1292,8 +1294,8 @@ function startWelcome(featuredId){
       const off = [(p.x < W * 0.5 ? 0.3 : 0.7) * W - W / 2, pinTarget - (mr0.top + mr0.height / 2)];
       introAim = aim; map.on("move", aim);
       if (!startCam) startCam = { center: map.getCenter(), zoom: map.getZoom() };
-      map.flyTo({ center: it.ll, zoom: Math.max(map.getZoom(), 16.3), pitch: 50, offset: off, duration: 2200, essential: true });
-      if (introMotion === "spin") map.once("moveend", () => {
+      map.flyTo({ center: it.ll, zoom: bdCam ? Math.min((z => isFinite(z) ? z : 22)(Number(map.getMaxZoom())), Math.max(map.getZoom(), bdCam.zoom + 0.9)) : Math.max(map.getZoom(), 16.3), pitch: bdCam ? 0 : 50, offset: off, duration: 2200, essential: true });
+      if (introMotion === "spin" && !bdCam) map.once("moveend", () => {
         if (stopped || gen !== introGen) return;
         map.easeTo({ center: it.ll, offset: off, bearing: map.getBearing() + 50, duration: Math.max(1500, siteTime - 2600), easing: t => t, essential: true });
       });
@@ -1794,6 +1796,9 @@ async function setupBackdrop() {
   if (!ctl.anchored) { SITE.hereButton = false; SITE.mapsLink = false; const nb = document.getElementById("near"); if (nb) nb.hidden = true; }
   if (window.__scaleCtl) { try { map.removeControl(window.__scaleCtl); } catch (e) {} window.__scaleCtl = null; }
   ctl.scaleBar(map.getContainer()); ctl.floorBar(map.getContainer());
+  try { map.setMaxPitch(0); } catch (e) {}                       // a plan stays flat and upright: no tilting...
+  try { map.dragRotate.disable(); } catch (e) {}                 // ...and no turning it by accident
+  try { map.touchZoomRotate.disableRotation(); } catch (e) {}
   window.__bd = ctl;
   map.jumpTo({ center: ctl.center, zoom: ctl.zoom });
 }
